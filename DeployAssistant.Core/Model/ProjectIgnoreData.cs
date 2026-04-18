@@ -1,5 +1,6 @@
 ﻿using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json.Serialization;
 
@@ -103,7 +104,7 @@ namespace DeployAssistant.Model
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Critical Error while trying to get ignore files for deploy, {ex.Message}");
+                Trace.TraceWarning($"Critical Error while trying to get ignore files for deploy, {ex.Message}");
                 return (new List<string>(), new List<string>());
             }
         }
@@ -120,7 +121,7 @@ namespace DeployAssistant.Model
             catch (Exception ex)
             {
                 // Handle case where access to directory is denied
-                MessageBox.Show($"Error: Access denied to directory: {directoryPath} {ex.Message}");
+                Trace.TraceWarning($"Error: Access denied to directory: {directoryPath} {ex.Message}");
                 return;
             }
         }

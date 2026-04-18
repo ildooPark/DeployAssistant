@@ -1,7 +1,7 @@
 ﻿using DeployAssistant.Interfaces;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Text.Json.Serialization;
-using System.Windows.Media.Converters;
 
 namespace DeployAssistant.Model
 {
@@ -196,7 +196,7 @@ namespace DeployAssistant.Model
         {
             if (x == null || y == null)
             {
-                MessageBox.Show("Invalid Comparison, ProjectData Cannot be Null");
+                Trace.TraceWarning("Invalid Comparison, ProjectData Cannot be Null");
                 return 0;
             }
             return x.UpdatedTime.CompareTo(y.UpdatedTime);
@@ -224,7 +224,7 @@ namespace DeployAssistant.Model
         {
             if (other == null)
             {
-                MessageBox.Show("Invalid Comparison, ProjectData Cannot be Null");
+                Trace.TraceWarning("Invalid Comparison, ProjectData Cannot be Null");
                 return 0;
             }
             return this.UpdatedTime.CompareTo(other.UpdatedTime);
@@ -245,7 +245,7 @@ namespace DeployAssistant.Model
         {
             if (ProjectPath == null)
             {
-                MessageBox.Show("Project Path is Null, Couldn't Set Source Data Path for all Project Files");
+                Trace.TraceWarning("Project Path is Null, Couldn't Set Source Data Path for all Project Files");
                 return;
             }
             foreach (ProjectFile file in ProjectFiles.Values)

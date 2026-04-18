@@ -2,6 +2,7 @@
 using DeployAssistant.Model;
 using DeployAssistant.Utils;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 
 namespace DeployAssistant.DataComponent
@@ -24,6 +25,13 @@ namespace DeployAssistant.DataComponent
         public event Action<object>? ProjectRevertEventHandler;
         public event Action<object>? FetchCompleteEventHandler;
         public event Action<MetaDataState> ManagerStateEventHandler;
+
+        /// <summary>
+        /// Optional callback to ask the user a yes/no question.
+        /// Parameters: (message, title). Returns true for "Yes", false for "No".
+        /// When null, defaults to false (do not retry on failure).
+        /// </summary>
+        public Func<string, string, bool>? ConfirmationCallback { get; set; }
 
         private FileHandlerTool _fileHandlerTool;
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
@@ -122,7 +130,7 @@ namespace DeployAssistant.DataComponent
         {
             if (BackupFiles == null)
             {
-                MessageBox.Show("Backupfiles is null for BackupManager");
+                Trace.TraceWarning("Backupfiles is null for BackupManager");
                 return "";
             }
             BackupFiles.TryGetValue(projectFile.DataHash, out ProjectFile? backupFile);
@@ -139,15 +147,14 @@ namespace DeployAssistant.DataComponent
                     revertSuccess = _fileHandlerTool.TryApplyFileChanges(FileDifferences);
                     if (!revertSuccess)
                     {
-                        var response = MessageBox.Show("Update Failed, Would you like to Retry?", "Update Project",
-                            MessageBoxButtons.YesNo);
-                        if (response == DialogResult.Yes)
+                        bool retry = ConfirmationCallback?.Invoke("Update Failed, Would you like to Retry?", "Update Project") ?? false;
+                        if (retry)
                         {
                             continue;
                         }
                         else
                         {
-                            MessageBox.Show("Revert Failed"); return;
+                            Trace.TraceWarning("Revert Failed"); return;
                         }
                     }
                 }
@@ -155,7 +162,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"BUVM RevertProject {ex.Message}");
+                Trace.TraceError($"BUVM RevertProject {ex.Message}");
             }
         }
         #endregion

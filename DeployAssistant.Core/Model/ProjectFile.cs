@@ -212,10 +212,7 @@ namespace DeployAssistant.Model
         public bool Equals(ProjectFile? other)
         {
             if (other == null)
-            {
-                MessageBox.Show($"Presented ProjectFile is Null for comparision with {this.DataName}"); 
                 return false;
-            }
             return other.DataName == this.DataName;
         }
     }

@@ -1,12 +1,10 @@
-﻿using DeployAssistant.Model;
-using DeployAssistant.Interfaces;
+﻿using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
 using DeployAssistant.Utils;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
-using WPF = System.Windows;
 
 namespace DeployAssistant.DataComponent
 {
@@ -63,6 +61,13 @@ namespace DeployAssistant.DataComponent
         public event Action<MetaDataState> ManagerStateEventHandler;
         #endregion
 
+        /// <summary>
+        /// Optional callback used to ask the user a yes/no question.
+        /// Parameters: (message, title). Returns true for "Yes", false for "No".
+        /// When null, defaults to true (proceed with the affirmative path).
+        /// </summary>
+        public Func<string, string, bool>? ConfirmationCallback { get; set; }
+
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         public FileManager()
         {
@@ -71,8 +76,8 @@ namespace DeployAssistant.DataComponent
             _projDirFileList = new List<ProjectFile>();
             _preStagedFilesDict = new Dictionary<string, ProjectFile>();
             _registeredChangesDict = new Dictionary<string, ChangedFile>();
-            _fileHandlerTool = App.FileHandlerTool;
-            _hashTool = App.HashTool;
+            _fileHandlerTool = new FileHandlerTool();
+            _hashTool = new HashTool();
             _asyncControl = new SemaphoreSlim(12);
         }
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
@@ -86,7 +91,7 @@ namespace DeployAssistant.DataComponent
             if (_dstProjectData == null || _projIgnoreData == null)
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                MessageBox.Show("Main Project is Missing");
+                Trace.TraceWarning("Main Project is Missing");
                 return;
             }
             _preStagedFilesDict.Clear();
@@ -185,7 +190,7 @@ namespace DeployAssistant.DataComponent
                     if (!projectFilesConcurrent.TryAdd(fileRelPath, intersectedFile))
                     {
                         ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                        MessageBox.Show($"Couldn't Run File Integrity Check, Couldn't Hash Intersected File on {fileRelPath}");
+                        Trace.TraceWarning($"Couldn't Run File Integrity Check, Couldn't Hash Intersected File on {fileRelPath}");
                         return;
                     }
                     try
@@ -195,7 +200,7 @@ namespace DeployAssistant.DataComponent
                     catch (Exception ex)
                     {
                         ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                        MessageBox.Show($"Couldn't Run File Integrity Check: File async Hashing Failed\n{ex.Message}");
+                        Trace.TraceWarning($"Couldn't Run File Integrity Check: File async Hashing Failed\n{ex.Message}");
                         projectFilesConcurrent.TryRemove(fileRelPath, out _);
                         return;
                     }
@@ -222,7 +227,7 @@ namespace DeployAssistant.DataComponent
                             if (!projectFilesDict.TryGetValue(intersectedFile.DataRelPath, out ProjectFile? projectFile))
                             {
                                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                                MessageBox.Show($"Couldn't Run File Integrity Check, project File does not exist in Intersected file list {intersectedFile.DataName}");
+                                Trace.TraceWarning($"Couldn't Run File Integrity Check, project File does not exist in Intersected file list {intersectedFile.DataName}");
                                 return;
                             }
                             if (projectFile.DataHash != intersectedFile.DataHash)
@@ -250,7 +255,7 @@ namespace DeployAssistant.DataComponent
                         }
                         catch (Exception Ex)
                         {
-                            MessageBox.Show($"Failed During Integrity Test {Ex.Message}");
+                            Trace.TraceWarning($"Failed During Integrity Test {Ex.Message}");
                             return; 
                         }
                         finally
@@ -272,7 +277,7 @@ namespace DeployAssistant.DataComponent
             catch (Exception ex)
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                System.Windows.MessageBox.Show($"{ex.Message}. Couldn't Run File Integrity Check");
+                Trace.TraceError($"{ex.Message}. Couldn't Run File Integrity Check");
             }
         }
         public List<ChangedFile>? ProjectIntegrityCheck(ProjectData targetProject)
@@ -280,7 +285,7 @@ namespace DeployAssistant.DataComponent
             if (targetProject == null)
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                MessageBox.Show("Main Project is Missing");
+                Trace.TraceWarning("Main Project is Missing");
                 return null;
             }
             ManagerStateEventHandler?.Invoke(MetaDataState.CleanRestoring);
@@ -361,7 +366,7 @@ namespace DeployAssistant.DataComponent
                 {
                     if (!_backupFilesDict.TryGetValue(projectFilesDict[fileRelPath].DataHash, out ProjectFile? backupFile))
                     {
-                        MessageBox.Show($"Failed To Retrieve File {projectFilesDict[fileRelPath].DataName} For Restoration");
+                        Trace.TraceWarning($"Failed To Retrieve File {projectFilesDict[fileRelPath].DataName} For Restoration");
                         return null;
                     }
                     ProjectFile srcFile = new ProjectFile(backupFile, DataState.None);
@@ -377,7 +382,7 @@ namespace DeployAssistant.DataComponent
                     {
                         if (!_backupFilesDict.TryGetValue(projectFilesDict[fileRelPath].DataHash, out ProjectFile? backupFile))
                         {
-                            MessageBox.Show($"Failed To Retrieve File {projectFilesDict[fileRelPath].DataName} For Restoration");
+                            Trace.TraceWarning($"Failed To Retrieve File {projectFilesDict[fileRelPath].DataName} For Restoration");
                             return null; 
                         }
                         ProjectFile srcFile = new ProjectFile(backupFile, DataState.None);
@@ -394,7 +399,7 @@ namespace DeployAssistant.DataComponent
 
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"{ex.Message}. Couldn't Run Version Clearn Restoring File Check");
+                Trace.TraceError($"{ex.Message}. Couldn't Run Version Clearn Restoring File Check");
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                 return null;
             }
@@ -447,7 +452,7 @@ namespace DeployAssistant.DataComponent
                 {
                     if (!_backupFilesDict.TryGetValue(srcDict[fileRelPath].DataHash, out ProjectFile? backupFile))
                     {
-                        MessageBox.Show($"Following Previous Project Version {srcData.UpdatedVersion}\n" +
+                        Trace.TraceWarning($"Following Previous Project Version {srcData.UpdatedVersion}\n" +
                             $"Lacks Backup File {srcDict[fileRelPath].DataName}");
                         return null;
                     }
@@ -469,7 +474,7 @@ namespace DeployAssistant.DataComponent
                     {
                         if (!_backupFilesDict.TryGetValue(srcDict[fileRelPath].DataHash, out ProjectFile? backupFile))
                         {
-                            MessageBox.Show($"Following Previous Project Version {srcData.UpdatedVersion} Lacks Backup File {srcDict[fileRelPath].DataName}");
+                            Trace.TraceWarning($"Following Previous Project Version {srcData.UpdatedVersion} Lacks Backup File {srcDict[fileRelPath].DataName}");
                             return null;
                         }
                         ProjectFile srcFile = new ProjectFile(backupFile, DataState.Backup, backupFile.DataSrcPath);
@@ -486,7 +491,7 @@ namespace DeployAssistant.DataComponent
             catch (Exception ex)
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                System.Windows.MessageBox.Show($"{ex.Message}. Couldn't Run Find Version Differences For Backup");
+                Trace.TraceError($"{ex.Message}. Couldn't Run Find Version Differences For Backup");
                 return null;
             }
         }
@@ -567,7 +572,7 @@ namespace DeployAssistant.DataComponent
             catch (Exception ex)
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                System.Windows.MessageBox.Show($"{ex.Message}. Couldn't Run Find Version Differences Against Given Src");
+                Trace.TraceError($"{ex.Message}. Couldn't Run Find Version Differences Against Given Src");
                 significantDiff = -1; 
                 return null;
             }
@@ -644,7 +649,7 @@ namespace DeployAssistant.DataComponent
             catch (Exception ex)
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                MessageBox.Show($"{ex.Message}. Couldn't Run Find Version Differences Against Given Src");
+                Trace.TraceWarning($"{ex.Message}. Couldn't Run Find Version Differences Against Given Src");
                 return null;
             }
         }
@@ -678,7 +683,7 @@ namespace DeployAssistant.DataComponent
             catch (Exception ex)
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                MessageBox.Show($"File Manager RetrieveDataSrc Error: {ex.Message}");
+                Trace.TraceWarning($"File Manager RetrieveDataSrc Error: {ex.Message}");
             }
             ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
         }
@@ -686,9 +691,10 @@ namespace DeployAssistant.DataComponent
         {
             if (TryGetDeployMetaFile(srcDirPath, out DeployData? deployData))
             {
-                var useDeployResponse = MessageBox.Show("Deploy Data Found, Allocate file using previous settings or Reconfigure Allocation?", "Source File Allocation",
-                            MessageBoxButtons.YesNo);
-                if (useDeployResponse == DialogResult.Yes)
+                bool useDeployResponse = ConfirmationCallback?.Invoke(
+                    "Deploy Data Found, Allocate file using previous settings or Reconfigure Allocation?",
+                    "Source File Allocation") ?? true;
+                if (useDeployResponse)
                 {
                     if (TryValidateDeployMetaFile(srcDirPath, deployData))
                     {
@@ -698,7 +704,7 @@ namespace DeployAssistant.DataComponent
                     }
                     else
                     {
-                        MessageBox.Show("Failed to Allocate src files using previous settings. Allocate Manually");
+                        Trace.TraceWarning("Failed to Allocate src files using previous settings. Allocate Manually");
                     }
                 }
                 else
@@ -712,7 +718,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                WPF.MessageBox.Show($"FileManager RegisterNewData Error {ex.Message}");
+                Trace.TraceError($"FileManager RegisterNewData Error {ex.Message}");
                 return;
             }
         }
@@ -735,7 +741,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"FileManager RegisterNewData Error {ex.Message}");
+                Trace.TraceWarning($"FileManager RegisterNewData Error {ex.Message}");
                 filesAllDirectories = null;
                 filesTopDirectories = null;
                 dirsAllDirectories = null;
@@ -743,7 +749,7 @@ namespace DeployAssistant.DataComponent
             }
             if (filesAllDirectories == null || filesTopDirectories == null || dirsAllDirectories == null)
             {
-                WPF.MessageBox.Show($"Couldn't get files or dirrectories from given Directory {srcDirPath}");
+                Trace.TraceError($"Couldn't get files or dirrectories from given Directory {srcDirPath}");
                 return;
             }
 
@@ -755,7 +761,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                WPF.MessageBox.Show($"FileManager RegisterNewData Error {ex.Message}");
+                Trace.TraceError($"FileManager RegisterNewData Error {ex.Message}");
                 return;
             }
         }
@@ -791,7 +797,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                WPF.MessageBox.Show($"FileManager RegisterNewData Error {ex.Message}");
+                Trace.TraceError($"FileManager RegisterNewData Error {ex.Message}");
                 return;
             }
             
@@ -812,14 +818,14 @@ namespace DeployAssistant.DataComponent
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"FileManager RegisterNewData Error {ex.Message}");
+                    Trace.TraceWarning($"FileManager RegisterNewData Error {ex.Message}");
                     filesAllDirectories = null;
                     filesTopDirectories = null;
                     dirsAllDirectories = null;
                 }
                 if (filesAllDirectories == null || filesTopDirectories == null || dirsAllDirectories == null)
                 {
-                    WPF.MessageBox.Show($"Couldn't get files or dirrectories from given Directory {srcDirPath}");
+                    Trace.TraceError($"Couldn't get files or dirrectories from given Directory {srcDirPath}");
                     return;
                 }
 
@@ -852,7 +858,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                WPF.MessageBox.Show($"FileManager RegisterNewData Error {ex.Message}");
+                Trace.TraceError($"FileManager RegisterNewData Error {ex.Message}");
                 return;
             }
 
@@ -866,7 +872,7 @@ namespace DeployAssistant.DataComponent
                     srcFile.DataState |= DataState.PreStaged;
                     if (!_preStagedFilesDict.TryAdd(srcFile.DataRelPath, srcFile))
                     {
-                        WPF.MessageBox.Show($"Already Enlisted File {srcFile.DataName}: for Update");
+                        Trace.TraceError($"Already Enlisted File {srcFile.DataName}: for Update");
                     }
                     else continue;
                 }
@@ -874,7 +880,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                WPF.MessageBox.Show(ex.Message);
+                Trace.TraceError(ex.Message);
                 return;
             }
         }
@@ -890,7 +896,7 @@ namespace DeployAssistant.DataComponent
                 List<ProjectFile>? overlappingFiles = null;
                 if (fileName == null)
                 {
-                    MessageBox.Show($"Couldn't Process file name for overlapping file check on {topDirFilePaths[i]}");
+                    Trace.TraceWarning($"Couldn't Process file name for overlapping file check on {topDirFilePaths[i]}");
                     return;
                 }
                 if (Path.GetExtension(topDirFilePaths[i]) == ".VersionLog") continue;
@@ -1034,7 +1040,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed Deployment {ex.Message}");
+                Trace.TraceWarning($"Failed Deployment {ex.Message}");
             }
         }
         private void RegisterFilesFromDeployData(string srcPath, DeployData deployedData)
@@ -1062,7 +1068,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to remove existing registered files in src folder {ex.Message}");
+                Trace.TraceWarning($"Failed to remove existing registered files in src folder {ex.Message}");
                 return false;
             }
         }
@@ -1073,7 +1079,7 @@ namespace DeployAssistant.DataComponent
         {
             if (_dstProjectData == null)
             {
-                MessageBox.Show("Project Data is unreachable from FileManager");
+                Trace.TraceWarning("Project Data is unreachable from FileManager");
                 return;
             }
             ManagerStateEventHandler?.Invoke(MetaDataState.Processing);
@@ -1112,7 +1118,7 @@ namespace DeployAssistant.DataComponent
             catch (Exception ex)
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                WPF.MessageBox.Show($"File Manager UpdateHashFromChangedList Error: {ex.Message}");
+                Trace.TraceError($"File Manager UpdateHashFromChangedList Error: {ex.Message}");
             }
             finally
             {
@@ -1286,7 +1292,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Critical Error while validating registered deploy meta files {ex.Message}");
+                Trace.TraceWarning($"Critical Error while validating registered deploy meta files {ex.Message}");
                 return false; 
             }
         }
@@ -1297,7 +1303,7 @@ namespace DeployAssistant.DataComponent
         {
             if (_dstProjectData == null)
             {
-                MessageBox.Show("Project Data is unreachable from FileManager");
+                Trace.TraceWarning("Project Data is unreachable from FileManager");
                 return;
             }
             await HashPreStagedFilesAsync();
@@ -1305,7 +1311,7 @@ namespace DeployAssistant.DataComponent
             (bool result, List<string>? failedDataList) = DeployFileIntegrityCheck(deployPath);
             if (!result)
             {
-                MessageBox.Show("Failed to Stage Changes: DeployFiles Integrity Check Failed");
+                Trace.TraceWarning("Failed to Stage Changes: DeployFiles Integrity Check Failed");
                 return;
             }
         }
@@ -1324,7 +1330,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                WPF.MessageBox.Show($"{ex.Message}, Failed SrcFileIntegrityCheck On FileManager");
+                Trace.TraceError($"{ex.Message}, Failed SrcFileIntegrityCheck On FileManager");
                 return (true, null);
             }
         }
@@ -1341,13 +1347,13 @@ namespace DeployAssistant.DataComponent
                 case DataState.Modified:
                     if (!_projectFilesDict.TryGetValue(file.DataRelPath, out ProjectFile? projectFile_M))
                     {
-                        MessageBox.Show("Couldn't revert change since recorded project file does not exist");
+                        Trace.TraceWarning("Couldn't revert change since recorded project file does not exist");
                         file.DataState |= DataState.IntegrityChecked;
                         return;
                     }
                     if (!_backupFilesDict.TryGetValue(projectFile_M.DataHash, out ProjectFile? backupFile_M))
                     {
-                        MessageBox.Show("Couldn't revert change since backup does not exist");
+                        Trace.TraceWarning("Couldn't revert change since backup does not exist");
                         file.DataState |= DataState.IntegrityChecked;
                         return;
                     }
@@ -1356,7 +1362,7 @@ namespace DeployAssistant.DataComponent
                 case DataState.Deleted:
                     if (!_projectFilesDict.TryGetValue(file.DataRelPath, out ProjectFile? projectFile_D))
                     {
-                        MessageBox.Show("Coudln't Revert Change for Recorded Project file");
+                        Trace.TraceWarning("Coudln't Revert Change for Recorded Project file");
                         file.DataState |= DataState.IntegrityChecked;
                         return;
                     }
@@ -1367,7 +1373,7 @@ namespace DeployAssistant.DataComponent
                     }
                     if (!_backupFilesDict.TryGetValue(projectFile_D.DataHash, out ProjectFile? backupFile_D))
                     {
-                        MessageBox.Show("Couldn't revert change since backup does not exist");
+                        Trace.TraceWarning("Couldn't revert change since backup does not exist");
                         file.DataState |= DataState.IntegrityChecked;
                         return;
                     }

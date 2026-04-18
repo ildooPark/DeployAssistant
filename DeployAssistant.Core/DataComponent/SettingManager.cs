@@ -1,13 +1,11 @@
-﻿using DeployAssistant.Model;
-using DeployManager.Model;
-using DeployAssistant;
-using DeployAssistant.DataComponent;
+﻿using DeployAssistant.DataComponent;
 using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
 using DeployAssistant.Utils;
+using System.Diagnostics;
 using System.IO;
 
-namespace DeployManager.DataComponent
+namespace DeployAssistant.DataComponent
 {
     [Flags]
     public enum IgnoreFileType
@@ -23,6 +21,13 @@ namespace DeployManager.DataComponent
         public event Action<string>? SetPrevProjectEventHandler;
         public event Action<ProjectIgnoreData>? UpdateIgnoreListEventHandler;
         public ProjectIgnoreData _projectIgnoreData; 
+
+        /// <summary>
+        /// Optional callback to ask the user a yes/no question.
+        /// Parameters: (message, title). Returns true for "Yes", false for "No".
+        /// When null, defaults to true (proceed with the affirmative path).
+        /// </summary>
+        public Func<string, string, bool>? ConfirmationCallback { get; set; }
 
         private readonly string? DAMetaFilePath;
         private string? ignoreMetaFilePath;
@@ -44,7 +49,7 @@ namespace DeployManager.DataComponent
             {
                 Console.WriteLine(ex.Message);
             }
-            _fileHandlerTool = App.FileHandlerTool;
+            _fileHandlerTool = new FileHandlerTool();
         }
         public void Awake()
         {
@@ -53,15 +58,16 @@ namespace DeployManager.DataComponent
                 if (File.Exists(DAMetaFilePath))
                 {
                     if (!_fileHandlerTool.TryDeserializeJsonData(DAMetaFilePath, out LocalConfigData? localConfigData)) return;
-                    var result = MessageBox.Show($"Recent Destination Project Path Found: Proceed with this Destination? {localConfigData.LastOpenedDstPath}",
-                        "Import Previous Destination Project", MessageBoxButtons.YesNo);
-                    if (result == DialogResult.Yes)
+                    bool proceed = ConfirmationCallback?.Invoke(
+                        $"Recent Destination Project Path Found: Proceed with this Destination? {localConfigData?.LastOpenedDstPath}",
+                        "Import Previous Destination Project") ?? true;
+                    if (proceed && localConfigData?.LastOpenedDstPath != null)
                     {
                         SetPrevProjectEventHandler?.Invoke(localConfigData.LastOpenedDstPath);
                     }
                     else
                     {
-                        MessageBox.Show("Couldn't Retrieve ");
+                        Trace.TraceWarning("Couldn't Retrieve ");
                         return;
                     }
                 }
@@ -105,7 +111,7 @@ namespace DeployManager.DataComponent
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Could not Generate Deployed Mark, {ex.Message}");
+                Trace.TraceWarning($"Could not Generate Deployed Mark, {ex.Message}");
             }
         }
         #endregion
@@ -122,7 +128,7 @@ namespace DeployManager.DataComponent
                 {
                     if (!_fileHandlerTool.TryDeserializeJsonData(ignoreMetaFilePath, out ProjectIgnoreData? projectIgnoreData))
                     {
-                        MessageBox.Show($"Setting Manager Project Ignore Error, Couldn't Deserialize IgnoreData");
+                        Trace.TraceWarning($"Setting Manager Project Ignore Error, Couldn't Deserialize IgnoreData");
                         return;
                     }
                     else
@@ -140,7 +146,7 @@ namespace DeployManager.DataComponent
                     _projectIgnoreData.ConfigureDefaultIgnore(projectMetaData.ProjectName);
                     if (!_fileHandlerTool.TrySerializeJsonData(ignoreMetaFilePath, _projectIgnoreData))
                     {
-                        MessageBox.Show($"Setting Manager Project Ignore Error, Couldn't initialize IgnoreData");
+                        Trace.TraceWarning($"Setting Manager Project Ignore Error, Couldn't initialize IgnoreData");
                         return;
                     }
                 }
@@ -148,7 +154,7 @@ namespace DeployManager.DataComponent
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Setting Manager Project Ignore Error {ex.Message}");
+                Trace.TraceWarning($"Setting Manager Project Ignore Error {ex.Message}");
             }
         }
         #endregion
