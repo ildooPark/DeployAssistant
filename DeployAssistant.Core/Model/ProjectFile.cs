@@ -212,7 +212,10 @@ namespace DeployAssistant.Model
         public bool Equals(ProjectFile? other)
         {
             if (other == null)
+            {
+                Trace.TraceWarning($"Null ProjectFile presented for comparison with {this.DataName}");
                 return false;
+            }
             return other.DataName == this.DataName;
         }
     }
