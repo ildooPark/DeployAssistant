@@ -38,64 +38,75 @@ Core responsibilities:
 
 ```
 DeployAssistant.sln
-└── SimpleBinaryVCS/                   ← single project, all source
-    ├── App.xaml / App.xaml.cs         ← application entry-point; global singletons
-    ├── AssemblyInfo.cs
-    ├── Interfaces/
-    │   ├── IManager.cs
-    │   └── IProjectData.cs
-    ├── Model/                         ← pure data classes (serializable)
-    │   ├── ProjectMetaData.cs
-    │   ├── ProjectData.cs
-    │   ├── ProjectFile.cs
-    │   ├── ChangedFile.cs
-    │   ├── RecordedFile.cs
-    │   ├── ProjectIgnoreData.cs
-    │   ├── ProjectSimilarity.cs
-    │   ├── DeployData.cs
-    │   └── LocalConfigData.cs
-    ├── DataComponent/                 ← service/manager layer (business logic)
-    │   ├── MetaDataManager.cs         ← central orchestrator
-    │   ├── FileManager.cs
-    │   ├── BackupManager.cs
-    │   ├── UpdateManager.cs
-    │   ├── ExportManager.cs
-    │   ├── SettingManager.cs
-    │   └── LogManager.cs              ← empty stub
-    ├── ViewModel/
-    │   ├── ViewModelBase.cs
-    │   ├── MainViewModel.cs
-    │   ├── MetaDataViewModel.cs
-    │   ├── FileTrackViewModel.cs
-    │   ├── BackupViewModel.cs
-    │   ├── VersionDiffViewModel.cs
-    │   ├── VersionIntegrationViewModel.cs
-    │   ├── VersionCheckViewModel.cs
-    │   ├── VersionCompatibilityViewModel.cs
-    │   └── OverlapFileViewModel.cs
-    ├── View/
-    │   ├── MainWindow.xaml / .cs
-    │   ├── IntegrityLogWindow.xaml / .cs
-    │   ├── ErrorLogWindow.xaml / .cs
-    │   ├── VersionDiffWindow.xaml / .cs
-    │   ├── VersionIntegrationView.xaml / .cs
-    │   ├── CompatibleVersionWindow.xaml
-    │   ├── OverlapFileWindow.xaml / .cs
-    │   └── VersionComparisonWindow.cs
+├── DeployAssistant/                   ← main application project
+│   ├── App.xaml / App.xaml.cs         ← application entry-point; global singletons
+│   ├── AssemblyInfo.cs
+│   ├── Interfaces/
+│   │   ├── IManager.cs
+│   │   └── IProjectData.cs
+│   ├── Model/                         ← pure data classes (serializable)
+│   │   ├── ProjectMetaData.cs
+│   │   ├── ProjectData.cs
+│   │   ├── ProjectFile.cs
+│   │   ├── ChangedFile.cs
+│   │   ├── RecordedFile.cs
+│   │   ├── ProjectIgnoreData.cs
+│   │   ├── ProjectSimilarity.cs
+│   │   ├── DeployData.cs
+│   │   └── LocalConfigData.cs
+│   ├── DataComponent/                 ← service/manager layer (business logic)
+│   │   ├── MetaDataManager.cs         ← central orchestrator
+│   │   ├── FileManager.cs
+│   │   ├── BackupManager.cs
+│   │   ├── UpdateManager.cs
+│   │   ├── ExportManager.cs
+│   │   ├── SettingManager.cs
+│   │   └── LogManager.cs              ← empty stub
+│   ├── ViewModel/
+│   │   ├── ViewModelBase.cs
+│   │   ├── MainViewModel.cs
+│   │   ├── MetaDataViewModel.cs
+│   │   ├── FileTrackViewModel.cs
+│   │   ├── BackupViewModel.cs
+│   │   ├── VersionDiffViewModel.cs
+│   │   ├── VersionIntegrationViewModel.cs
+│   │   ├── VersionCheckViewModel.cs
+│   │   ├── VersionCompatibilityViewModel.cs
+│   │   └── OverlapFileViewModel.cs
+│   ├── View/
+│   │   ├── MainWindow.xaml / .cs
+│   │   ├── IntegrityLogWindow.xaml / .cs
+│   │   ├── ErrorLogWindow.xaml / .cs
+│   │   ├── VersionDiffWindow.xaml / .cs
+│   │   ├── VersionIntegrationView.xaml / .cs
+│   │   ├── CompatibleVersionWindow.xaml
+│   │   ├── OverlapFileWindow.xaml / .cs
+│   │   └── VersionComparisonWindow.cs
+│   └── Utils/
+│       ├── FileHandlerTool.cs
+│       ├── HashTool.cs
+│       ├── LogTool.cs
+│       └── RelayCommand.cs
+└── DeployAssistant.Tests/             ← unit test project (xUnit)
+    └── Models/
+        ├── ChangedFileTests.cs
+        ├── ProjectDataTests.cs
+        ├── ProjectFileTests.cs
+        ├── ProjectIgnoreDataTests.cs
+        └── ProjectMetaDataTests.cs
     └── Utils/
-        ├── FileHandlerTool.cs
-        ├── HashTool.cs
-        ├── LogTool.cs
-        └── RelayCommand.cs
+        ├── FileHandlerToolTests.cs
+        ├── HashToolTests.cs
+        └── IntegrityCheckRobustnessTests.cs
 ```
 
 ### Namespace irregularities (known technical debt)
-The codebase uses **three different namespaces** across files in the same project:
-- `SimpleBinaryVCS` — most files (original namespace)
-- `DeployAssistant` / `DeployAssistant.Model` / `DeployAssistant.ViewModel` — newer files
-- `DeployManager` / `DeployManager.DataComponent` / `DeployManager.Model` — some model/manager files
+The codebase uses **two namespace prefixes** across files in the same project:
+- `DeployAssistant` / `DeployAssistant.Interfaces` / `DeployAssistant.Model` / `DeployAssistant.DataComponent` / `DeployAssistant.ViewModel` / `DeployAssistant.View` / `DeployAssistant.Utils` — the vast majority of files
+- `DeployManager.DataComponent` — `SettingManager.cs` only
+- `DeployManager.Model` — `LocalConfigData.cs` only
 
-All live in a single compiled assembly. A refactor should consolidate to a single namespace.
+All live in a single compiled assembly. A refactor should consolidate to the `DeployAssistant.*` namespace hierarchy.
 
 ---
 
@@ -716,7 +727,7 @@ The following issues were observed in the current implementation and should be a
 
 5. **Stub — `RequestExportProjectVersionDiffFiles`** (`MetaDataManager.cs`): Empty body.
 
-6. **Inconsistent namespace** (`SimpleBinaryVCS` vs `DeployAssistant` vs `DeployManager`): All three are used across files in the same project. Should be unified to one namespace.
+6. **Inconsistent namespace** (`DeployAssistant.*` vs `DeployManager.*`): `SettingManager.cs` uses namespace `DeployManager.DataComponent` and `LocalConfigData.cs` uses `DeployManager.Model`. All files should be unified under the `DeployAssistant.*` hierarchy.
 
 7. **Double `_updateManager.Awake()` call** (`MetaDataManager.Awake()`, lines 154–155): `_updateManager.Awake()` is called twice in succession; `_fileManager.Awake()` and `_exportManager.Awake()` are never called.
 
