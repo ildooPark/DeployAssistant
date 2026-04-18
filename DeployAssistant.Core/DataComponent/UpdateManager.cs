@@ -1,6 +1,7 @@
 ﻿using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
 using DeployAssistant.Utils;
+using System.Diagnostics;
 using System.Text;
 
 namespace DeployAssistant.DataComponent
@@ -17,10 +18,18 @@ namespace DeployAssistant.DataComponent
         public event Action<ProjectData, ProjectData, List<ChangedFile>>? ReportFileDifferences;
         public event Action<object>? ProjectUpdateEventHandler;
         public event Action<MetaDataState>? ManagerStateEventHandler;
+
+        /// <summary>
+        /// Optional callback to ask the user a yes/no question.
+        /// Parameters: (message, title). Returns true for "Yes", false for "No".
+        /// When null, defaults to false (do not retry on failure).
+        /// </summary>
+        public Func<string, string, bool>? ConfirmationCallback { get; set; }
+
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         public UpdateManager() 
         {
-            _fileHandlerTool = App.FileHandlerTool;
+            _fileHandlerTool = new FileHandlerTool();
         }
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         public void Awake()
@@ -34,10 +43,10 @@ namespace DeployAssistant.DataComponent
         /// <param name="updateLog"></param>
         public void UpdateProjectMain(string updaterName, string updateLog, string currentProjectPath)
         {
-            if (_projectMetaData == null) { MessageBox.Show("Project MetaData on Update Manager is Missing"); return; }
-            if (_projectMain == null) { MessageBox.Show("Project Data on Update Manager is Missing"); return; }
-            if (_currentProjectFileChanges == null || _currentProjectFileChanges.Count == 0) { MessageBox.Show("File Changes does not exist"); return; }
-            if (currentProjectPath != _projectMetaData.ProjectPath) { MessageBox.Show("Project Meta Data Path and Updated Path must match"); return; }
+            if (_projectMetaData == null) { Trace.TraceWarning("Project MetaData on Update Manager is Missing"); return; }
+            if (_projectMain == null) { Trace.TraceWarning("Project Data on Update Manager is Missing"); return; }
+            if (_currentProjectFileChanges == null || _currentProjectFileChanges.Count == 0) { Trace.TraceWarning("File Changes does not exist"); return; }
+            if (currentProjectPath != _projectMetaData.ProjectPath) { Trace.TraceWarning("Project Meta Data Path and Updated Path must match"); return; }
             
             ManagerStateEventHandler?.Invoke(MetaDataState.Updating);
             
@@ -52,15 +61,14 @@ namespace DeployAssistant.DataComponent
                 updateSuccess = _fileHandlerTool.TryApplyFileChanges(_currentProjectFileChanges);
                 if (!updateSuccess)
                 {
-                    var response = MessageBox.Show("Update Failed, Would you like to Retry?", "Update Project", 
-                        MessageBoxButtons.YesNo);
-                    if (response == DialogResult.Yes)
+                    bool retry = ConfirmationCallback?.Invoke("Update Failed, Would you like to Retry?", "Update Project") ?? false;
+                    if (retry)
                     {
                         continue; 
                     }
                     else
                     {
-                        MessageBox.Show("Update Failed, Please Run Version Integrity Test");
+                        Trace.TraceWarning("Update Failed, Please Run Version Integrity Test");
                         ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                         return;
                     }
@@ -85,12 +93,12 @@ namespace DeployAssistant.DataComponent
         {
             if (_srcProjectData == null)
             {
-                MessageBox.Show("Insert Source Project");
+                Trace.TraceWarning("Insert Source Project");
                 return;
             }
             if (_currentProjectFileChanges == null || _currentProjectFileChanges.Count == 0) 
             { 
-                MessageBox.Show("File Changes does not exist"); return; 
+                Trace.TraceWarning("File Changes does not exist"); return; 
             }
 
             RegisterFileChanges(_srcProjectData, _projectMain, _currentProjectFileChanges, out StringBuilder? changeLog); 
@@ -101,15 +109,14 @@ namespace DeployAssistant.DataComponent
                 updateSuccess = _fileHandlerTool.TryApplyFileChanges(_currentProjectFileChanges);
                 if (!updateSuccess)
                 {
-                    var response = MessageBox.Show("Integration Failed, Would you like to Retry?", "Update Project",
-                        MessageBoxButtons.YesNo);
-                    if (response == DialogResult.Yes)
+                    bool retry = ConfirmationCallback?.Invoke("Integration Failed, Would you like to Retry?", "Update Project") ?? false;
+                    if (retry)
                     {
                         continue;
                     }
                     else
                     {
-                        MessageBox.Show("Integration Failed, Please Run Version Integrity Test");
+                        Trace.TraceWarning("Integration Failed, Please Run Version Integrity Test");
                         ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                         return;
                     }
@@ -249,7 +256,7 @@ namespace DeployAssistant.DataComponent
         {
             if (obj is not ProjectData loadedProject)
             {
-                MessageBox.Show("Invalid Parameter has entered on Update Manager");
+                Trace.TraceWarning("Invalid Parameter has entered on Update Manager");
                 return;
             }
             _projectMain = loadedProject;

@@ -1,6 +1,7 @@
 ﻿using DeployAssistant.DataComponent;
 using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -138,7 +139,7 @@ namespace DeployAssistant.Utils
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Couldn't Process File Changes : {ex.Message}");
+                Trace.TraceWarning($"Couldn't Process File Changes : {ex.Message}");
                 return false;
             }
         }
@@ -210,7 +211,7 @@ namespace DeployAssistant.Utils
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message); return false; 
+                Trace.TraceError(ex.Message); return false; 
             }
         }
         public bool HandleFile(string? srcPath, string dstPath, DataState state)
@@ -225,7 +226,7 @@ namespace DeployAssistant.Utils
                 }
                 if (srcPath == null)
                 {
-                    MessageBox.Show($"Source File is null while File Handle state is {state.ToString()}");
+                    Trace.TraceWarning($"Source File is null while File Handle state is {state.ToString()}");
                     return false;
                 }
                 if ((state & DataState.Added) != 0)
@@ -241,7 +242,7 @@ namespace DeployAssistant.Utils
                         Directory.CreateDirectory(Path.GetDirectoryName(dstPath));
                     if (srcPath == dstPath)
                     {
-                        //MessageBox.Show($"Source File and Dst File path is same for {state.ToString()}, {dstPath}");
+                        //Trace.TraceWarning($"Source File and Dst File path is same for {state.ToString()}, {dstPath}");
                         return false; 
                     }
                     File.Copy(srcPath, dstPath, true);
@@ -250,7 +251,7 @@ namespace DeployAssistant.Utils
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message); return false; 
+                Trace.TraceError(ex.Message); return false; 
             }
         }
 
@@ -266,7 +267,7 @@ namespace DeployAssistant.Utils
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Couldn't Move File {ex.Message}");
+                Trace.TraceWarning($"Couldn't Move File {ex.Message}");
                 return false; 
             }
         }

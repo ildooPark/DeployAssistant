@@ -1,6 +1,4 @@
-﻿using DeployAssistant.Model;
-using DeployManager.DataComponent;
-using DeployAssistant.Interfaces;
+﻿using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
 using DeployAssistant.Utils;
 using System.Collections.Concurrent;
@@ -99,12 +97,19 @@ namespace DeployAssistant.DataComponent
         private FileHandlerTool _fileHandlerTool;
         private HashTool _hashTool; 
 
+        /// <summary>
+        /// Optional callback to ask the user a yes/no question.
+        /// Parameters: (message, title). Returns true for "Yes", false for "No".
+        /// When null, defaults to true (proceed with the affirmative path).
+        /// </summary>
+        public Func<string, string, bool>? ConfirmationCallback { get; set; }
+
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         public MetaDataManager()
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         {
-            _fileHandlerTool = App.FileHandlerTool;
-            _hashTool = App.HashTool;
+            _fileHandlerTool = new FileHandlerTool();
+            _hashTool = new HashTool();
         }
 
         public void Awake()
@@ -187,7 +192,7 @@ namespace DeployAssistant.DataComponent
             catch (Exception ex)
             {
                 CurrentState = MetaDataState.Idle;
-                MessageBox.Show($"MetaDataManager TryRetrieveProject Error {ex.Message}");
+                Trace.TraceWarning($"MetaDataManager TryRetrieveProject Error {ex.Message}");
                 return false;
             }
             TryAppendProjParentDirAsProjectFile(MainProjectData, projectPath);
@@ -222,7 +227,7 @@ namespace DeployAssistant.DataComponent
 
                 if (newProjectFiles == null || newProjectDirs == null)
                 { 
-                    MessageBox.Show("Couldn't Get Project Files (And Or) Directories on MetaDataManager"); 
+                    Trace.TraceWarning("Couldn't Get Project Files (And Or) Directories on MetaDataManager"); 
                     return; 
                 }
 
@@ -302,7 +307,7 @@ namespace DeployAssistant.DataComponent
             catch (Exception ex)
             {
                 CurrentState = MetaDataState.Idle;
-                MessageBox.Show($"MetaDataManager Error InitializeProject {ex.Message}");
+                Trace.TraceWarning($"MetaDataManager Error InitializeProject {ex.Message}");
                 return;
             }
         }
@@ -328,7 +333,7 @@ namespace DeployAssistant.DataComponent
         {
             if (targetProject == null)
             {
-                MessageBox.Show("Invalid Request For Backup: Targeting Project is Null");
+                Trace.TraceWarning("Invalid Request For Backup: Targeting Project is Null");
                 return;
             }
 
@@ -409,7 +414,7 @@ namespace DeployAssistant.DataComponent
                         }
                         catch(Exception ex)
                         {
-                            MessageBox.Show($"Error while collecting Project Compatibility {ex.Message}");
+                            Trace.TraceWarning($"Error while collecting Project Compatibility {ex.Message}");
                             return;
                         }
                         finally
@@ -421,7 +426,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error while collecting Project Compatibility {ex.Message}");
+                Trace.TraceWarning($"Error while collecting Project Compatibility {ex.Message}");
                 return; 
             }
             
@@ -438,22 +443,19 @@ namespace DeployAssistant.DataComponent
             {
                 if (currentProjectPath == null)
                 {
-                    MessageBox.Show("Project Path must be set for Update Request");
+                    Trace.TraceWarning("Project Path must be set for Update Request");
                     return;
                 }
                 if (_srcProjectData != null)
                 {
-                    var responseForIntegration = MessageBox.Show("Src Project Data Found, Try Integrate?", "Integrate Project",
-                            MessageBoxButtons.YesNo);
-                    if (responseForIntegration == DialogResult.Yes)
+                    bool tryIntegrate = ConfirmationCallback?.Invoke("Src Project Data Found, Try Integrate?", "Integrate Project") ?? true;
+                    if (tryIntegrate)
                     {
                         List<ChangedFile>? fileDifferences = _fileManager.FindVersionDifferences(_srcProjectData, MainProjectData);
                         if (!_updateManager.TryIntegrateSrcProject(_srcProjectData, fileDifferences))
                         {
-                            var responseForUpdate = MessageBox.Show("Integration Failed, Update Anyway?", "Update Project",
-                            MessageBoxButtons.YesNo);
-
-                            if (responseForUpdate == DialogResult.No)
+                            bool updateAnyway = ConfirmationCallback?.Invoke("Integration Failed, Update Anyway?", "Update Project") ?? false;
+                            if (!updateAnyway)
                             {
                                 return;
                             }
@@ -466,10 +468,8 @@ namespace DeployAssistant.DataComponent
                     }
                     else
                     {
-                        var responseForUpdate = MessageBox.Show("Update Anyway?", "Update Project",
-                                MessageBoxButtons.YesNo);
-
-                        if (responseForUpdate == DialogResult.No)
+                        bool updateAnyway = ConfirmationCallback?.Invoke("Update Anyway?", "Update Project") ?? false;
+                        if (!updateAnyway)
                         {
                             return;
                         }
@@ -479,7 +479,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message);
+                Trace.TraceError(ex.Message);
             }
         }
 
@@ -525,7 +525,7 @@ namespace DeployAssistant.DataComponent
         {
             if (stagedFileListObj is not List<ChangedFile> stagedFiles)
             {
-                MessageBox.Show("Improper stagedFile parameter value returned");
+                Trace.TraceWarning("Improper stagedFile parameter value returned");
                 return;
             }
             ObservableCollection<ProjectFile> stagedChangesObs = new ObservableCollection<ProjectFile>();
@@ -584,7 +584,7 @@ namespace DeployAssistant.DataComponent
         {
             if (!RequestProjectRetrieval(dstProjectPath))
             {
-                MessageBox.Show("Project Data not found! Please Reconfigure Destination Path");
+                Trace.TraceWarning("Project Data not found! Please Reconfigure Destination Path");
                 return;
             }
         }
@@ -625,7 +625,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Project Initialization Failed due to {ex.Message}");
+                Trace.TraceWarning($"Project Initialization Failed due to {ex.Message}");
                 return false;   
             }
         }

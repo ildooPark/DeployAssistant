@@ -1,4 +1,5 @@
-﻿using System.IO;
+using System.Diagnostics;
+using System.IO;
 using System.Text.Json.Serialization;
 
 namespace DeployAssistant.Model
@@ -53,7 +54,7 @@ namespace DeployAssistant.Model
                 string? fileBackupVersion = Path.GetFileName(backupFile.DataSrcPath);
                 if (fileBackupVersion == null)
                 {
-                    MessageBox.Show("BackupPath Invalid!"); return;
+                    Trace.TraceWarning("BackupPath Invalid!"); return;
                 }
                 backupFile.DataSrcPath = Path.Combine(newBackupPath, fileBackupVersion); 
             }

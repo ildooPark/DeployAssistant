@@ -1,7 +1,7 @@
 ﻿using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
 using DeployAssistant.Utils;
-using WPF = System.Windows;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using DocumentFormat.OpenXml;
@@ -15,9 +15,17 @@ namespace DeployAssistant.DataComponent
         private string? _currentProjectPath; 
         private Dictionary<string, ProjectFile>? _backupFilesDict;
         private FileHandlerTool _fileHandlerTool;
+
+        /// <summary>
+        /// Optional callback to ask the user a yes/no question.
+        /// Parameters: (message, title). Returns true for "Yes", false for "No".
+        /// When null, defaults to false (do not retry on failure).
+        /// </summary>
+        public Func<string, string, bool>? ConfirmationCallback { get; set; }
+
         public ExportManager() 
         {
-            _fileHandlerTool = App.FileHandlerTool;
+            _fileHandlerTool = new FileHandlerTool();
         }
         #region Manager Events
         /// <summary>
@@ -38,14 +46,16 @@ namespace DeployAssistant.DataComponent
                 exportResult = _fileHandlerTool.TrySerializeProjectData(projectData, exportVersionLogPath);
                 if (!exportResult)
                 {
-                    var response = WPF.MessageBox.Show("Export Failed, Would you like to try again?", "Export Project Version Log", WPF.MessageBoxButton.YesNo);
-                    if (response == WPF.MessageBoxResult.Yes)
+                    bool retry = ConfirmationCallback?.Invoke(
+                        "Export Failed, Would you like to try again?",
+                        "Export Project Version Log") ?? false;
+                    if (retry)
                     {
                         continue;
                     }
                     else
                     {
-                        WPF.MessageBox.Show("Export Canceled");
+                        Trace.TraceWarning("Export Canceled");
                         return;
                     }
                 }
@@ -57,7 +67,7 @@ namespace DeployAssistant.DataComponent
             if (_backupFilesDict == null)
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                WPF.MessageBox.Show("Backup files are missing!, Make sure ProjectMetaData is Set");
+                Trace.TraceWarning("Backup files are missing!, Make sure ProjectMetaData is Set");
                 return;
             }
             ManagerStateEventHandler?.Invoke(MetaDataState.Exporting);
@@ -68,14 +78,16 @@ namespace DeployAssistant.DataComponent
                 exportResult = TryExportProject(projectData, out exportPath);
                 if (!exportResult)
                 {
-                    var response = WPF.MessageBox.Show("Export Failed, Would you like to try again?", "Export Project", WPF.MessageBoxButton.YesNo);
-                    if (response == WPF.MessageBoxResult.Yes)
+                    bool retry = ConfirmationCallback?.Invoke(
+                        "Export Failed, Would you like to try again?",
+                        "Export Project") ?? false;
+                    if (retry)
                     {
                         continue;
                     }
                     else
                     {
-                        WPF.MessageBox.Show("Export Canceled");
+                        Trace.TraceWarning("Export Canceled");
                         ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                         break;
                     }
@@ -93,7 +105,7 @@ namespace DeployAssistant.DataComponent
             {
                 if (_backupFilesDict == null)
                 {
-                    WPF.MessageBox.Show("Backup files are missing!, Make sure ProjectMetaData is Set");
+                    Trace.TraceWarning("Backup files are missing!, Make sure ProjectMetaData is Set");
                     exportPath = null; return false;
                 }
                 string exportDstPath = GetExportProjectPath(projectData);
@@ -109,7 +121,7 @@ namespace DeployAssistant.DataComponent
                         bool handleResult = _fileHandlerTool.HandleDirectory(null, Path.Combine(exportDstPath, file.DataRelPath), DataState.None);
                         if (!handleResult)
                         {
-                            WPF.MessageBox.Show($"Export Failed! for file {file.DataName}!");
+                            Trace.TraceError($"Export Failed! for file {file.DataName}!");
                             exportPath = null;  return false;
                         }
                         exportCount++;
@@ -117,7 +129,7 @@ namespace DeployAssistant.DataComponent
                     }
                     if (!_backupFilesDict.TryGetValue(file.DataHash, out ProjectFile? backupFile))
                     {
-                        WPF.MessageBox.Show($"Export Failed! for file {file.DataName}!");
+                        Trace.TraceError($"Export Failed! for file {file.DataName}!");
                         exportPath = null; return false;
                     }
                     else
@@ -125,7 +137,7 @@ namespace DeployAssistant.DataComponent
                         bool handleResult = _fileHandlerTool.HandleFile(backupFile.DataAbsPath, Path.Combine(exportDstPath, file.DataRelPath), DataState.None);
                         if (!handleResult)
                         {
-                            WPF.MessageBox.Show($"Export Failed! for file {file.DataName}!");
+                            Trace.TraceError($"Export Failed! for file {file.DataName}!");
                             exportPath = null; return false;
                         }
                         exportCount++;
@@ -143,7 +155,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                WPF.MessageBox.Show(ex.Message);
+                Trace.TraceError(ex.Message);
                 exportPath = null; return false;
             }
         }
@@ -223,7 +235,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message);
+                Trace.TraceError(ex.Message);
                 exportPath = null;
                 return false; 
             }
@@ -292,7 +304,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message);
+                Trace.TraceError(ex.Message);
                 exportPath = null;
                 return false;
             }

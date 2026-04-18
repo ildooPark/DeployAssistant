@@ -1,8 +1,8 @@
 ﻿using DeployAssistant.Model;
+using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
-using WPF = System.Windows;
 
 namespace DeployAssistant.Utils
 {
@@ -27,7 +27,7 @@ namespace DeployAssistant.Utils
             using MD5 md5 = MD5.Create();
             if (md5 == null)
             {
-                WPF.MessageBox.Show("Failed to Initialize MD5");
+                Trace.TraceError("Failed to Initialize MD5");
                 result = (null, null);
                 return false;
             }
@@ -51,7 +51,7 @@ namespace DeployAssistant.Utils
             using MD5 md5 = MD5.Create();
             if (md5 == null)
             {
-                WPF.MessageBox.Show($"Failed to Initialize MD5 for file {srcFileRelPath}");
+                Trace.TraceError($"Failed to Initialize MD5 for file {srcFileRelPath}");
                 return "";
             }
             using (var srcStream = File.OpenRead(srcFileFullPath))
@@ -69,7 +69,7 @@ namespace DeployAssistant.Utils
                 using MD5 md5 = MD5.Create();
                 if (md5 == null)
                 {
-                    WPF.MessageBox.Show("Failed to Initialize MD5 Async");
+                    Trace.TraceError("Failed to Initialize MD5 Async");
                     return;
                 }
                 using (var srcStream = File.OpenRead(file.DataAbsPath))
@@ -82,7 +82,7 @@ namespace DeployAssistant.Utils
             }
             catch (Exception ex)
             {
-                WPF.MessageBox.Show($"Error occured {ex.Message} \nwhile Computing hash async by this file {file.DataName}");
+                Trace.TraceError($"Error occured {ex.Message} \nwhile Computing hash async by this file {file.DataName}");
             }
         }
         public void GetFileMD5CheckSum(ProjectFile file)
@@ -93,7 +93,7 @@ namespace DeployAssistant.Utils
                 using MD5 md5 = MD5.Create();
                 if (md5 == null)
                 {
-                    WPF.MessageBox.Show("Failed to Initialize MD5");
+                    Trace.TraceError("Failed to Initialize MD5");
                     return;
                 }
                 using (var srcStream = File.OpenRead(file.DataAbsPath))
@@ -106,7 +106,7 @@ namespace DeployAssistant.Utils
             }
             catch (Exception ex)
             {
-                WPF.MessageBox.Show($"Error occured {ex.Message} \nwhile Computing hash by this file {file.DataName}");
+                Trace.TraceError($"Error occured {ex.Message} \nwhile Computing hash by this file {file.DataName}");
             }
         }
         public async Task<string?> GetFileMD5CheckSumAsync(string fileFullPath)
@@ -117,7 +117,7 @@ namespace DeployAssistant.Utils
                 using MD5 md5 = MD5.Create();
                 if (md5 == null)
                 {
-                    WPF.MessageBox.Show("Failed to Initialize MD5 Async");
+                    Trace.TraceError("Failed to Initialize MD5 Async");
                     return null;
                 }
                 using (var srcStream = File.OpenRead(fileFullPath))
@@ -130,7 +130,7 @@ namespace DeployAssistant.Utils
             }
             catch (Exception ex)
             {
-                WPF.MessageBox.Show($"Error occured {ex.Message} \nwhile Computing hash async by this file {Path.GetFileName(fileFullPath)}");
+                Trace.TraceError($"Error occured {ex.Message} \nwhile Computing hash async by this file {Path.GetFileName(fileFullPath)}");
                 return null;
             }
         }
@@ -160,7 +160,7 @@ namespace DeployAssistant.Utils
             using SHA256 sha256 = SHA256.Create();
             if (sha256 == null)
             {
-                WPF.MessageBox.Show($"Failed to Initialize MD5 for ProjectData Hash {projectData.ProjectName}");
+                Trace.TraceError($"Failed to Initialize SHA256 for ProjectData Hash {projectData.ProjectName}");
                 return "";
             }
             byte[] filesByte = Encoding.UTF8.GetBytes((string) filesListWithHash.ToString());
