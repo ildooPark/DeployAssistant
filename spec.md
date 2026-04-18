@@ -21,7 +21,7 @@ Core responsibilities:
 
 | Item | Detail |
 |---|---|
-| Language | C# 12 / .NET 8.0 (Windows) |
+| Language | C# 14 / .NET 10.0 (Windows) |
 | UI Framework | WPF (`UseWPF=true`) |
 | Auxiliary UI | Windows Forms (`UseWindowsForms=true`) — used for `FolderBrowserDialog`, `MessageBox`, `DialogResult` |
 | Architecture pattern | MVVM (Model / ViewModel / View) with event-driven data flow |
