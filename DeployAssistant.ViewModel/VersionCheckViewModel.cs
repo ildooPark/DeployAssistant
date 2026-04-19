@@ -61,7 +61,7 @@ namespace DeployAssistant.ViewModel
             set
             {
                 _projectDataReview = value;
-                OnPropertyChanged("ProjectDataDetail");
+                OnPropertyChanged(nameof(ProjectDataReview));
             }
         }
 
