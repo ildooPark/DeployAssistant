@@ -9,6 +9,8 @@ jobs:
   test:
     name: Run Tests
     runs-on: windows-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
