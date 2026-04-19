@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>DeployAssistant.Core.Standard</AssemblyName>
+    <RootNamespace>DeployAssistant</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.0.2" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <!-- Link unchanged source files directly from DeployAssistant.Core -->
+  <ItemGroup>
+    <!-- Interfaces -->
+    <Compile Include="../DeployAssistant.Core/Interfaces/IManager.cs"
+             Link="Interfaces/IManager.cs" />
+    <Compile Include="../DeployAssistant.Core/Interfaces/IProjectData.cs"
+             Link="Interfaces/IProjectData.cs" />
+
+    <!-- Model -->
+    <Compile Include="../DeployAssistant.Core/Model/ChangedFile.cs"
+             Link="Model/ChangedFile.cs" />
+    <Compile Include="../DeployAssistant.Core/Model/DeployData.cs"
+             Link="Model/DeployData.cs" />
+    <Compile Include="../DeployAssistant.Core/Model/LocalConfigData.cs"
+             Link="Model/LocalConfigData.cs" />
+    <Compile Include="../DeployAssistant.Core/Model/ProjectData.cs"
+             Link="Model/ProjectData.cs" />
+    <Compile Include="../DeployAssistant.Core/Model/ProjectFile.cs"
+             Link="Model/ProjectFile.cs" />
+    <Compile Include="../DeployAssistant.Core/Model/ProjectIgnoreData.cs"
+             Link="Model/ProjectIgnoreData.cs" />
+    <Compile Include="../DeployAssistant.Core/Model/ProjectMetaData.cs"
+             Link="Model/ProjectMetaData.cs" />
+    <Compile Include="../DeployAssistant.Core/Model/ProjectSimilarity.cs"
+             Link="Model/ProjectSimilarity.cs" />
+    <Compile Include="../DeployAssistant.Core/Model/RecordedFile.cs"
+             Link="Model/RecordedFile.cs" />
+
+    <!-- DataComponent (unchanged) -->
+    <Compile Include="../DeployAssistant.Core/DataComponent/BackupManager.cs"
+             Link="DataComponent/BackupManager.cs" />
+    <Compile Include="../DeployAssistant.Core/DataComponent/ExportManager.cs"
+             Link="DataComponent/ExportManager.cs" />
+    <Compile Include="../DeployAssistant.Core/DataComponent/LogManager.cs"
+             Link="DataComponent/LogManager.cs" />
+    <Compile Include="../DeployAssistant.Core/DataComponent/SettingManager.cs"
+             Link="DataComponent/SettingManager.cs" />
+    <Compile Include="../DeployAssistant.Core/DataComponent/UpdateManager.cs"
+             Link="DataComponent/UpdateManager.cs" />
+
+    <!-- Utils (unchanged) -->
+    <Compile Include="../DeployAssistant.Core/Utils/LogTool.cs"
+             Link="Utils/LogTool.cs" />
+  </ItemGroup>
+
+</Project>
