@@ -105,6 +105,7 @@ namespace DeployAssistant.ViewModel
             _metaDataManager.FetchRequestEventHandler += FetchRequestCallBack;
             _metaDataManager.ProjExportEventHandler += ExportRequestCallBack;
             _metaDataManager.ManagerStateEventHandler += MetaDataStateChangeCallBack;
+            _metaDataManager.ProjComparisonCompleteEventHandler += ProjComparisonCompleteCallBack;
         }
 
         private bool CanFetch(object obj)
@@ -237,6 +238,14 @@ namespace DeployAssistant.ViewModel
             {
                 _metaDataState = state;
                 System.Windows.Application.Current?.MainWindow?.UpdateLayout();
+            });
+        }
+
+        private void ProjComparisonCompleteCallBack(ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff)
+        {
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            {
+                VersionDiffWindowRequested?.Invoke(srcProject, dstProject, diff);
             });
         }
 
