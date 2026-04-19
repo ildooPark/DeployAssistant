@@ -3,10 +3,31 @@ name: Release
 on:
   push:
     tags:
-      - 'v[0-9]+.0.0'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
+  test:
+    name: Run Tests
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore DeployAssistant.sln
+
+      - name: Run tests
+        run: dotnet test DeployAssistant.sln --configuration Release --no-restore --verbosity normal
+
   build-and-release:
+    name: Build & Release
+    needs: test
     runs-on: windows-latest
     permissions:
       contents: write
@@ -14,6 +35,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v4
@@ -32,23 +55,152 @@ jobs:
             -p:PublishSingleFile=true `
             -o ./publish/DeployAssistant
 
-      - name: Zip build output
+      - name: Publish CLI (self-contained, win-x64)
+        run: |
+          dotnet publish DeployAssistant.CLI/DeployAssistant.CLI.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -o ./publish/DeployAssistant.CLI
+
+      - name: Zip WPF build output
         shell: pwsh
         run: |
           Compress-Archive -Path ./publish/DeployAssistant/* `
             -DestinationPath DeployAssistant-build.zip -Force
 
+      - name: Zip CLI build output
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ./publish/DeployAssistant.CLI/* `
+            -DestinationPath DeployAssistant-CLI-build.zip -Force
+
       - name: Zip source code
         shell: pwsh
         run: |
-          $exclude = @('.git', 'publish', 'DeployAssistant-build.zip')
+          $exclude = @('.git', 'publish', 'DeployAssistant-build.zip', 'DeployAssistant-CLI-build.zip')
           $items = Get-ChildItem -Path . -Exclude $exclude
           Compress-Archive -Path $items -DestinationPath DeployAssistant-src.zip -Force
+
+      - name: Generate categorized changelog
+        id: changelog
+        shell: pwsh
+        run: |
+          # Determine commit range: from previous tag to current tag
+          $currentTag = $env:GITHUB_REF_NAME
+          $prevTag = git describe --tags --abbrev=0 "$currentTag^" 2>$null
+          if ($LASTEXITCODE -ne 0 -or -not $prevTag) {
+            $range = $currentTag
+            $prevTagDisplay = "(initial release)"
+          } else {
+            $range = "$prevTag..$currentTag"
+            $prevTagDisplay = $prevTag
+          }
+
+          # Collect commits in range
+          $commits = git log $range --pretty=format:"%s|%h|%an" --no-merges
+
+          $hotfixes    = [System.Collections.Generic.List[string]]::new()
+          $bugFixes    = [System.Collections.Generic.List[string]]::new()
+          $features    = [System.Collections.Generic.List[string]]::new()
+          $performance = [System.Collections.Generic.List[string]]::new()
+          $other       = [System.Collections.Generic.List[string]]::new()
+
+          foreach ($line in $commits) {
+            if (-not $line) { continue }
+            $parts   = $line -split '\|', 3
+            $subject = $parts[0].Trim()
+            $hash    = $parts[1].Trim()
+            $author  = if ($parts.Count -ge 3) { $parts[2].Trim() } else { '' }
+            $entry   = "- $subject (\`$hash\`) — $author"
+
+            if ($subject -match '^hotfix(\([^)]+\))?!?:') {
+              $hotfixes.Add($entry)
+            } elseif ($subject -match '^fix(\([^)]+\))?!?:') {
+              $bugFixes.Add($entry)
+            } elseif ($subject -match '^(feat|feature|improve|improvement|enhance)(\([^)]+\))?!?:') {
+              $features.Add($entry)
+            } elseif ($subject -match '^(perf|refactor|chore|build|ci)(\([^)]+\))?!?:') {
+              $performance.Add($entry)
+            } else {
+              $other.Add($entry)
+            }
+          }
+
+          # Build markdown body
+          $md = @()
+          $md += "## 📦 Release $currentTag"
+          $md += ""
+          $md += "> Changes since **$prevTagDisplay**"
+          $md += ""
+
+          # Summary counts
+          $total = $hotfixes.Count + $bugFixes.Count + $features.Count + $performance.Count + $other.Count
+          $md += "### 📊 Summary"
+          $md += ""
+          $md += "| Category | Count |"
+          $md += "|---|---|"
+          if ($hotfixes.Count    -gt 0) { $md += "| 🚨 Hotfixes | $($hotfixes.Count) |" }
+          if ($bugFixes.Count    -gt 0) { $md += "| 🐛 Bug Fixes | $($bugFixes.Count) |" }
+          if ($features.Count    -gt 0) { $md += "| ✨ Features & Improvements | $($features.Count) |" }
+          if ($performance.Count -gt 0) { $md += "| ⚡ Performance & Maintenance | $($performance.Count) |" }
+          if ($other.Count       -gt 0) { $md += "| 🔧 Other Changes | $($other.Count) |" }
+          $md += "| **Total** | **$total** |"
+          $md += ""
+
+          if ($hotfixes.Count -gt 0) {
+            $md += "### 🚨 Hotfixes"
+            $md += ""
+            $hotfixes | ForEach-Object { $md += $_ }
+            $md += ""
+          }
+
+          if ($bugFixes.Count -gt 0) {
+            $md += "### 🐛 Bug Fixes"
+            $md += ""
+            $bugFixes | ForEach-Object { $md += $_ }
+            $md += ""
+          }
+
+          if ($features.Count -gt 0) {
+            $md += "### ✨ Features & Improvements"
+            $md += ""
+            $features | ForEach-Object { $md += $_ }
+            $md += ""
+          }
+
+          if ($performance.Count -gt 0) {
+            $md += "### ⚡ Performance & Maintenance"
+            $md += ""
+            $performance | ForEach-Object { $md += $_ }
+            $md += ""
+          }
+
+          if ($other.Count -gt 0) {
+            $md += "### 🔧 Other Changes"
+            $md += ""
+            $other | ForEach-Object { $md += $_ }
+            $md += ""
+          }
+
+          if ($total -eq 0) {
+            $md += "_No conventional commits found in this release._"
+            $md += ""
+          }
+
+          $md += "---"
+          $md += "_Generated by GitHub Actions · $currentTag_"
+
+          $body = $md -join "`n"
+          $body | Out-File -FilePath release_notes.md -Encoding utf8
+          Write-Host "Changelog generated ($total commits categorized)."
 
       - name: Create GitHub Release and upload artifacts
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release_notes.md
           files: |
             DeployAssistant-src.zip
             DeployAssistant-build.zip
-          generate_release_notes: true
+            DeployAssistant-CLI-build.zip
