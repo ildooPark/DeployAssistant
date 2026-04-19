@@ -1,12 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Input;
 
-namespace DeployAssistant.Utils
+namespace DeployAssistant.ViewModel.Utils
 {
     public class RelayCommand : ICommand
     {
@@ -15,25 +10,25 @@ namespace DeployAssistant.Utils
         private readonly Action<object> _execute;
         private readonly Predicate<object>? _canExecute;
 
-        #endregion // Fields
+        #endregion
 
         #region Constructors
 
         public RelayCommand(Action<object?> execute)
             : this(execute, null)
         {
-            //
         }
 
         public RelayCommand(Action<object> execute, Predicate<object>? canExecute)
         {
             if (execute == null)
-                throw new ArgumentNullException("execute");
+                throw new ArgumentNullException(nameof(execute));
 
             _execute = execute;
             _canExecute = canExecute;
         }
-        #endregion // Constructors
+
+        #endregion
 
         #region ICommand Members
 
@@ -53,6 +48,6 @@ namespace DeployAssistant.Utils
             _execute(parameter);
         }
 
-        #endregion // ICommand Members
+        #endregion
     }
 }

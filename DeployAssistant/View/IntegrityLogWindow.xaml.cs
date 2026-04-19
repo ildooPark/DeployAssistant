@@ -1,4 +1,4 @@
-﻿using DeployAssistant.Model;
+using DeployAssistant.Model;
 using DeployAssistant.ViewModel;
 using System.Collections.ObjectModel;
 using System.Windows;
@@ -13,14 +13,14 @@ namespace DeployAssistant.View
         public IntegrityLogWindow(ProjectData projData, string versionLog, ObservableCollection<ProjectFile> fileList)
         {
             InitializeComponent();
-            VersionCheckViewModel versionCheckViewModel = new VersionCheckViewModel(projData, versionLog, fileList);
+            var versionCheckViewModel = new VersionCheckViewModel(App.MetaDataManager, projData, versionLog, fileList);
             this.DataContext = versionCheckViewModel;
         }
 
         public IntegrityLogWindow(ProjectData projectData)
         {
             InitializeComponent();
-            VersionCheckViewModel versionCheckViewModel = new VersionCheckViewModel(projectData);
+            var versionCheckViewModel = new VersionCheckViewModel(App.MetaDataManager, projectData);
             this.DataContext = versionCheckViewModel;
         }
 
@@ -28,10 +28,10 @@ namespace DeployAssistant.View
         {
             BackupFileList.Items.Filter = FilterFilesMethod;
         }
+
         private bool FilterFilesMethod(object obj)
         {
             var file = (ProjectFile)obj;
-
             return file.DataName.Contains(FileFilterKeyword.Text, StringComparison.OrdinalIgnoreCase);
         }
     }
