@@ -1,23 +1,21 @@
-﻿using DeployAssistant.DataComponent;
+using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
-using DeployAssistant.Utils;
-using DeployAssistant.View;
+using DeployAssistant.ViewModel.Utils;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.IO;
-using System.Text.RegularExpressions;
 using System.Windows.Input;
-using System.Windows.Threading;
-using WPF = System.Windows;
 
 namespace DeployAssistant.ViewModel
 {
     public class BackupViewModel : ViewModelBase
     {
-        /// <summary>
-        /// Aligns all the project in order, such that version with the highest revision number 
-        /// is listed as the Newest Version. 
-        /// </summary>
+        #region Window-request events
+        /// <summary>Raised when the integrity-log window should be opened for a backup version.</summary>
+        public event Action<ProjectData?>? IntegrityLogWindowRequested;
+        /// <summary>Raised when the version-diff window should be opened.</summary>
+        public event Action<ProjectData, ProjectData, List<ChangedFile>>? VersionDiffWindowRequested;
+        #endregion
+
         private ObservableCollection<ProjectData>? _backupProjectDataList;
         public ObservableCollection<ProjectData> BackupProjectDataList
         {
@@ -25,9 +23,10 @@ namespace DeployAssistant.ViewModel
             set
             {
                 _backupProjectDataList = value;
-                OnPropertyChanged("BackupProjectDataList");
+                OnPropertyChanged(nameof(BackupProjectDataList));
             }
         }
+
         private ProjectData? _selectedItem;
         public ProjectData? SelectedItem
         {
@@ -39,34 +38,30 @@ namespace DeployAssistant.ViewModel
                 UpdaterName = value.UpdaterName;
                 UpdateLog = value.UpdateLog;
                 DiffLog = value.ChangedProjectFileObservable;
-                OnPropertyChanged("SelectedItem");
+                OnPropertyChanged(nameof(SelectedItem));
             }
         }
 
-        private ICommand? fetchBackup;
-        public ICommand FetchBackup => fetchBackup ??= new RelayCommand(Fetch, CanFetch);
+        private ICommand? _fetchBackup;
+        public ICommand FetchBackup => _fetchBackup ??= new RelayCommand(Fetch, CanFetch);
 
-        private ICommand? checkoutBackup;
-        public ICommand CheckoutBackup => checkoutBackup ??= new RelayCommand(Revert, CanRevert);
+        private ICommand? _checkoutBackup;
+        public ICommand CheckoutBackup => _checkoutBackup ??= new RelayCommand(Revert, CanRevert);
 
-        private ICommand? exportVersion;
-        public ICommand ExportVersion => exportVersion ??= new RelayCommand(ExportBackupFiles, CanExportBackupFiles);
+        private ICommand? _exportVersion;
+        public ICommand ExportVersion => _exportVersion ??= new RelayCommand(ExportBackupFiles, CanExportBackupFiles);
 
-        
+        private ICommand? _cleanRestoreBackup;
+        public ICommand CleanRestoreBackup => _cleanRestoreBackup ??= new RelayCommand(CleanRestoreBackupFiles, CanCleanRestoreBackupFiles);
 
-        private ICommand? cleanRestoreBackup;
-        public ICommand CleanRestoreBackup => cleanRestoreBackup ??= new RelayCommand(CleanRestoreBackupFiles, CanCleanRestoreBackupFiles);
-        
+        private ICommand? _extractVersionLog;
+        public ICommand ExtractVersionLog => _extractVersionLog ??= new RelayCommand(ExtractVersionMetaData);
 
-        private ICommand? extractVersionLog;
-        public ICommand ExtractVersionLog => extractVersionLog ??= new RelayCommand(ExtractVersionMetaData);
+        private ICommand? _viewFullLog;
+        public ICommand ViewFullLog => _viewFullLog ??= new RelayCommand(OnViewFullLog, CanRevert);
 
-        private ICommand? viewFullLog;
-        public ICommand ViewFullLog => viewFullLog ??= new RelayCommand(OnViewFullLog, CanRevert);
-
-        private ICommand? compareDeployedProjectWithMain;
-        public ICommand? CompareDeployedProjectWithMain => compareDeployedProjectWithMain ??= new RelayCommand(CompareSrcProjWithMain, CanCompareSrcProjWithMain);
-        
+        private ICommand? _compareDeployedProjectWithMain;
+        public ICommand? CompareDeployedProjectWithMain => _compareDeployedProjectWithMain ??= new RelayCommand(CompareSrcProjWithMain, CanCompareSrcProjWithMain);
 
         private string? _updaterName;
         public string UpdaterName
@@ -75,7 +70,7 @@ namespace DeployAssistant.ViewModel
             set
             {
                 _updaterName = value;
-                OnPropertyChanged("UpdaterName");
+                OnPropertyChanged(nameof(UpdaterName));
             }
         }
 
@@ -86,7 +81,7 @@ namespace DeployAssistant.ViewModel
             set
             {
                 _updateLog = value;
-                OnPropertyChanged("UpdateLog");
+                OnPropertyChanged(nameof(UpdateLog));
             }
         }
 
@@ -97,44 +92,47 @@ namespace DeployAssistant.ViewModel
             set
             {
                 _diffLog = value;
-                OnPropertyChanged("DiffLog");
+                OnPropertyChanged(nameof(DiffLog));
             }
         }
 
-        private MetaDataManager _metaDataManager;
+        private readonly MetaDataManager _metaDataManager;
         private MetaDataState? _metaDataState = MetaDataState.Idle;
-        public BackupViewModel()
+
+        public BackupViewModel(MetaDataManager metaDataManager)
         {
-            this._metaDataManager = App.MetaDataManager;
-            this._metaDataManager.FetchRequestEventHandler += FetchRequestCallBack;
-            this._metaDataManager.ProjExportEventHandler += ExportRequestCallBack;
-            this._metaDataManager.ManagerStateEventHandler += MetaDataStateChangeCallBack;
+            _metaDataManager = metaDataManager;
+            _metaDataManager.FetchRequestEventHandler += FetchRequestCallBack;
+            _metaDataManager.ProjExportEventHandler += ExportRequestCallBack;
+            _metaDataManager.ManagerStateEventHandler += MetaDataStateChangeCallBack;
+            _metaDataManager.ProjComparisonCompleteEventHandler += ProjComparisonCompleteCallBack;
         }
 
         private bool CanFetch(object obj)
         {
-            if (App.Current == null || _metaDataManager.ProjectMetaData == null) return false;
+            if (_metaDataManager.ProjectMetaData == null) return false;
             return true;
         }
+
         private void Fetch(object obj)
         {
             SelectedItem = null;
-            //Set up Current Project at Main 
             if (_metaDataManager.CurrentProjectPath == null || _metaDataManager.ProjectMetaData == null) return;
             _metaDataManager.RequestFetchBackup();
-
         }
 
         private void CompareSrcProjWithMain(object obj)
         {
             _metaDataManager.RequestProjVersionDiff(SelectedItem);
         }
+
         private bool CanCompareSrcProjWithMain(object obj)
         {
             if (_metaDataState != MetaDataState.Idle) return false;
             if (SelectedItem == null) return false;
             return true;
         }
+
         private void OnViewFullLog(object obj)
         {
             if (SelectedItem == null)
@@ -142,12 +140,9 @@ namespace DeployAssistant.ViewModel
                 MessageBox.Show("Couldn't Get the Log, Selected Item is Null");
                 return;
             }
-            var mainWindow = obj as WPF.Window;
-            IntegrityLogWindow logWindow = new IntegrityLogWindow(SelectedItem);
-            logWindow.Owner = mainWindow;
-            logWindow.WindowStartupLocation = WPF.WindowStartupLocation.CenterOwner;
-            logWindow.Show();
+            IntegrityLogWindowRequested?.Invoke(SelectedItem);
         }
+
         private bool CanRevert(object obj)
         {
             if (SelectedItem == null || _metaDataManager.MainProjectData == null) return false;
@@ -163,21 +158,18 @@ namespace DeployAssistant.ViewModel
                 return;
             }
             var response = MessageBox.Show($"Do you want to Revert to {_selectedItem.UpdatedVersion}", "Confirm Updates",
-                MessageBoxButtons.YesNo); 
+                MessageBoxButtons.YesNo);
             if (response == DialogResult.Yes)
             {
                 _metaDataManager.RequestRevertProject(_selectedItem);
-                return;
-            }
-            else
-            {
-                return;
             }
         }
+
         private bool CanCleanRestoreBackupFiles(object obj)
         {
             return _metaDataState == MetaDataState.Idle;
         }
+
         private void CleanRestoreBackupFiles(object? obj)
         {
             if (SelectedItem == null)
@@ -192,15 +184,13 @@ namespace DeployAssistant.ViewModel
             {
                 Task.Run(() => _metaDataManager.RequestProjectCleanRestore(SelectedItem));
             }
-            else
-            {
-                return;
-            }
         }
+
         private bool CanExportBackupFiles(object obj)
         {
             return _metaDataState == MetaDataState.Idle;
         }
+
         private void ExportBackupFiles(object? obj)
         {
             if (SelectedItem == null)
@@ -221,11 +211,8 @@ namespace DeployAssistant.ViewModel
             _metaDataManager.RequestExportProjectVersionLog(SelectedItem);
         }
 
-        #region CallBack From Model Events 
-        private void ProjectLoadedCallBack(object? obj)
-        {
+        #region Callbacks From Model Events
 
-        }
         private void FetchRequestCallBack(object backupListObj)
         {
             if (backupListObj is not ObservableCollection<ProjectData> backupList) return;
@@ -247,15 +234,20 @@ namespace DeployAssistant.ViewModel
 
         private void MetaDataStateChangeCallBack(MetaDataState state)
         {
-            App.Current.Dispatcher.Invoke(() =>
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
                 _metaDataState = state;
-                ((MainWindow)System.Windows.Application.Current.MainWindow).UpdateLayout();
+                System.Windows.Application.Current?.MainWindow?.UpdateLayout();
             });
         }
-        #endregion
 
-        #region Planned
+        private void ProjComparisonCompleteCallBack(ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff)
+        {
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            {
+                VersionDiffWindowRequested?.Invoke(srcProject, dstProject, diff);
+            });
+        }
 
         #endregion
     }

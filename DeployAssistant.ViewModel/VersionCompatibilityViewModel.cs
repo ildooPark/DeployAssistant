@@ -1,26 +1,20 @@
-﻿using DeployAssistant.Model;
 using DeployAssistant.Model;
-using DeployAssistant.ViewModel;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace DeployAssistant.ViewModel
 {
-    public class VersionCompatibilityViewModel: ViewModelBase
+    public class VersionCompatibilityViewModel : ViewModelBase
     {
-        private string? _srcProjVersion; 
+        private string? _srcProjVersion;
         public string SrcProjVersion
         {
-            get => _srcProjVersion ??= ""; 
+            get => _srcProjVersion ??= "";
             set
             {
                 _srcProjVersion = value;
-                OnPropertyChanged("SrcProjVersion"); 
+                OnPropertyChanged(nameof(SrcProjVersion));
             }
         }
+
         private string? _srcProjConductedPC;
         public string SrcProjConductedPC
         {
@@ -28,21 +22,22 @@ namespace DeployAssistant.ViewModel
             set
             {
                 _srcProjConductedPC = value;
-                OnPropertyChanged("SrcProjConductedPC");
-            }
-        }
-        private string? _targetProjVersion; 
-        public string TargetProjVersion
-        {
-            get => _targetProjVersion ??= ""; 
-            set
-            {
-                _targetProjVersion = value;
-                OnPropertyChanged("TargetProjVersion"); 
+                OnPropertyChanged(nameof(SrcProjConductedPC));
             }
         }
 
-        private ProjectData _srcProjData; 
+        private string? _targetProjVersion;
+        public string TargetProjVersion
+        {
+            get => _targetProjVersion ??= "";
+            set
+            {
+                _targetProjVersion = value;
+                OnPropertyChanged(nameof(TargetProjVersion));
+            }
+        }
+
+        private ProjectData _srcProjData;
         public ProjectData SrcProjData
         {
             get => _srcProjData;
@@ -52,7 +47,8 @@ namespace DeployAssistant.ViewModel
                 OnPropertyChanged(nameof(SrcProjData));
             }
         }
-        private ProjectSimilarity? _selected; 
+
+        private ProjectSimilarity? _selected;
         public ProjectSimilarity? Selected
         {
             get => _selected ??= new ProjectSimilarity();
@@ -65,7 +61,7 @@ namespace DeployAssistant.ViewModel
                 }
                 _selected = value;
                 FileDifferences = value.fileDifferences;
-                TargetProjVersion = value.projData.UpdatedVersion; 
+                TargetProjVersion = value.projData.UpdatedVersion;
                 OnPropertyChanged(nameof(Selected));
             }
         }
@@ -73,18 +69,18 @@ namespace DeployAssistant.ViewModel
         private List<ProjectSimilarity>? _versionSimilarities;
         public List<ProjectSimilarity> VersionSimilarities
         {
-            get => _versionSimilarities ?? []; 
+            get => _versionSimilarities ?? [];
             set
             {
                 _versionSimilarities = value;
-                OnPropertyChanged("VersionSimilarities"); 
+                OnPropertyChanged(nameof(VersionSimilarities));
             }
         }
 
-        private List<ChangedFile>? _fileDifferences; 
+        private List<ChangedFile>? _fileDifferences;
         public List<ChangedFile> FileDifferences
         {
-            get => _fileDifferences ??= []; 
+            get => _fileDifferences ??= [];
             set
             {
                 _fileDifferences = value;
@@ -92,13 +88,14 @@ namespace DeployAssistant.ViewModel
             }
         }
 
-        
+#pragma warning disable CS8618
         public VersionCompatibilityViewModel(ProjectData srcData, List<ProjectSimilarity> similarities)
         {
             _srcProjData = srcData;
             _versionSimilarities = similarities;
             SrcProjConductedPC = srcData.ConductedPC;
-            SrcProjVersion = srcData.UpdatedVersion; 
+            SrcProjVersion = srcData.UpdatedVersion;
         }
+#pragma warning restore CS8618
     }
 }

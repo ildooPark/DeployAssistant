@@ -1,11 +1,6 @@
-﻿using DeployAssistant.DataComponent;
+using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
-using DeployAssistant.Utils;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using DeployAssistant.ViewModel.Utils;
 using System.Windows.Input;
 
 namespace DeployAssistant.ViewModel
@@ -45,22 +40,25 @@ namespace DeployAssistant.ViewModel
             }
         }
 
-        private MetaDataManager _metaDataManager;
-        public VersionDiffViewModel(ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff)
+        private readonly MetaDataManager _metaDataManager;
+
+        public VersionDiffViewModel(MetaDataManager metaDataManager, ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff)
         {
-            this._srcProject = srcProject;
-            this._dstProject = dstProject;
-            this._diff = diff;
-            this._metaDataManager = App.MetaDataManager;
+            _metaDataManager = metaDataManager;
+            _srcProject = srcProject;
+            _dstProject = dstProject;
+            _diff = diff;
         }
 
-        private ICommand? exportDiffFiles;
-        public ICommand ExportDiffFiles => exportDiffFiles ??= new RelayCommand(ExportDiff, CanExportDiff);
+        private ICommand? _exportDiffFiles;
+        public ICommand ExportDiffFiles => _exportDiffFiles ??= new RelayCommand(ExportDiff, CanExportDiff);
+
         private bool CanExportDiff(object obj)
         {
             if (Diff.Count <= 0) return false;
-            return true; 
+            return true;
         }
+
         private void ExportDiff(object obj)
         {
             _metaDataManager.RequestExportProjectVersionDiffFiles(Diff);

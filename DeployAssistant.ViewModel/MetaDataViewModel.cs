@@ -1,7 +1,6 @@
-﻿using DeployAssistant.DataComponent;
+using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
-using DeployAssistant.Utils;
-using DeployAssistant.View;
+using DeployAssistant.ViewModel.Utils;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using WinForms = System.Windows.Forms;
@@ -10,117 +9,117 @@ namespace DeployAssistant.ViewModel
 {
     public class MetaDataViewModel : ViewModelBase
     {
-        private string? currentProjectPath; 
+        private string? _currentProjectPath;
         public string CurrentProjectPath
         {
-            get => currentProjectPath ?? ""; 
-            set => currentProjectPath = value;
+            get => _currentProjectPath ?? "";
+            set => _currentProjectPath = value;
         }
 
-        private ProjectData? projectData; 
+        private ProjectData? _projectData;
         public ProjectData? ProjectData
         {
-            get => projectData ?? null;
+            get => _projectData;
             set
             {
-                projectData = value;
+                _projectData = value;
                 ProjectFiles = value?.ProjectFilesObs;
                 ProjectName = value?.ProjectName ?? "Undefined";
-                CurrentVersion = value?.UpdatedVersion ?? "Undefined"; 
+                CurrentVersion = value?.UpdatedVersion ?? "Undefined";
             }
         }
 
-        private ObservableCollection<ProjectFile>? projectFiles;
+        private ObservableCollection<ProjectFile>? _projectFiles;
         public ObservableCollection<ProjectFile>? ProjectFiles
         {
-            get => projectFiles;
+            get => _projectFiles;
             set
             {
-                projectFiles = value;
-                OnPropertyChanged("ProjectFiles");
+                _projectFiles = value;
+                OnPropertyChanged(nameof(ProjectFiles));
             }
         }
 
-        private string? updaterName;
+        private string? _updaterName;
         public string? UpdaterName
         {
-            get => updaterName ?? "";
+            get => _updaterName ?? "";
             set
             {
-                updaterName = value;
-                OnPropertyChanged("UpdaterName");
+                _updaterName = value;
+                OnPropertyChanged(nameof(UpdaterName));
             }
         }
 
-        private string? updateLog;
+        private string? _updateLog;
         public string? UpdateLog
         {
-            get => updateLog ?? "";
+            get => _updateLog ?? "";
             set
             {
-                updateLog = value;
-                OnPropertyChanged("UpdateLog");
+                _updateLog = value;
+                OnPropertyChanged(nameof(UpdateLog));
             }
         }
 
-        private string? _currentMetaDataState; 
+        private string? _currentMetaDataState;
         public string CurrentMetaDataState
         {
             get => _currentMetaDataState ??= "Idle";
             set
             {
                 _currentMetaDataState = value;
-                OnPropertyChanged("CurrentMetaDataState");
+                OnPropertyChanged(nameof(CurrentMetaDataState));
             }
         }
 
-        private string? projectName;
+        private string? _projectName;
         public string ProjectName
         {
-            get => projectName ?? "Undefined";
+            get => _projectName ?? "Undefined";
             set
             {
-                projectName = value ?? "Undefined";
-                OnPropertyChanged("ProjectName");
+                _projectName = value ?? "Undefined";
+                OnPropertyChanged(nameof(ProjectName));
             }
         }
 
-        private string? currentVersion;
+        private string? _currentVersion;
         public string CurrentVersion
         {
-            get => currentVersion ??= "Undefined";
+            get => _currentVersion ??= "Undefined";
             set
             {
-                currentVersion = value ?? "Undefined";
-                OnPropertyChanged("CurrentVersion");
+                _currentVersion = value ?? "Undefined";
+                OnPropertyChanged(nameof(CurrentVersion));
             }
         }
 
-        private ICommand? conductUpdate;
-        public ICommand ConductUpdate => conductUpdate ??= new RelayCommand(Update, CanUpdate);
+        private ICommand? _conductUpdate;
+        public ICommand ConductUpdate => _conductUpdate ??= new RelayCommand(Update, CanUpdate);
 
-        private ICommand? getProject;
-        public ICommand GetProject => getProject ??= new RelayCommand(RetrieveProject, CanRetrieveProject);
+        private ICommand? _getProject;
+        public ICommand GetProject => _getProject ??= new RelayCommand(RetrieveProject, CanRetrieveProject);
 
-        private MetaDataManager _metaDataManager;
+        private readonly MetaDataManager _metaDataManager;
         private MetaDataState? _metaDataState = MetaDataState.Idle;
 
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-        public MetaDataViewModel()
-#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+        public MetaDataViewModel(MetaDataManager metaDataManager)
         {
-            this._metaDataManager = App.MetaDataManager;
-            this._metaDataManager.ProjLoadedEventHandler += MetaDataManager_ProjLoadedCallBack;
-            this._metaDataManager.ManagerStateEventHandler += MetaDataStateChangeCallBack;
+            _metaDataManager = metaDataManager;
+            _metaDataManager.ProjLoadedEventHandler += MetaDataManager_ProjLoadedCallBack;
+            _metaDataManager.ManagerStateEventHandler += MetaDataStateChangeCallBack;
         }
-        #region Update Version 
+
+        #region Update Version
+
         private bool CanUpdate(object obj)
         {
             if (ProjectFiles == null || CurrentProjectPath == "") return false;
             if (_metaDataState != MetaDataState.Idle) return false;
             return true;
         }
-        
+
         private void Update(object obj)
         {
             if (UpdaterName == "" || UpdateLog == "")
@@ -129,7 +128,7 @@ namespace DeployAssistant.ViewModel
                 if (response == DialogResult.OK) return;
                 return;
             }
-            _metaDataManager.RequestProjectUpdate(updaterName, UpdateLog, CurrentProjectPath);
+            _metaDataManager.RequestProjectUpdate(_updaterName, UpdateLog, CurrentProjectPath);
         }
 
         private bool CanRetrieveProject(object parameter)
@@ -137,15 +136,16 @@ namespace DeployAssistant.ViewModel
             if (_metaDataState != MetaDataState.Idle) return false;
             return true;
         }
+
         private void RetrieveProject(object parameter)
         {
-            if (projectFiles != null && projectFiles.Count != 0) projectFiles.Clear();
+            if (_projectFiles != null && _projectFiles.Count != 0) _projectFiles.Clear();
             var openFD = new WinForms.FolderBrowserDialog();
             string? projectPath;
             if (openFD.ShowDialog() == DialogResult.OK)
             {
                 projectPath = openFD.SelectedPath;
-                CurrentProjectPath = openFD.SelectedPath; 
+                CurrentProjectPath = openFD.SelectedPath;
             }
             else return;
             openFD.Dispose();
@@ -158,7 +158,7 @@ namespace DeployAssistant.ViewModel
                     "Import Project", MessageBoxButtons.YesNo);
                 if (result == DialogResult.Yes)
                 {
-                    Task.Run (() => _metaDataManager.RequestProjectInitialization(openFD.SelectedPath));
+                    Task.Run(() => _metaDataManager.RequestProjectInitialization(openFD.SelectedPath));
                 }
                 else
                 {
@@ -167,17 +167,21 @@ namespace DeployAssistant.ViewModel
                 }
             }
         }
+
         #endregion
+
         #region Receiving Model Callbacks
+
         private void MetaDataStateChangeCallBack(MetaDataState state)
         {
-            App.Current.Dispatcher.Invoke(() =>
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
                 _metaDataState = state;
                 CurrentMetaDataState = state.ToString();
-                ((MainWindow)System.Windows.Application.Current.MainWindow).UpdateLayout();
+                System.Windows.Application.Current?.MainWindow?.UpdateLayout();
             });
         }
+
         private void MetaDataManager_ProjLoadedCallBack(object projObj)
         {
             if (projObj is not ProjectData projectData) return;
@@ -188,6 +192,7 @@ namespace DeployAssistant.ViewModel
             UpdaterName = "";
             UpdateLog = "";
         }
+
         #endregion
     }
 }
