@@ -252,6 +252,8 @@ namespace DeployAssistant.DataComponent
                     })); 
                 }
 
+                await Task.WhenAll(asyncTask);
+
                 fileIntegrityLog.Append($"Integrity Check Took: {sw.Elapsed.ToString()}s \n");
                 fileIntegrityLog.AppendLine("Integrity Check Complete");
                 DataStagedEventHandler?.Invoke(_registeredChangesDict.Values.ToList());
