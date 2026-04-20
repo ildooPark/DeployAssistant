@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Serena MCP runtime files (memories, caches) — keep project.yml committed
+.serena/memories/
+.serena/*.log

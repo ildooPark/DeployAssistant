@@ -1,0 +1,21 @@
+# Serena MCP project configuration for DeployAssistant
+# See: https://github.com/oraios/serena
+
+project_name: "DeployAssistant"
+
+# C# codebase — use the built-in C# language server (Roslyn-based)
+languages: ["csharp"]
+
+encoding: "utf-8"
+
+# Windows project uses CRLF line endings
+line_ending: "crlf"
+
+# Respect the existing .gitignore (covers bin/, obj/, .vs/, etc.)
+ignore_all_files_in_gitignore: true
+
+# Additional paths to skip that are not in .gitignore
+ignored_paths:
+  - "**/*.Designer.cs"
+  - "**/*.g.cs"
+  - "**/*.g.i.cs"
