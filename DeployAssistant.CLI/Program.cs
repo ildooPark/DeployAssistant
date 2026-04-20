@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
+using Spectre.Console;
 
 namespace DeployAssistant.CLI
 {
@@ -47,18 +49,19 @@ namespace DeployAssistant.CLI
 
             var mgr = CreateManager();
             using var done = new ManualResetEventSlim(false);
-
-            mgr.ManagerStateEventHandler += state =>
-            {
-                if (state == MetaDataState.Idle) done.Set();
-            };
+            mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
             mgr.ConfirmationCallback = (_, _) => true;
 
-            Console.WriteLine($"Initializing project at: {path}");
-            mgr.RequestProjectInitialization(path);
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .SpinnerStyle(Style.Parse("cyan"))
+                .Start($"[cyan]Initializing project at:[/] {Markup.Escape(path)}", _ =>
+                {
+                    mgr.RequestProjectInitialization(path);
+                    done.Wait(TimeSpan.FromMinutes(5));
+                });
 
-            done.Wait(TimeSpan.FromMinutes(5));
-            Console.WriteLine("Initialization complete.");
+            AnsiConsole.MarkupLine("[green]✓[/] Initialization complete.");
             return 0;
         }
 
@@ -73,13 +76,11 @@ namespace DeployAssistant.CLI
             bool ok = mgr.RequestProjectRetrieval(path);
             if (!ok)
             {
-                Console.Error.WriteLine($"Failed to load project from: {path}");
+                AnsiConsole.MarkupLine($"[red]✗[/] Failed to load project from: [dim]{Markup.Escape(path)}[/]");
                 return 1;
             }
 
-            Console.WriteLine($"Loaded: {mgr.ProjectMetaData?.ProjectName} " +
-                              $"— {mgr.ProjectMetaData?.ProjectDataList.Count} revision(s)");
-            PrintProjectMain(mgr.MainProjectData);
+            PrintProjectCard(mgr);
             return 0;
         }
 
@@ -93,7 +94,7 @@ namespace DeployAssistant.CLI
             if (mgr == null) return 1;
 
             using var done = new ManualResetEventSlim(false);
-            var changedFiles = new List<DeployAssistant.Model.ProjectFile>();
+            var changedFiles = new List<ProjectFile>();
 
             mgr.FileChangesEventHandler += files =>
             {
@@ -102,13 +103,24 @@ namespace DeployAssistant.CLI
                 done.Set();
             };
 
-            Console.WriteLine($"Scanning source: {srcPath}");
-            mgr.RequestSrcDataRetrieval(srcPath);
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .SpinnerStyle(Style.Parse("cyan"))
+                .Start($"[cyan]Scanning source:[/] {Markup.Escape(srcPath)}", _ =>
+                {
+                    mgr.RequestSrcDataRetrieval(srcPath);
+                    done.Wait(TimeSpan.FromMinutes(2));
+                });
 
-            done.Wait(TimeSpan.FromMinutes(2));
-            Console.WriteLine($"Found {changedFiles.Count} pre-staged file(s):");
+            if (changedFiles.Count == 0)
+            {
+                AnsiConsole.MarkupLine("[green]✓[/] No changes detected.");
+                return 0;
+            }
+
+            AnsiConsole.MarkupLine($"[cyan]ℹ[/]  Found [bold]{changedFiles.Count}[/] pre-staged file(s):");
             foreach (var f in changedFiles)
-                Console.WriteLine($"  [{f.DataState}] {f.DataRelPath}");
+                AnsiConsole.MarkupLine(FormatFileState(f.DataState, f.DataRelPath));
             return 0;
         }
 
@@ -121,22 +133,31 @@ namespace DeployAssistant.CLI
             if (mgr == null) return 1;
 
             using var done = new ManualResetEventSlim(false);
-            mgr.ManagerStateEventHandler += state =>
+            var stagedFiles = new List<ProjectFile>();
+            mgr.FileChangesEventHandler += files =>
             {
-                if (state == MetaDataState.Idle) done.Set();
+                stagedFiles.Clear();
+                stagedFiles.AddRange(files);
             };
+            mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
 
-            Console.WriteLine("Staging file changes...");
-            mgr.RequestStageChanges();
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .SpinnerStyle(Style.Parse("cyan"))
+                .Start("[cyan]Staging file changes…[/]", _ =>
+                {
+                    mgr.RequestStageChanges();
+                    done.Wait(TimeSpan.FromMinutes(2));
+                });
 
-            done.Wait(TimeSpan.FromMinutes(2));
-            Console.WriteLine("Staging complete.");
+            AnsiConsole.MarkupLine($"[green]✓[/] Staging complete. [bold]{stagedFiles.Count}[/] file(s) staged.");
+            foreach (var f in stagedFiles)
+                AnsiConsole.MarkupLine(FormatFileState(f.DataState, f.DataRelPath));
             return 0;
         }
 
         private static int RunDeploy(string[] args)
         {
-            // deploy <dst-path> [--updater <name>] [--log <message>]
             if (args.Length < 1) return UsageError("deploy <dst-path> [--updater <name>] [--log <message>]");
             string dstPath = args[0];
             string updater = ParseFlag(args, "--updater") ?? Environment.UserName;
@@ -146,23 +167,29 @@ namespace DeployAssistant.CLI
             if (mgr == null) return 1;
 
             using var done = new ManualResetEventSlim(false);
-            mgr.ManagerStateEventHandler += state =>
-            {
-                if (state == MetaDataState.Idle) done.Set();
-            };
+            string? newVersion = null;
+            mgr.ProjLoadedEventHandler += obj => { if (obj is ProjectData pd) newVersion = pd.UpdatedVersion; };
+            mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
             mgr.ConfirmationCallback = (_, _) => true;
 
-            Console.WriteLine($"Deploying to: {dstPath}");
-            mgr.RequestProjectUpdate(updater, log, dstPath);
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .SpinnerStyle(Style.Parse("cyan"))
+                .Start($"[cyan]Deploying to:[/] {Markup.Escape(dstPath)}", _ =>
+                {
+                    mgr.RequestProjectUpdate(updater, log, dstPath);
+                    done.Wait(TimeSpan.FromMinutes(10));
+                });
 
-            done.Wait(TimeSpan.FromMinutes(10));
-            Console.WriteLine("Deploy complete.");
+            string versionStr = newVersion != null
+                ? $" [cyan bold]→ {Markup.Escape(newVersion)}[/]"
+                : string.Empty;
+            AnsiConsole.MarkupLine($"[green]✓[/] Deploy complete.{versionStr}");
             return 0;
         }
 
         private static int RunRevert(string[] args)
         {
-            // revert <dst-path> <version>
             if (args.Length < 2) return UsageError("revert <dst-path> <version>");
             string dstPath  = args[0];
             string version  = args[1];
@@ -174,28 +201,29 @@ namespace DeployAssistant.CLI
                 .FirstOrDefault(p => p.UpdatedVersion == version);
             if (target == null)
             {
-                Console.Error.WriteLine($"Version not found: {version}");
+                AnsiConsole.MarkupLine($"[red]✗[/] Version not found: [bold]{Markup.Escape(version)}[/]");
                 return 1;
             }
 
             using var done = new ManualResetEventSlim(false);
-            mgr.ManagerStateEventHandler += state =>
-            {
-                if (state == MetaDataState.Idle) done.Set();
-            };
+            mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
             mgr.ConfirmationCallback = (_, _) => true;
 
-            Console.WriteLine($"Reverting to: {version}");
-            mgr.RequestRevertProject(target);
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .SpinnerStyle(Style.Parse("cyan"))
+                .Start($"[cyan]Reverting to:[/] {Markup.Escape(version)}", _ =>
+                {
+                    mgr.RequestRevertProject(target);
+                    done.Wait(TimeSpan.FromMinutes(10));
+                });
 
-            done.Wait(TimeSpan.FromMinutes(10));
-            Console.WriteLine("Revert complete.");
+            AnsiConsole.MarkupLine($"[green]✓[/] Reverted [cyan bold]→ {Markup.Escape(version)}[/]");
             return 0;
         }
 
         private static int RunExport(string[] args)
         {
-            // export <dst-path> <version>
             if (args.Length < 2) return UsageError("export <dst-path> <version>");
             string dstPath = args[0];
             string version = args[1];
@@ -207,26 +235,33 @@ namespace DeployAssistant.CLI
                 .FirstOrDefault(p => p.UpdatedVersion == version);
             if (target == null)
             {
-                Console.Error.WriteLine($"Version not found: {version}");
+                AnsiConsole.MarkupLine($"[red]✗[/] Version not found: [bold]{Markup.Escape(version)}[/]");
                 return 1;
             }
 
             using var done = new ManualResetEventSlim(false);
-            mgr.ProjExportEventHandler += exportPath =>
+            string? exportPath = null;
+            mgr.ProjExportEventHandler += path =>
             {
-                Console.WriteLine($"Exported to: {exportPath}");
+                exportPath = path;
                 done.Set();
             };
-            mgr.ManagerStateEventHandler += state =>
-            {
-                if (state == MetaDataState.Idle) done.Set();
-            };
+            mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
             mgr.ConfirmationCallback = (_, _) => true;
 
-            Console.WriteLine($"Exporting version: {version}");
-            mgr.RequestExportProjectBackup(target);
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .SpinnerStyle(Style.Parse("cyan"))
+                .Start($"[cyan]Exporting version:[/] {Markup.Escape(version)}", _ =>
+                {
+                    mgr.RequestExportProjectBackup(target);
+                    done.Wait(TimeSpan.FromMinutes(10));
+                });
 
-            done.Wait(TimeSpan.FromMinutes(10));
+            if (exportPath != null)
+                AnsiConsole.MarkupLine($"[green]✓[/] Exported to: [dim]{Markup.Escape(exportPath)}[/]");
+            else
+                AnsiConsole.MarkupLine("[green]✓[/] Export complete.");
             return 0;
         }
 
@@ -241,18 +276,39 @@ namespace DeployAssistant.CLI
             var list = mgr.ProjectMetaData?.ProjectDataList;
             if (list == null || list.Count == 0)
             {
-                Console.WriteLine("No revisions found.");
+                AnsiConsole.MarkupLine("[yellow]⚠[/]  No revisions found.");
                 return 0;
             }
 
-            Console.WriteLine($"Revisions for '{mgr.ProjectMetaData?.ProjectName}':");
+            var table = new Table()
+                .Border(TableBorder.Rounded)
+                .Title($"[cyan bold]{Markup.Escape(mgr.ProjectMetaData?.ProjectName ?? "")}[/]")
+                .AddColumn(new TableColumn(" ").Centered())
+                .AddColumn(new TableColumn("[dim]Rev[/]").RightAligned())
+                .AddColumn("[dim]Version[/]")
+                .AddColumn("[dim]Date[/]")
+                .AddColumn("[dim]By[/]")
+                .AddColumn(new TableColumn("[dim]Changes[/]").RightAligned());
+
             int idx = 1;
             foreach (ProjectData pd in list)
             {
-                string marker = pd.Equals(mgr.MainProjectData) ? " *" : "  ";
-                Console.WriteLine($"{marker} {idx,3}. [{pd.UpdatedVersion}]  {pd.UpdatedTime:yyyy-MM-dd HH:mm}  by {pd.UpdaterName}  ({pd.NumberOfChanges} changes)");
+                bool isCurrent = pd.Equals(mgr.MainProjectData);
+                string marker      = isCurrent ? "[cyan bold]→[/]" : " ";
+                string versionText = isCurrent
+                    ? $"[cyan bold]{Markup.Escape(pd.UpdatedVersion ?? "")}[/]"
+                    : Markup.Escape(pd.UpdatedVersion ?? "");
+                table.AddRow(
+                    marker,
+                    $"[dim]#{idx}[/]",
+                    versionText,
+                    pd.UpdatedTime.ToString("yyyy-MM-dd HH:mm"),
+                    Markup.Escape(pd.UpdaterName ?? ""),
+                    $"{pd.NumberOfChanges}");
                 idx++;
             }
+
+            AnsiConsole.Write(table);
             return 0;
         }
 
@@ -265,23 +321,32 @@ namespace DeployAssistant.CLI
             if (mgr == null) return 1;
 
             using var done = new ManualResetEventSlim(false);
-            mgr.IntegrityCheckCompleteEventHandler += (log, files) =>
+            List<ProjectFile>? changedFiles = null;
+            mgr.IntegrityCheckCompleteEventHandler += (_, files) =>
             {
-                Console.WriteLine(log);
-                Console.WriteLine($"Changed files detected: {files.Count}");
-                foreach (var f in files)
-                    Console.WriteLine($"  [{f.DataState}] {f.DataRelPath}");
+                changedFiles = new List<ProjectFile>(files);
                 done.Set();
             };
-            mgr.ManagerStateEventHandler += state =>
+            mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
+
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .SpinnerStyle(Style.Parse("cyan"))
+                .Start("[cyan]Running integrity check…[/]", _ =>
+                {
+                    mgr.RequestProjectIntegrityCheck();
+                    done.Wait(TimeSpan.FromMinutes(10));
+                });
+
+            if (changedFiles == null || changedFiles.Count == 0)
             {
-                if (state == MetaDataState.Idle) done.Set();
-            };
+                AnsiConsole.MarkupLine("[green]✓[/] All files match — no deviations detected.");
+                return 0;
+            }
 
-            Console.WriteLine("Running integrity check...");
-            mgr.RequestProjectIntegrityCheck();
-
-            done.Wait(TimeSpan.FromMinutes(10));
+            AnsiConsole.MarkupLine($"[yellow]⚠[/]  [bold]{changedFiles.Count}[/] deviation(s) found:");
+            foreach (var f in changedFiles)
+                AnsiConsole.MarkupLine(FormatFileState(f.DataState, f.DataRelPath));
             return 0;
         }
 
@@ -303,20 +368,40 @@ namespace DeployAssistant.CLI
 
             if (!mgr.RequestProjectRetrieval(dstPath))
             {
-                Console.Error.WriteLine($"Could not load project from: {dstPath}");
-                Console.Error.WriteLine("Run 'deployassistant init <path>' first.");
+                AnsiConsole.MarkupLine($"[red]✗[/] Could not load project from: [dim]{Markup.Escape(dstPath)}[/]");
+                AnsiConsole.MarkupLine("[dim]  Run 'deployassistant init <path>' first.[/]");
                 return null;
             }
             return mgr;
         }
 
-        private static void PrintProjectMain(ProjectData? pd)
+        private static void PrintProjectCard(MetaDataManager mgr)
         {
-            if (pd == null) return;
-            Console.WriteLine($"  Version : {pd.UpdatedVersion}");
-            Console.WriteLine($"  Updated : {pd.UpdatedTime:yyyy-MM-dd HH:mm}");
-            Console.WriteLine($"  By      : {pd.UpdaterName}");
-            Console.WriteLine($"  Files   : {pd.ProjectFiles.Count}");
+            var pd = mgr.MainProjectData;
+            int revCount = mgr.ProjectMetaData?.ProjectDataList.Count ?? 0;
+            var panel = new Panel(
+                $"[bold]Path   [/]  {Markup.Escape(pd?.ProjectPath ?? "")}\n" +
+                $"[bold]Version[/]  [cyan bold]{Markup.Escape(pd?.UpdatedVersion ?? "Undefined")}[/]\n" +
+                $"[bold]Updated[/]  {pd?.UpdatedTime:yyyy-MM-dd HH:mm}  by {Markup.Escape(pd?.UpdaterName ?? "")}\n" +
+                $"[bold]Files  [/]  {pd?.ProjectFiles.Count ?? 0}   [dim]({revCount} revision(s))[/]")
+                .Header($"[cyan bold]{Markup.Escape(mgr.ProjectMetaData?.ProjectName ?? "Unknown")}[/]")
+                .BorderColor(Color.Cyan1);
+            AnsiConsole.Write(panel);
+        }
+
+        /// <summary>Returns a markup line describing a single file's change state.</summary>
+        private static string FormatFileState(DataState state, string relPath)
+        {
+            string escaped = Markup.Escape(relPath ?? "");
+            if ((state & DataState.Added) != 0)
+                return $"  [green]+[/] [green]{escaped}[/]  [dim](added)[/]";
+            if ((state & DataState.Deleted) != 0)
+                return $"  [red]-[/] [red]{escaped}[/]  [dim](deleted)[/]";
+            if ((state & DataState.Modified) != 0)
+                return $"  [yellow]~[/] [yellow]{escaped}[/]  [dim](modified)[/]";
+            if ((state & DataState.Restored) != 0)
+                return $"  [magenta]*[/] [magenta]{escaped}[/]  [dim](restored)[/]";
+            return $"  [dim]{escaped}  ({state})[/]";
         }
 
         private static string? ParseFlag(string[] args, string flag)
@@ -334,56 +419,62 @@ namespace DeployAssistant.CLI
 
         private static int UsageError(string usage)
         {
-            Console.Error.WriteLine($"Usage: deployassistant {usage}");
+            AnsiConsole.MarkupLine($"[red]✗[/] [bold]Usage:[/] deployassistant {Markup.Escape(usage)}");
             return 1;
         }
 
         private static int UnknownCommand(string cmd)
         {
-            Console.Error.WriteLine($"Unknown command: {cmd}");
+            AnsiConsole.MarkupLine($"[red]✗[/] Unknown command: [bold]{Markup.Escape(cmd)}[/]");
+            AnsiConsole.WriteLine();
             ShowHelp();
             return 1;
         }
 
         private static void ShowHelp()
         {
-            Console.WriteLine("""
-                DeployAssistant CLI
+            AnsiConsole.MarkupLine("[cyan bold]DeployAssistant CLI[/]");
+            AnsiConsole.MarkupLine("[dim]Usage: deployassistant <command> [options][/]");
+            AnsiConsole.WriteLine();
 
-                Usage: deployassistant <command> [options]
+            var table = new Table()
+                .Border(TableBorder.None)
+                .HideHeaders()
+                .AddColumn(new TableColumn("Command").Width(46))
+                .AddColumn("Description");
 
-                Commands:
-                  init <path>
-                      Initialise a new project at the given directory.
+            table.AddRow(
+                "[bold]init[/] [dim]<path>[/]",
+                "Initialise a new project at the given directory.");
+            table.AddRow(
+                "[bold]load[/] [dim]<path>[/]",
+                "Load and display the project at the given directory.");
+            table.AddRow(
+                "[bold]scan[/] [dim]<dst-path> <src-path>[/]",
+                "Scan a source directory and list detected changes.");
+            table.AddRow(
+                "[bold]stage[/] [dim]<dst-path>[/]",
+                "Hash and promote pre-staged changes to staged state.");
+            table.AddRow(
+                "[bold]deploy[/] [dim]<dst-path> [--updater N] [--log M][/]",
+                "Apply staged changes and record a new revision.");
+            table.AddRow(
+                "[bold]revert[/] [dim]<dst-path> <version>[/]",
+                "Revert the project to the specified revision.");
+            table.AddRow(
+                "[bold]export[/] [dim]<dst-path> <version>[/]",
+                "Export the specified revision as a zipped snapshot.");
+            table.AddRow(
+                "[bold]list[/] [dim]<dst-path>[/]",
+                $"List all recorded revisions ([cyan]→[/] = current).");
+            table.AddRow(
+                "[bold]integrity-check[/] [dim]<dst-path>[/]",
+                "Compare the recorded state against files on disk.");
+            table.AddRow(
+                "[bold]help[/] [dim]/ --help[/]",
+                "Show this help text.");
 
-                  load <path>
-                      Load and display the project at the given directory.
-
-                  scan <dst-path> <src-path>
-                      Scan a source directory against the loaded destination project
-                      and list detected file changes.
-
-                  stage <dst-path>
-                      Hash and promote pre-staged changes to the staged state.
-
-                  deploy <dst-path> [--updater <name>] [--log <message>]
-                      Apply staged changes to the project and record a new revision.
-
-                  revert <dst-path> <version>
-                      Revert the project to the specified revision version string.
-
-                  export <dst-path> <version>
-                      Export the specified revision as a zipped snapshot.
-
-                  list <dst-path>
-                      List all recorded revisions (* = current).
-
-                  integrity-check <dst-path>
-                      Compare the recorded project state against the files on disk.
-
-                  help / --help
-                      Show this help text.
-                """);
+            AnsiConsole.Write(table);
         }
     }
 }

@@ -10,6 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Spectre.Console" Version="0.49.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\DeployAssistant.Core.Standard\DeployAssistant.Core.Standard.csproj" />
   </ItemGroup>
 

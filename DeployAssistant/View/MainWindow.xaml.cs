@@ -1,6 +1,8 @@
+using AvalonDock.Layout.Serialization;
 using DeployAssistant.Model;
 using DeployAssistant.ViewModel;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 
 namespace DeployAssistant.View
@@ -10,6 +12,10 @@ namespace DeployAssistant.View
     /// </summary>
     public partial class MainWindow : Window
     {
+        private static readonly string LayoutFilePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "DeployAssistant.layout");
+
         public MainWindow()
         {
             InitializeComponent();
@@ -34,11 +40,48 @@ namespace DeployAssistant.View
             mainVM.BackupVM.VersionDiffWindowRequested += OpenVersionDiffWindow;
         }
 
+        // ------------------------------------------------------------------ //
+        //  Window lifecycle                                                   //
+        // ------------------------------------------------------------------ //
+
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (File.Exists(LayoutFilePath))
+            {
+                try
+                {
+                    var serializer = new XmlLayoutSerializer(DockManager);
+                    serializer.Deserialize(LayoutFilePath);
+                }
+                catch
+                {
+                    // Layout file is invalid or from a different version; fall back to default.
+                }
+            }
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            try
+            {
+                var serializer = new XmlLayoutSerializer(DockManager);
+                serializer.Serialize(LayoutFilePath);
+            }
+            catch
+            {
+                // Best-effort; ignore save failures.
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        //  Secondary window openers                                           //
+        // ------------------------------------------------------------------ //
+
         private void OpenOverlapFileWindow(List<ChangedFile> overlapped, List<ChangedFile> newFiles)
         {
             var window = new OverlapFileWindow(overlapped, newFiles);
             window.Owner = this;
-            window.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner;
+            window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             window.Show();
         }
 
@@ -47,7 +90,7 @@ namespace DeployAssistant.View
             if (projData == null) return;
             var window = new IntegrityLogWindow(projData, changeLog, fileList);
             window.Owner = this;
-            window.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner;
+            window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             window.Show();
         }
 
@@ -56,7 +99,7 @@ namespace DeployAssistant.View
             if (projData == null) return;
             var window = new IntegrityLogWindow(projData);
             window.Owner = this;
-            window.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner;
+            window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             window.Show();
         }
 
@@ -64,7 +107,7 @@ namespace DeployAssistant.View
         {
             var window = new VersionDiffWindow(srcProject, dstProject, diff);
             window.Owner = this;
-            window.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner;
+            window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             window.Show();
         }
 
@@ -72,7 +115,7 @@ namespace DeployAssistant.View
         {
             var window = new VersionComparisonWindow(srcData, similarities);
             window.Owner = this;
-            window.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner;
+            window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             window.Show();
         }
 
@@ -81,9 +124,13 @@ namespace DeployAssistant.View
             if (projData == null) return;
             var window = new IntegrityLogWindow(projData);
             window.Owner = this;
-            window.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner;
+            window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             window.Show();
         }
+
+        // ------------------------------------------------------------------ //
+        //  Filter handler for the Project Files panel                        //
+        // ------------------------------------------------------------------ //
 
         private void FileFilterKeyword_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
