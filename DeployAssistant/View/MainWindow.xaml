@@ -80,6 +80,20 @@
             </Setter>
         </Style>
 
+        <!-- Deploy button style — green variant of ActionButtonStyle -->
+        <Style x:Key="DeployButtonStyle" TargetType="Button" BasedOn="{StaticResource ActionButtonStyle}">
+            <Setter Property="Background" Value="#388E3C"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#2E7D32"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#1B5E20"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- State badge color converter (inline via DataTrigger on the border) -->
         <Style x:Key="StateBadgeStyle" TargetType="Border">
             <Setter Property="Background" Value="#757575"/>
@@ -483,9 +497,8 @@
                                                 Style="{StaticResource ActionButtonStyle}"/>
                                         <Button Content="Deploy"
                                                 Margin="2" Height="30" FontSize="13"
-                                                Background="#388E3C" Foreground="White"
                                                 Command="{Binding MetaDataVM.ConductUpdate}"
-                                                Style="{StaticResource ActionButtonStyle}"/>
+                                                Style="{StaticResource DeployButtonStyle}"/>
                                     </UniformGrid>
 
                                 </Grid>

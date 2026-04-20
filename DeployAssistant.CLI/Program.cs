@@ -392,7 +392,7 @@ namespace DeployAssistant.CLI
         /// <summary>Returns a markup line describing a single file's change state.</summary>
         private static string FormatFileState(DataState state, string relPath)
         {
-            string escaped = Markup.Escape(relPath ?? "");
+            string escaped = Markup.Escape(relPath);
             if ((state & DataState.Added) != 0)
                 return $"  [green]+[/] [green]{escaped}[/]  [dim](added)[/]";
             if ((state & DataState.Deleted) != 0)

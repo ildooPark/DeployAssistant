@@ -2,6 +2,7 @@ using AvalonDock.Layout.Serialization;
 using DeployAssistant.Model;
 using DeployAssistant.ViewModel;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 
@@ -53,9 +54,10 @@ namespace DeployAssistant.View
                     var serializer = new XmlLayoutSerializer(DockManager);
                     serializer.Deserialize(LayoutFilePath);
                 }
-                catch
+                catch (Exception ex)
                 {
                     // Layout file is invalid or from a different version; fall back to default.
+                    Debug.WriteLine($"[DeployAssistant] Could not restore docking layout: {ex.Message}");
                 }
             }
         }
@@ -67,9 +69,10 @@ namespace DeployAssistant.View
                 var serializer = new XmlLayoutSerializer(DockManager);
                 serializer.Serialize(LayoutFilePath);
             }
-            catch
+            catch (Exception ex)
             {
-                // Best-effort; ignore save failures.
+                // Best-effort; inform the developer but do not block the close.
+                Debug.WriteLine($"[DeployAssistant] Could not save docking layout: {ex.Message}");
             }
         }
 
