@@ -18,7 +18,15 @@ namespace DeployAssistant.Model
         #region Constructor 
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         [JsonConstructor]
-        public ProjectMetaData() { }
+        public ProjectMetaData()
+        {
+            LocalUpdateCount = 0;
+            ProjectName = string.Empty;
+            ProjectPath = string.Empty;
+            ProjectMain = new ProjectData();
+            ProjectDataList = new LinkedList<ProjectData>();
+            BackupFiles = new Dictionary<string, ProjectFile>();
+        }
 
         public ProjectMetaData(string projectName, string projectPath)
         {

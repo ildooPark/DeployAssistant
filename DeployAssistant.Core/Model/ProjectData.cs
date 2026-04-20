@@ -105,7 +105,18 @@ namespace DeployAssistant.Model
             }
         }
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-        public ProjectData() { }
+        public ProjectData()
+        {
+            ProjectName = string.Empty;
+            ProjectPath = string.Empty;
+            UpdaterName = string.Empty;
+            ConductedPC = string.Empty;
+            UpdatedVersion = string.Empty;
+            UpdateLog = string.Empty;
+            ChangeLog = string.Empty;
+            ChangedFiles = new List<ChangedFile>();
+            ProjectFiles = new Dictionary<string, ProjectFile>();
+        }
         [JsonConstructor]
         public ProjectData(string ProjectName, string ProjectPath, string UpdaterName, string ConductedPC, 
             DateTime UpdatedTime, string UpdatedVersion, string UpdateLog, string ChangeLog, 
