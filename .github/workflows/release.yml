@@ -2,8 +2,19 @@ name: Release
 
 on:
   push:
+    branches:
+      - master
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing tag to release (e.g. v1.2.3). Leave empty for CI-only run.'
+        required: false
+        type: string
 
 jobs:
   test:
@@ -27,12 +38,12 @@ jobs:
       - name: Run tests
         run: dotnet test DeployAssistant.sln --configuration Release --no-restore --verbosity normal
 
-  build-and-release:
-    name: Build & Release
+  build:
+    name: Build Artifacts
     needs: test
     runs-on: windows-latest
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -85,13 +96,57 @@ jobs:
           $items = Get-ChildItem -Path . -Exclude $exclude
           Compress-Archive -Path $items -DestinationPath DeployAssistant-src.zip -Force
 
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeployAssistant-builds
+          path: |
+            DeployAssistant-src.zip
+            DeployAssistant-build.zip
+            DeployAssistant-CLI-build.zip
+
+  release:
+    name: Create GitHub Release
+    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: DeployAssistant-builds
+          path: .
+
       - name: Generate categorized changelog
         id: changelog
         shell: pwsh
         run: |
-          # Determine commit range: from previous tag to current tag
-          $currentTag = $env:GITHUB_REF_NAME
-          $prevTag = git describe --tags --abbrev=0 "$currentTag^" 2>$null
+          # Determine the release tag: pushed tag or manually selected existing tag
+          $manualTag = '${{ github.event.inputs.release_tag }}'
+          if ($manualTag) {
+            $currentTag = $manualTag
+          } else {
+            $currentTag = $env:GITHUB_REF_NAME
+          }
+
+          # Verify tag exists for manual release runs
+          git rev-parse --verify "refs/tags/$currentTag" 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Tag '$currentTag' does not exist. Create/push it first, then rerun workflow_dispatch."
+            exit 1
+          }
+
+          # Find previous tag from the tag commit history
+          $tagCommit = git rev-list -n 1 "$currentTag"
+          $prevTag = git describe --tags --abbrev=0 "$tagCommit^" 2>$null
           if ($LASTEXITCODE -ne 0 -or -not $prevTag) {
             $range = $currentTag
             $prevTagDisplay = "(initial release)"
@@ -135,6 +190,7 @@ jobs:
           $md += "## 📦 Release $currentTag"
           $md += ""
           $md += "> Changes since **$prevTagDisplay**"
+          $md += "> Commit: **$(git rev-parse --short $currentTag)**"
           $md += ""
 
           # Summary counts
@@ -202,7 +258,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
           body_path: release_notes.md
           files: |
             DeployAssistant-src.zip

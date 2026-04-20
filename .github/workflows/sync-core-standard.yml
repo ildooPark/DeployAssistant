@@ -3,7 +3,7 @@ name: Sync Core.Standard with Core
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'DeployAssistant.Core/**/*.cs'
       - 'DeployAssistant.Core.Standard/DeployAssistant.Core.Standard.csproj'
