@@ -1,7 +1,6 @@
 using DeployAssistant.Model;
 using DeployAssistant.DataComponent;
 using DeployAssistant.Interfaces;
-using DeployAssistant.Model;
 using System;
 using System.Collections.Generic;
 using Xunit;
