@@ -94,7 +94,7 @@ namespace DeployAssistant.CLI
             if (mgr == null) return 1;
 
             using var done = new ManualResetEventSlim(false);
-            var changedFiles = new List<ProjectFile>();
+            List<ProjectFile> changedFiles = [];
 
             mgr.FileChangesEventHandler += files =>
             {
@@ -133,7 +133,7 @@ namespace DeployAssistant.CLI
             if (mgr == null) return 1;
 
             using var done = new ManualResetEventSlim(false);
-            var stagedFiles = new List<ProjectFile>();
+            List<ProjectFile> stagedFiles = [];
             mgr.FileChangesEventHandler += files =>
             {
                 stagedFiles.Clear();
@@ -324,7 +324,7 @@ namespace DeployAssistant.CLI
             List<ProjectFile>? changedFiles = null;
             mgr.IntegrityCheckCompleteEventHandler += (_, files) =>
             {
-                changedFiles = new List<ProjectFile>(files);
+                changedFiles = [..files];
                 done.Set();
             };
             mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };

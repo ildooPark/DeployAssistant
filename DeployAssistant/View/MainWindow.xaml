@@ -5,7 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DeployAssistant.View"
         xmlns:avalonDock="clr-namespace:AvalonDock;assembly=AvalonDock"
-        xmlns:avalonTheme="clr-namespace:AvalonDock.Themes.VS2013;assembly=AvalonDock.Themes.VS2013"
+        xmlns:avalonDockLayout="clr-namespace:AvalonDock.Layout;assembly=AvalonDock"
+        xmlns:avalonTheme="clr-namespace:AvalonDock.Themes;assembly=AvalonDock.Themes.VS2013"
         mc:Ignorable="d"
         Title="Deploy Assistant" Height="900" Width="1600"
         MinHeight="700"
@@ -198,25 +199,25 @@
                                    x:Name="DockManager"
                                    AllowMixedOrientation="True">
             <avalonDock:DockingManager.Theme>
-                <avalonTheme:VS2013LightTheme/>
+                <avalonTheme:Vs2013LightTheme/>
             </avalonDock:DockingManager.Theme>
-
-            <avalonDock:LayoutRoot>
-                <avalonDock:LayoutPanel Orientation="Horizontal">
+            <avalonDockLayout:LayoutRoot>
+                <avalonDockLayout:LayoutPanel Orientation="Horizontal">
 
                     <!-- LEFT: History pane (top) + DiffLog pane (bottom) -->
-                    <avalonDock:LayoutAnchorablePaneGroup Orientation="Vertical"
+                    <avalonDockLayout:LayoutAnchorablePaneGroup Orientation="Vertical"
                                                          DockWidth="360">
 
                         <!-- Version History -->
-                        <avalonDock:LayoutAnchorablePane DockHeight="0.45*">
-                            <avalonDock:LayoutAnchorable Title="Version History"
+                        <avalonDockLayout:LayoutAnchorablePane DockHeight="0.45*">
+                            <avalonDockLayout:LayoutAnchorable Title="Version History"
                                                          ContentId="HistoryPanel"
                                                          CanClose="False"
                                                          CanHide="False">
                                 <ListView x:Name="backupList"
                                           ItemsSource="{Binding BackupVM.BackupProjectDataList}"
                                           SelectedItem="{Binding BackupVM.SelectedItem}"
+                                          Tag="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=DataContext}"
                                           BorderBrush="#CDCDCD"
                                           ScrollViewer.CanContentScroll="True"
                                           ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -241,7 +242,7 @@
                                         </Style>
                                     </ListView.ItemContainerStyle>
                                     <ListView.ContextMenu>
-                                        <ContextMenu>
+                                        <ContextMenu DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
                                             <MenuItem Header="Export Full Version"       Command="{Binding BackupVM.ExportVersion}"/>
                                             <MenuItem Header="Export Version Log"        Command="{Binding BackupVM.ExtractVersionLog}"/>
                                             <MenuItem Header="Compare With Main"         Command="{Binding BackupVM.CompareDeployedProjectWithMain}"/>
@@ -253,12 +254,12 @@
                                         </ContextMenu>
                                     </ListView.ContextMenu>
                                 </ListView>
-                            </avalonDock:LayoutAnchorable>
-                        </avalonDock:LayoutAnchorablePane>
+                            </avalonDockLayout:LayoutAnchorable>
+                        </avalonDockLayout:LayoutAnchorablePane>
 
                         <!-- Diff Log (selected version's changed files) -->
-                        <avalonDock:LayoutAnchorablePane DockHeight="0.55*">
-                            <avalonDock:LayoutAnchorable Title="Diff Log"
+                        <avalonDockLayout:LayoutAnchorablePane DockHeight="0.55*">
+                            <avalonDockLayout:LayoutAnchorable Title="Diff Log"
                                                          ContentId="DiffLogPanel"
                                                          CanClose="False"
                                                          CanHide="False">
@@ -337,14 +338,14 @@
                                         </DataGrid.CellStyle>
                                     </DataGrid>
                                 </Grid>
-                            </avalonDock:LayoutAnchorable>
-                        </avalonDock:LayoutAnchorablePane>
+                            </avalonDockLayout:LayoutAnchorable>
+                        </avalonDockLayout:LayoutAnchorablePane>
 
-                    </avalonDock:LayoutAnchorablePaneGroup>
+                    </avalonDockLayout:LayoutAnchorablePaneGroup>
 
                     <!-- CENTER: Project Files document tab -->
-                    <avalonDock:LayoutDocumentPane>
-                        <avalonDock:LayoutDocument Title="Project Files"
+                    <avalonDockLayout:LayoutDocumentPane>
+                        <avalonDockLayout:LayoutDocument Title="Project Files"
                                                    ContentId="ProjectFilesPanel"
                                                    CanClose="False">
                             <Grid>
@@ -382,22 +383,23 @@
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </Grid>
-                        </avalonDock:LayoutDocument>
-                    </avalonDock:LayoutDocumentPane>
+                        </avalonDockLayout:LayoutDocument>
+                    </avalonDockLayout:LayoutDocumentPane>
 
                     <!-- RIGHT: Staged Changes (top) + Action Panel (bottom) -->
-                    <avalonDock:LayoutAnchorablePaneGroup Orientation="Vertical"
+                    <avalonDockLayout:LayoutAnchorablePaneGroup Orientation="Vertical"
                                                          DockWidth="330">
 
                         <!-- Staged / Pre-staged changes -->
-                        <avalonDock:LayoutAnchorablePane DockHeight="0.6*">
-                            <avalonDock:LayoutAnchorable Title="Staged Changes"
+                        <avalonDockLayout:LayoutAnchorablePane DockHeight="0.6*">
+                            <avalonDockLayout:LayoutAnchorable Title="Staged Changes"
                                                          ContentId="StagingPanel"
                                                          CanClose="False"
                                                          CanHide="False">
                                 <ListView x:Name="uploadWindow"
                                           ItemsSource="{Binding FileTrackVM.ChangedFileList}"
                                           SelectedItem="{Binding FileTrackVM.SelectedItem, UpdateSourceTrigger=PropertyChanged}"
+                                          Tag="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=DataContext}"
                                           BorderBrush="#CDCDCD"
                                           ScrollViewer.CanContentScroll="True"
                                           ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -430,18 +432,18 @@
                                         </Style>
                                     </ListView.ItemContainerStyle>
                                     <ListView.ContextMenu>
-                                        <ContextMenu>
+                                        <ContextMenu DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
                                             <MenuItem Header="Revert"
                                                       Command="{Binding FileTrackVM.RevertChange}"/>
                                         </ContextMenu>
                                     </ListView.ContextMenu>
                                 </ListView>
-                            </avalonDock:LayoutAnchorable>
-                        </avalonDock:LayoutAnchorablePane>
+                            </avalonDockLayout:LayoutAnchorable>
+                        </avalonDockLayout:LayoutAnchorablePane>
 
                         <!-- Action Panel: updater / log / buttons -->
-                        <avalonDock:LayoutAnchorablePane DockHeight="0.4*">
-                            <avalonDock:LayoutAnchorable Title="Actions"
+                        <avalonDockLayout:LayoutAnchorablePane DockHeight="0.4*">
+                            <avalonDockLayout:LayoutAnchorable Title="Actions"
                                                          ContentId="ActionPanel"
                                                          CanClose="False"
                                                          CanHide="False">
@@ -502,13 +504,13 @@
                                     </UniformGrid>
 
                                 </Grid>
-                            </avalonDock:LayoutAnchorable>
-                        </avalonDock:LayoutAnchorablePane>
+                            </avalonDockLayout:LayoutAnchorable>
+                        </avalonDockLayout:LayoutAnchorablePane>
 
-                    </avalonDock:LayoutAnchorablePaneGroup>
+                    </avalonDockLayout:LayoutAnchorablePaneGroup>
 
-                </avalonDock:LayoutPanel>
-            </avalonDock:LayoutRoot>
+                </avalonDockLayout:LayoutPanel>
+            </avalonDockLayout:LayoutRoot>
         </avalonDock:DockingManager>
 
     </Grid>
