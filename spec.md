@@ -21,7 +21,7 @@ Core responsibilities:
 
 | Item | Detail |
 |---|---|
-| Language | C# 14 / .NET 10.0 (Windows) |
+| Language | C# 14 / .NET 10.0 (Windows) for WPF/ViewModel/Core; .NET 8.0 for CLI; .NET Standard 2.0 for Core.Standard |
 | UI Framework | WPF (`UseWPF=true`) |
 | Auxiliary UI | Windows Forms (`UseWindowsForms=true`) — used for `FolderBrowserDialog`, `MessageBox`, `DialogResult` |
 | Architecture pattern | MVVM (Model / ViewModel / View) with event-driven data flow |
@@ -31,16 +31,19 @@ Core responsibilities:
 | Export — archive | `System.IO.Compression.ZipFile` |
 | Extended UI controls | `Extended.Wpf.Toolkit` v4.6.0 |
 | Concurrency | `Task`, `Parallel.ForEach`, `SemaphoreSlim` (max 12 concurrent hash tasks) |
+| CLI output (planned) | `Spectre.Console` — ANSI color, spinners, progress bars, tables |
+| WPF docking (planned) | `Dirkster.AvalonDock` — drag-and-drop dockable panel layout |
 
 ---
 
 ## 3. Project Layout
 
+The solution contains six compilable projects plus one test project:
+
 ```
 DeployAssistant.sln
-├── DeployAssistant/                   ← main application project
-│   ├── App.xaml / App.xaml.cs         ← application entry-point; global singletons
-│   ├── AssemblyInfo.cs
+│
+├── DeployAssistant.Core/              ← net10.0-windows class library; all business logic
 │   ├── Interfaces/
 │   │   ├── IManager.cs
 │   │   └── IProjectData.cs
@@ -48,13 +51,14 @@ DeployAssistant.sln
 │   │   ├── ProjectMetaData.cs
 │   │   ├── ProjectData.cs
 │   │   ├── ProjectFile.cs
+│   │   ├── DataState.cs               ← DataState flags enum
 │   │   ├── ChangedFile.cs
 │   │   ├── RecordedFile.cs
 │   │   ├── ProjectIgnoreData.cs
 │   │   ├── ProjectSimilarity.cs
 │   │   ├── DeployData.cs
 │   │   └── LocalConfigData.cs
-│   ├── DataComponent/                 ← service/manager layer (business logic)
+│   ├── DataComponent/                 ← service/manager layer
 │   │   ├── MetaDataManager.cs         ← central orchestrator
 │   │   ├── FileManager.cs
 │   │   ├── BackupManager.cs
@@ -62,43 +66,73 @@ DeployAssistant.sln
 │   │   ├── ExportManager.cs
 │   │   ├── SettingManager.cs
 │   │   └── LogManager.cs              ← empty stub
-│   ├── ViewModel/
-│   │   ├── ViewModelBase.cs
-│   │   ├── MainViewModel.cs
-│   │   ├── MetaDataViewModel.cs
-│   │   ├── FileTrackViewModel.cs
-│   │   ├── BackupViewModel.cs
-│   │   ├── VersionDiffViewModel.cs
-│   │   ├── VersionIntegrationViewModel.cs
-│   │   ├── VersionCheckViewModel.cs
-│   │   ├── VersionCompatibilityViewModel.cs
-│   │   └── OverlapFileViewModel.cs
-│   ├── View/
-│   │   ├── MainWindow.xaml / .cs
-│   │   ├── IntegrityLogWindow.xaml / .cs
-│   │   ├── ErrorLogWindow.xaml / .cs
-│   │   ├── VersionDiffWindow.xaml / .cs
-│   │   ├── VersionIntegrationView.xaml / .cs
-│   │   ├── CompatibleVersionWindow.xaml
-│   │   ├── OverlapFileWindow.xaml / .cs
-│   │   └── VersionComparisonWindow.cs
 │   └── Utils/
 │       ├── FileHandlerTool.cs
 │       ├── HashTool.cs
-│       ├── LogTool.cs
+│       └── LogTool.cs
+│
+├── DeployAssistant.Core.Standard/     ← netstandard2.0 class library; cross-platform subset for CLI
+│   │                                    Links most source files directly from Core; has its own
+│   │                                    platform-neutral variants of FileManager, MetaDataManager,
+│   │                                    FileHandlerTool, HashTool, and a CompatHelper shim.
+│   ├── CompatHelper.cs                ← netstandard2.0 compatibility shims
+│   ├── DataComponent/
+│   │   ├── MetaDataManager.cs         ← platform-neutral variant (no MessageBox, no WPF)
+│   │   └── FileManager.cs             ← platform-neutral variant
+│   └── Utils/
+│       ├── FileHandlerTool.cs         ← platform-neutral variant
+│       └── HashTool.cs                ← platform-neutral variant
+│
+├── DeployAssistant.ViewModel/         ← net10.0-windows class library; WPF + WinForms
+│   │                                    References: DeployAssistant.Core
+│   ├── ViewModelBase.cs
+│   ├── MainViewModel.cs
+│   ├── MetaDataViewModel.cs
+│   ├── FileTrackViewModel.cs
+│   ├── BackupViewModel.cs
+│   ├── VersionDiffViewModel.cs
+│   ├── VersionIntegrationViewModel.cs
+│   ├── VersionCheckViewModel.cs
+│   ├── VersionCompatibilityViewModel.cs
+│   ├── OverlapFileViewModel.cs
+│   └── Utils/
 │       └── RelayCommand.cs
-└── DeployAssistant.Tests/             ← unit test project (xUnit)
-    └── Models/
-        ├── ChangedFileTests.cs
-        ├── ProjectDataTests.cs
-        ├── ProjectFileTests.cs
-        ├── ProjectIgnoreDataTests.cs
-        └── ProjectMetaDataTests.cs
+│
+├── DeployAssistant/                   ← net10.0-windows WPF exe (main GUI application)
+│   │                                    References: DeployAssistant.Core, DeployAssistant.ViewModel
+│   ├── App.xaml / App.xaml.cs         ← application entry-point; global singletons
+│   ├── AssemblyInfo.cs
+│   └── View/
+│       ├── MainWindow.xaml / .cs
+│       ├── IntegrityLogWindow.xaml / .cs
+│       ├── ErrorLogWindow.xaml / .cs
+│       ├── VersionDiffWindow.xaml / .cs
+│       ├── VersionIntegrationView.xaml / .cs
+│       ├── CompatibleVersionWindow.xaml
+│       ├── OverlapFileWindow.xaml / .cs
+│       └── VersionComparisonWindow.cs
+│
+├── DeployAssistant.CLI/               ← net8.0 console exe; cross-platform CLI
+│   │                                    References: DeployAssistant.Core.Standard
+│   │                                    Binary name: deployassistant
+│   └── Program.cs
+│
+└── DeployAssistant.Tests/             ← unit test project (xUnit); references DeployAssistant.Core
+    ├── Models/
+    │   ├── ChangedFileTests.cs
+    │   ├── ProjectDataTests.cs
+    │   ├── ProjectFileTests.cs
+    │   ├── ProjectIgnoreDataTests.cs
+    │   └── ProjectMetaDataTests.cs
     └── Utils/
         ├── FileHandlerToolTests.cs
         ├── HashToolTests.cs
         └── IntegrityCheckRobustnessTests.cs
 ```
+
+### Why two Core libraries?
+
+`DeployAssistant.Core` targets `net10.0-windows` and can use WPF/WinForms-dependent APIs (e.g. `MessageBox`). `DeployAssistant.Core.Standard` targets `netstandard2.0` so the CLI (`net8.0`) can reference it without pulling in Windows-only assemblies. The Standard project links the platform-neutral source files from Core directly and provides its own implementations of the modules that call Windows UI APIs.
 
 ### Namespace irregularities (known technical debt)
 The codebase uses **two namespace prefixes** across files in the same project:
@@ -168,7 +202,7 @@ The atomic unit of tracking. Represents one file or directory.
 | `DataState` | `DataState` | ✓ | Bitflag describing current lifecycle state |
 | `IsDstFile` | `bool` | ✓ | True when the file is the destination (deployed) side of a `ChangedFile` |
 
-### 6.2 `DataState` (flags enum, defined in `FileManager.cs`)
+### 6.2 `DataState` (flags enum, defined in `DataState.cs`)
 ```
 None           = 0
 Added          = 1
@@ -534,7 +568,7 @@ Static helper for building changelogs in `UpdateManager`:
 - `RegisterChange(log, state, srcData, dstData)` — two-sided diff entry (shows hash and build version change)
 
 ### 9.4 `RelayCommand`
-Standard `ICommand` implementation. Constructor takes `Action<object> execute` and optional `Func<object, bool> canExecute`. `CanExecuteChanged` is raised on `CommandManager.RequerySuggested`.
+Standard `ICommand` implementation (lives in `DeployAssistant.ViewModel/Utils/RelayCommand.cs`). Constructor takes `Action<object> execute` and optional `Func<object, bool> canExecute`. `CanExecuteChanged` is raised on `CommandManager.RequerySuggested`.
 
 ---
 
@@ -759,3 +793,170 @@ All managers implement `Awake()` for post-constructor setup. This pattern should
 
 ### Path abstraction
 `ProjectFile` stores paths as `DataSrcPath` (absolute root) + `DataRelPath` (relative). `DataAbsPath` is always computed. Refactoring must not break this invariant, which is essential for path reconfiguration across machines.
+
+---
+
+## 16. CLI Reference (`DeployAssistant.CLI`)
+
+Binary name: `deployassistant`. Targets `net8.0` (cross-platform). References `DeployAssistant.Core.Standard`.
+
+### 16.1 Commands
+
+| Command | Synopsis | Description |
+|---|---|---|
+| `init <path>` | Initialize | Bootstrap a new `ProjectMetaData` for a directory. Parallel file scan + MD5 hashing. Blocks until `MetaDataState.Idle`. |
+| `load <path>` | Load & inspect | Deserialize `ProjectMetaData.bin`; print project name, revision count, and current version details. |
+| `scan <dst-path> <src-path>` | Pre-stage | Scan a source folder against the loaded destination project; list pre-staged changes. |
+| `stage <dst-path>` | Stage | Hash pre-staged files, classify each change (Added / Modified / Deleted / Restored). |
+| `deploy <dst-path> [--updater <name>] [--log <message>]` | Deploy | Commit staged changes as a new revision. Defaults: updater = `Environment.UserName`, log = `"CLI deploy"`. |
+| `revert <dst-path> <version>` | Revert | Roll back to the named version string (e.g. `MyApp_PC_2025_01_01_v3`). |
+| `export <dst-path> <version>` | Export | Zip-archive a named version into `Export_<Name>/`. |
+| `list <dst-path>` | List history | Print all revisions; `*` marks the current version. |
+| `integrity-check <dst-path>` | Integrity | Hash-compare all tracked files vs. disk; report Added / Modified / Deleted deviations. |
+| `help` / `--help` | Help | Print command reference. |
+
+### 16.2 Current Output Style
+
+All output is plain monochrome `Console.WriteLine`. No color, no spinners, no progress bars.
+
+### 16.3 Planned CLI UI Improvements
+
+**Goal:** Git-like — colorful, concise, immediately scannable.
+
+#### Output conventions
+
+| Concept | Symbol | ANSI color |
+|---|---|---|
+| Success / completion | `✓` | Green |
+| Error | `✗` | Red |
+| Warning | `⚠` | Yellow |
+| Info / neutral | `ℹ` | Cyan |
+| Added file | `+` prefix | Green |
+| Deleted file | `-` prefix | Red |
+| Modified file | `~` prefix | Yellow |
+| Restored file | `*` prefix | Magenta |
+| Current version marker | `→` | Cyan bold |
+
+#### Per-command output targets
+
+**`list`** — compact tabular output, similar to `git log --oneline`:
+```
+  deployassistant list ./MyApp
+
+  → #8  MyApp_PC_2025_04_20_v8   2025-04-20 09:12  alice    3 changes
+    #7  MyApp_PC_2025_04_19_v7   2025-04-19 14:30  bob      1 change
+    #6  MyApp_PC_2025_04_18_v6   2025-04-18 11:05  alice    7 changes
+```
+
+**`scan` / `stage`** — one line per file with color-coded change type:
+```
+  + bin/MyApp.exe          (added)
+  ~ lib/utils.dll          (modified)
+  - config/old.cfg         (deleted)
+  * lib/legacy.dll         (restored)
+```
+
+**`deploy` / `revert` / `export`** — spinner while working, single completion line:
+```
+  ⠙ Deploying…   (spinner while running)
+  ✓ Deployed → MyApp_PC_2025_04_20_v9  (5 files changed)
+```
+
+**`integrity-check`** — progress bar while hashing, then a summary block:
+```
+  Hashing [████████████████░░░░] 80%  124/155 files
+
+  ✓ 148 files match
+  ⚠  7 deviations found:
+    ~  bin/MyApp.exe        (hash mismatch)
+    -  config/removed.cfg   (missing on disk)
+```
+
+**`load`** — compact project card:
+```
+  Project  MyApp
+  Path     C:\Deploy\MyApp
+  Version  MyApp_PC_2025_04_20_v8
+  Updated  2025-04-20 09:12  by alice
+  Files    155
+```
+
+#### Implementation approach
+
+Use **`Spectre.Console`** (NuGet `Spectre.Console`) in `DeployAssistant.CLI`:
+- `AnsiConsole.MarkupLine("[green]✓[/] Done.")` for colored output.
+- `AnsiConsole.Progress()` for per-file progress bars (wrap `FileChangesEventHandler` callbacks).
+- `AnsiConsole.Status()` for the spinner around blocking wait loops.
+- `AnsiConsole.Write(new Table())` for `list` and `load` output.
+
+The `DeployAssistant.Core.Standard` layer fires events (`FileChangesEventHandler`, `ManagerStateEventHandler`) that the CLI can subscribe to in order to drive live progress updates without changing core logic.
+
+---
+
+## 17. UI Design Plan — WPF Dockable Islands
+
+**Goal:** Replace the fixed 4-column `Grid` in `MainWindow` with a Visual Studio-style dockable panel layout where the user can drag, float, resize, and re-dock each panel independently.
+
+### 17.1 Current Layout Problems
+
+The current `MainWindow.xaml` is a hard-coded `Grid` with four fixed `ColumnDefinition` columns separated by `GridSplitter` controls:
+
+| Column | Content |
+|---|---|
+| 0 | Updater / UpdateLog inputs + DiffLog DataGrid |
+| 1 | Version history `ListView` |
+| 2 | Project file `DataGrid` + keyword filter |
+| 3 | Updater / UpdateLog inputs + Staged changes list + action buttons |
+
+Issues: panels cannot be re-ordered or floated; limited screen estate; secondary windows open as separate owned windows with no docking awareness; no layout persistence.
+
+### 17.2 Library Choice
+
+Use **`Dirkster.AvalonDock`** (NuGet `Dirkster.AvalonDock`), the actively maintained AvalonDock 4.x fork. It provides:
+- `DockingManager` — root container for the docking system.
+- `LayoutAnchorable` — side/bottom panels (can be hidden, auto-hidden, pinned).
+- `LayoutDocument` — center document-style tabs.
+- XML layout serialization for persistence via `XmlLayoutSerializer`.
+
+### 17.3 Panel Inventory
+
+Each current column and secondary window maps to a named panel:
+
+| Panel ID | Type | Default position | Content |
+|---|---|---|---|
+| `HistoryPanel` | `LayoutAnchorable` | Left | Version history list (currently column 1) |
+| `DiffLogPanel` | `LayoutAnchorable` | Left-bottom | DiffLog DataGrid showing changed files for the selected history version |
+| `ProjectFilesPanel` | `LayoutDocument` | Center | Project file DataGrid + keyword filter (currently column 2) |
+| `StagingPanel` | `LayoutAnchorable` | Right | Staged/pre-staged change list (currently column 3, upper) |
+| `ActionPanel` | `LayoutAnchorable` | Right-bottom | Updater, UpdateLog inputs + Stage / Update / Clear / Refresh buttons |
+| `IntegrityLogPanel` | `LayoutDocument` (tab) | Center | Integrity check results (replaces `IntegrityLogWindow` popup) |
+| `VersionDiffPanel` | `LayoutDocument` (tab) | Center | Version diff view (replaces `VersionDiffWindow` popup) |
+
+Secondary windows (`OverlapFileWindow`, `VersionComparisonWindow`, `CompatibleVersionWindow`) remain as modal dialogs — they require user decisions and are unsuitable for docking.
+
+### 17.4 Header Bar Redesign
+
+The current header row contains raw buttons scattered in a `StackPanel`. Replace with a two-zone header:
+- **Left zone — primary actions:** "Set Source Dir", "Set Dest Dir", "Integrity Check" buttons, styled as a WPF `ToolBar`.
+- **Right zone — project info:** Project name and current version as styled `TextBlock` elements with a status indicator (`TextBlock` bound to `MetaDataVM.CurrentMetaDataState`) showing a colored badge (Idle = grey, Processing = blue, Error = red).
+
+### 17.5 Visual Style
+
+Apply a consistent dark or light theme using AvalonDock's `VS2013` theme (bundled) or a custom `ResourceDictionary`:
+- Panel title bars: slim, 22 px, with a drag handle affordance.
+- DataGrid rows: retain existing color-coded `DataState` triggers (Added = light blue, Modified = light green, Deleted = light coral, Restored = gold).
+- Buttons: consistent `Height="32"`, `Padding="8,4"`, no mix of `Height="40"` and `Height="Auto"`.
+- `GridSplitter` replaced by AvalonDock's built-in resizing handles.
+
+### 17.6 Layout Persistence
+
+On close, serialize the `DockingManager` layout to `%USERPROFILE%\Documents\DeployAssistant.layout` using `XmlLayoutSerializer`. On startup, if the file exists, deserialize it to restore the user's last arrangement. Fall back to the default layout if deserialization fails.
+
+### 17.7 Implementation Steps
+
+1. Add `Dirkster.AvalonDock` NuGet reference to `DeployAssistant` (WPF project).
+2. Replace the body of `MainWindow.xaml` — wrap everything in a `DockingManager`; convert each column/panel to a `LayoutAnchorable` or `LayoutDocument` as mapped above.
+3. Update `MainWindow.xaml.cs`: add `SaveLayout()` / `LoadLayout()` helpers called on `Window.Closing` and `Window.Loaded`.
+4. Update `FileTrackViewModel` and `BackupViewModel` callbacks that currently open secondary `Window` instances for `IntegrityLogWindow` and `VersionDiffWindow` — instead activate the corresponding `LayoutDocument` panel and set its `DataContext`.
+5. Apply the VS2013 theme `ResourceDictionary` in `App.xaml`.
+
