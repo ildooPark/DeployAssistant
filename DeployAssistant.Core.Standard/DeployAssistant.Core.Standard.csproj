@@ -25,8 +25,6 @@
     <!-- Model -->
     <Compile Include="../DeployAssistant.Core/Model/ChangedFile.cs"
              Link="Model/ChangedFile.cs" />
-    <Compile Include="../DeployAssistant.Core/Model/DataState.cs"
-             Link="Model/DataState.cs" />
     <Compile Include="../DeployAssistant.Core/Model/DeployData.cs"
              Link="Model/DeployData.cs" />
     <Compile Include="../DeployAssistant.Core/Model/LocalConfigData.cs"
