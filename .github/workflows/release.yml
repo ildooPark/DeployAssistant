@@ -7,7 +7,6 @@ on:
   pull_request:
     branches:
       - master
-  workflow_dispatch:
 
 jobs:
   test:
@@ -100,7 +99,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    if: github.event_name == 'push' && github.ref_type == 'branch'
+    if: github.event_name == 'push'
     needs: build
     runs-on: windows-latest
     permissions:
@@ -122,9 +121,8 @@ jobs:
         id: changelog
         shell: pwsh
         run: |
-          # Derive release tag from the short commit SHA
-          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
-          $currentTag = "build-$shortSha"
+          # Derive release tag from the full commit SHA to avoid collisions
+          $currentTag = "build-$($env:GITHUB_SHA)"
           echo "tag_name=$currentTag" >> $env:GITHUB_OUTPUT
 
           # Find previous tag to determine the commit range
