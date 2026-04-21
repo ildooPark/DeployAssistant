@@ -4,17 +4,10 @@ on:
   push:
     branches:
       - master
-    tags:
-      - 'v*.*.*'
   pull_request:
     branches:
       - master
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Existing tag to release (e.g. v1.2.3). Leave empty for CI-only run.'
-        required: false
-        type: string
 
 jobs:
   test:
@@ -107,7 +100,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
+    if: github.event_name == 'push' && github.ref_type == 'branch'
     needs: build
     runs-on: windows-latest
     permissions:
@@ -129,29 +122,18 @@ jobs:
         id: changelog
         shell: pwsh
         run: |
-          # Determine the release tag: pushed tag or manually selected existing tag
-          $manualTag = '${{ github.event.inputs.release_tag }}'
-          if ($manualTag) {
-            $currentTag = $manualTag
-          } else {
-            $currentTag = $env:GITHUB_REF_NAME
-          }
+          # Derive release tag from the short commit SHA
+          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
+          $currentTag = "build-$shortSha"
+          echo "tag_name=$currentTag" >> $env:GITHUB_OUTPUT
 
-          # Verify tag exists for manual release runs
-          git rev-parse --verify "refs/tags/$currentTag" 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Tag '$currentTag' does not exist. Create/push it first, then rerun workflow_dispatch."
-            exit 1
-          }
-
-          # Find previous tag from the tag commit history
-          $tagCommit = git rev-list -n 1 "$currentTag"
-          $prevTag = git describe --tags --abbrev=0 "$tagCommit^" 2>$null
+          # Find previous tag to determine the commit range
+          $prevTag = git describe --tags --abbrev=0 HEAD^ 2>$null
           if ($LASTEXITCODE -ne 0 -or -not $prevTag) {
-            $range = $currentTag
+            $range = "HEAD"
             $prevTagDisplay = "(initial release)"
           } else {
-            $range = "$prevTag..$currentTag"
+            $range = "$prevTag..HEAD"
             $prevTagDisplay = $prevTag
           }
 
@@ -190,7 +172,7 @@ jobs:
           $md += "## 📦 Release $currentTag"
           $md += ""
           $md += "> Changes since **$prevTagDisplay**"
-          $md += "> Commit: **$(git rev-parse --short $currentTag)**"
+          $md += "> Commit: **$(git rev-parse --short HEAD)**"
           $md += ""
 
           # Summary counts
@@ -258,7 +240,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          tag_name: ${{ steps.changelog.outputs.tag_name }}
           body_path: release_notes.md
           files: |
             DeployAssistant-src.zip
