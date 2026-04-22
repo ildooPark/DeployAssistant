@@ -1,4 +1,5 @@
 ﻿using DeployAssistant.Model;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
@@ -85,9 +86,16 @@ namespace DeployAssistant.Utils
         #endregion
         public string GetUniqueComputerID(string userID)
         {
-            // Convert the hash bytes to a 10-character string by taking the first 5 bytes (40 bits) of the hash
-            byte[] bytes = SHA256.HashData(Encoding.UTF8.GetBytes(userID));
-            return Convert.ToHexStringLower(bytes.AsSpan(0, 5));
+            // Stack-allocate the UTF-8 encoding buffer for short strings (≤256 bytes), heap-fallback otherwise.
+            int maxBytes = Encoding.UTF8.GetMaxByteCount(userID.Length);
+            Span<byte> inputBuf = maxBytes <= 256 ? stackalloc byte[maxBytes] : new byte[maxBytes];
+            int written = Encoding.UTF8.GetBytes(userID, inputBuf);
+
+            // Stack-allocate the 32-byte SHA-256 output buffer and use the allocation-free TryHashData overload.
+            // Convert the hash bytes to a 10-character string by taking the first 5 bytes (40 bits) of the hash.
+            Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
+            SHA256.TryHashData(inputBuf[..written], hash, out _);
+            return Convert.ToHexStringLower(hash[..5]);
         }
         public string GetUniqueProjectDataID(ProjectData projectData)
         {
@@ -96,9 +104,24 @@ namespace DeployAssistant.Utils
             {
                 filesListWithHash.Append($"{file.DataRelPath}\\{file.DataHash}");
             }
-            byte[] inputBytes = Encoding.UTF8.GetBytes(filesListWithHash.ToString());
-            byte[] hashBytes = SHA256.HashData(inputBytes);
-            return Convert.ToHexString(hashBytes);
+            string input = filesListWithHash.ToString();
+
+            // Rent a byte[] from the pool for UTF-8 encoding to avoid a one-off heap allocation.
+            int maxBytes = Encoding.UTF8.GetMaxByteCount(input.Length);
+            byte[] rented = ArrayPool<byte>.Shared.Rent(maxBytes);
+            try
+            {
+                int written = Encoding.UTF8.GetBytes(input, rented);
+
+                // Stack-allocate the 32-byte SHA-256 output buffer.
+                Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
+                SHA256.TryHashData(rented.AsSpan(0, written), hash, out _);
+                return Convert.ToHexString(hash);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
         }
     }
 }
