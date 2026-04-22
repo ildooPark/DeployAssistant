@@ -485,7 +485,17 @@ namespace DeployAssistant.DataComponent
 
         public void RequestProjVersionDiff(ProjectData srcData)
         {
+            if (MainProjectData == null)
+            {
+                Trace.TraceWarning("RequestProjVersionDiff: MainProjectData is null. Load a project before comparing.");
+                return;
+            }
             List<ChangedFile>? fileDiff = _fileManager.FindVersionDifferences(srcData, MainProjectData);
+            if (fileDiff == null)
+            {
+                Trace.TraceWarning("RequestProjVersionDiff: FindVersionDifferences returned null, cannot open diff window.");
+                return;
+            }
             ProjComparisonCompleteEventHandler?.Invoke(srcData, MainProjectData, fileDiff);
         }
 
