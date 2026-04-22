@@ -1,6 +1,9 @@
 ﻿using DeployAssistant.DataComponent;
 using DeployAssistant.Interfaces;
+using DeployAssistant.Migration;
+using DeployAssistant.Migration.Steps;
 using DeployAssistant.Model;
+using DeployAssistant.Model.V2;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -10,6 +13,178 @@ namespace DeployAssistant.Utils
 {
     public class FileHandlerTool
     {
+        // ------------------------------------------------------------------ injectable migration pipeline
+
+        private readonly IMigrationPipeline<ProjectStore> _storeMigration;
+
+        /// <summary>Current V2 schema version understood by this tool.</summary>
+        public const int CurrentStoreSchemaVersion = 2;
+
+        /// <summary>
+        /// Parameterless constructor.  Uses a pre-configured
+        /// <see cref="MigrationPipeline{T}"/> that can migrate
+        /// V1 <c>ProjectMetaData</c> files to V2 <see cref="ProjectStore"/>.
+        /// </summary>
+        public FileHandlerTool()
+            : this(BuildDefaultStorePipeline()) { }
+
+        /// <summary>
+        /// Injectable constructor.  Pass a custom <see cref="IMigrationPipeline{T}"/>
+        /// to control schema migration behaviour (e.g. for testing or future version
+        /// additions without modifying this class — Open/Closed).
+        /// </summary>
+        public FileHandlerTool(IMigrationPipeline<ProjectStore> storeMigration)
+        {
+            _storeMigration = storeMigration
+                ?? throw new ArgumentNullException(nameof(storeMigration));
+        }
+
+        private static IMigrationPipeline<ProjectStore> BuildDefaultStorePipeline()
+        {
+            var step    = new ProjectMetaDataMigrationStep_1to2();
+            var adapter = new MigrationStepAdapter<ProjectMetaData, ProjectStore>(step);
+            return new MigrationPipeline<ProjectStore>(new[] { (IMigrationStepAdapter)adapter });
+        }
+
+        // ------------------------------------------------------------------ V2 ProjectStore serialize/deserialize
+
+        /// <summary>
+        /// Serialises a <see cref="ProjectStore"/> (V2 schema) to a Base64-encoded
+        /// JSON file at <paramref name="filePath"/>.
+        /// Before writing, if the file already exists it is copied to
+        /// <c>{filePath}.bak</c> as a safety net so the previous content can be
+        /// recovered if the write fails or if a rollback is later requested.
+        /// </summary>
+        public bool TrySerializeProjectStore(ProjectStore store, string filePath)
+        {
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    try { File.Copy(filePath, filePath + ".bak", overwrite: true); }
+                    catch (Exception bakEx)
+                    {
+                        Trace.TraceWarning($"Could not create .bak file for {filePath}: {bakEx.Message}");
+                    }
+                }
+
+                string jsonData = JsonSerializer.Serialize(store);
+                string base64   = Convert.ToBase64String(Encoding.UTF8.GetBytes(jsonData));
+                File.WriteAllText(filePath, base64);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError($"Error serializing ProjectStore: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Deserialises a <see cref="ProjectStore"/> from a Base64-encoded JSON file.
+        /// <para>
+        /// If the file contains a V1 <c>ProjectMetaData</c> document
+        /// (<c>SchemaVersion</c> ≤ 1 or absent), the method automatically:
+        /// <list type="number">
+        ///   <item>Copies the original file to <c>{filePath}.bak</c>.</item>
+        ///   <item>Runs the injected <see cref="IMigrationPipeline{T}"/> to produce
+        ///         a V2 <see cref="ProjectStore"/>.</item>
+        ///   <item>Returns the migrated store; the caller may optionally persist it
+        ///         by calling <see cref="TrySerializeProjectStore"/>.</item>
+        /// </list>
+        /// If migration fails the original <c>.bak</c> file is still available,
+        /// the method returns <c>false</c>, and <paramref name="projectStore"/>
+        /// is set to <c>null</c>.
+        /// </para>
+        /// </summary>
+        public bool TryDeserializeProjectStore(string filePath, out ProjectStore? projectStore)
+        {
+            try
+            {
+                string base64Str   = File.ReadAllText(filePath);
+                byte[] jsonBytes   = Convert.FromBase64String(base64Str);
+                string jsonString  = Encoding.UTF8.GetString(jsonBytes);
+
+                int schemaVersion  = PeekSchemaVersion(jsonString);
+
+                if (schemaVersion >= CurrentStoreSchemaVersion)
+                {
+                    // Already V2 — deserialise directly.
+                    projectStore = JsonSerializer.Deserialize<ProjectStore>(jsonString);
+                    return projectStore != null;
+                }
+
+                // V1 file — save .bak then migrate.
+                try { File.Copy(filePath, filePath + ".bak", overwrite: true); }
+                catch (Exception bakEx)
+                {
+                    Trace.TraceWarning($"Could not create .bak before migration for {filePath}: {bakEx.Message}");
+                }
+
+                // Treat version 0 (field absent) as version 1 for migration routing.
+                int fromVersion = schemaVersion < 1 ? 1 : schemaVersion;
+
+#pragma warning disable CS0618
+                ProjectMetaData? v1Meta = JsonSerializer.Deserialize<ProjectMetaData>(jsonString);
+#pragma warning restore CS0618
+                if (v1Meta == null)
+                {
+                    projectStore = null;
+                    return false;
+                }
+
+                projectStore = _storeMigration.MigrateTo(v1Meta, fromVersion, CurrentStoreSchemaVersion);
+                return projectStore != null;
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError($"Error deserializing ProjectStore: {ex.Message}");
+                projectStore = null;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Rolls back a <c>ProjectMetaData.bin</c> (or any store file) to its
+        /// previous version by copying the <c>.bak</c> file back over it.
+        /// Returns <c>false</c> if no <c>.bak</c> file exists.
+        /// </summary>
+        public bool TryRollbackProjectStore(string filePath)
+        {
+            try
+            {
+                string bakPath = filePath + ".bak";
+                if (File.Exists(bakPath))
+                {
+                    File.Copy(bakPath, filePath, overwrite: true);
+                    Trace.TraceInformation($"Restored {filePath} from {bakPath}");
+                    return true;
+                }
+                Trace.TraceWarning($"No .bak file found for {filePath}; rollback skipped.");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError($"Error rolling back ProjectStore: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static int PeekSchemaVersion(string jsonString)
+        {
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(jsonString);
+                if (doc.RootElement.TryGetProperty("SchemaVersion", out JsonElement el)
+                    && el.TryGetInt32(out int version))
+                    return version;
+            }
+            catch { /* malformed JSON — let the full deserialisation surface the error */ }
+            return 0; // absent → treat as legacy
+        }
+
+        // ------------------------------------------------------------------ V1 legacy methods (preserved for backward compatibility)
+
         public bool TrySerializeProjectData(ProjectData data, string filePath)
         {
             try

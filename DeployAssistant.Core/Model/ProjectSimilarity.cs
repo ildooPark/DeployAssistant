@@ -7,6 +7,12 @@ using System.Threading.Tasks;
 
 namespace DeployAssistant.Model
 {
+    /// <summary>
+    /// V1 similarity comparison result with non-conformant camelCase property names.
+    /// Use <see cref="DeployAssistant.Model.V2.SnapshotSimilarity"/> for new code.
+    /// </summary>
+    [System.Obsolete("ProjectSimilarity is a V1 type with non-conformant property names. " +
+                     "Use DeployAssistant.Model.V2.SnapshotSimilarity for new code.")]
     public class ProjectSimilarity
     {
         public ProjectData projData { get; set; }

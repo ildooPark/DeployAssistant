@@ -5,6 +5,12 @@ using System.Text.Json.Serialization;
 
 namespace DeployAssistant.Model
 {
+    /// <summary>
+    /// V1 snapshot type. Properties are recomputed on every access and
+    /// <c>ChangedFiles</c> is embedded in the snapshot causing redundant storage.
+    /// Use <see cref="DeployAssistant.Model.V2.SnapshotData"/> for new code.
+    /// </summary>
+    [System.Obsolete("ProjectData is a V1 type. Use DeployAssistant.Model.V2.SnapshotData for new code.")]
     public class ProjectData : IEquatable<ProjectData>, IComparer<ProjectData>, IComparable<ProjectData>
     {
         public string ProjectName { get; set; }
