@@ -5,85 +5,185 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DeployAssistant.View"
         mc:Ignorable="d"
-        Title="Source Project View" Height="450" Width="800">
+        Title="Integration Diff"
+        Height="560" Width="940"
+        MinHeight="400" MinWidth="700"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="100" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0">
-            <TextBlock>
-                <TextBlock.Inlines>
-                    <Run Text="SOURCE PROJECT VERSION: " />
-                    <Run Text="{Binding SrcProject.UpdatedVersion}" />
-                </TextBlock.Inlines>
+        <!-- ── Header bar ── -->
+        <Border Grid.Row="0" Background="#2D2D2D" Padding="10,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Foreground="#BBBBBB" FontSize="13" VerticalAlignment="Center">
+                        <Run Text="Src: "/>
+                        <Run Text="{Binding SrcProject.UpdatedVersion, FallbackValue='—'}"
+                             FontWeight="Bold" Foreground="#4EC9B0"/>
+                    </TextBlock>
+                    <TextBlock Foreground="#777777" FontSize="13" Margin="10,0" VerticalAlignment="Center" Text="→"/>
+                    <TextBlock Foreground="#BBBBBB" FontSize="13" VerticalAlignment="Center">
+                        <Run Text="Dst: "/>
+                        <Run Text="{Binding DstProject.UpdatedVersion, FallbackValue='—'}"
+                             FontWeight="Bold" Foreground="White"/>
+                    </TextBlock>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="Export Diff"
+                        Padding="10,4" FontSize="12"
+                        Command="{Binding ExportDiffFiles}"
+                        Style="{StaticResource ToolbarButtonStyle}"/>
+            </Grid>
+        </Border>
+
+        <!-- ── Summary bar ── -->
+        <Border Grid.Row="1" Background="#F5F5F5" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1" Padding="10,4">
+            <TextBlock FontSize="12" Foreground="#555555">
+                <Run Text="{Binding TotalCount,  StringFormat='{}{0} files changed'}"/>
+                <Run Text=" — "/>
+                <Run Text="{Binding AddedCount,   StringFormat='{}{0} added'}"    Foreground="#388E3C" FontWeight="SemiBold"/>
+                <Run Text=" · "/>
+                <Run Text="{Binding ModifiedCount, StringFormat='{}{0} modified'}" Foreground="#F57F17" FontWeight="SemiBold"/>
+                <Run Text=" · "/>
+                <Run Text="{Binding DeletedCount,  StringFormat='{}{0} deleted'}"  Foreground="#C62828" FontWeight="SemiBold"/>
             </TextBlock>
+        </Border>
 
-            <TextBlock>
-                <TextBlock.Inlines>
-                    <Run Text="DESTINATION PROJECT VERSION: " />
-                    <Run Text="{Binding DstProject.UpdatedVersion}" />
-                </TextBlock.Inlines>
+        <!-- ── Filter box ── -->
+        <Grid Grid.Row="2" Margin="6,4">
+            <TextBox x:Name="FilterDiffInput"
+                     Style="{StaticResource FilterBoxStyle}"
+                     TextChanged="FileFilterKeyword_TextChanged"/>
+            <TextBlock Text="Filter files…">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource PlaceholderStyle}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Text, ElementName=FilterDiffInput}" Value="">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Text, ElementName=FilterDiffInput}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                    </Style>
+                </TextBlock.Style>
             </TextBlock>
+        </Grid>
 
-            <Button
-                x:Name="ExportFileDiff"
-                Content="Export File Diff" 
-                Height="20"
-                Command="{Binding VersionDiffVM.ExportDiffFiles}"
-                />
-
-            <TextBox
-                x:Name="FilterDiffInput"
-                />
-
-        </StackPanel>
-
-        <ListView 
-            Grid.Row="1" 
-            ItemsSource="{Binding Diff}"
-            Name="FileDifferences">
+        <!-- ── Diff list ── -->
+        <ListView Grid.Row="3"
+                  x:Name="FileDifferences"
+                  ItemsSource="{Binding Diff}"
+                  BorderBrush="#CDCDCD"
+                  ScrollViewer.CanContentScroll="True"
+                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto">
             <ListView.View>
                 <GridView>
-                    <GridViewColumn 
-                        Header="Source File"
-                        DisplayMemberBinding="{Binding SrcFile.DataRelPath}"
-                        Width="200">
+                    <!-- state pill -->
+                    <GridViewColumn Header="" Width="32">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border CornerRadius="3" Padding="3,1" Margin="1">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="#9E9E9E"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataState}" Value="Added">
+                                                    <Setter Property="Background" Value="{StaticResource BrPillAdded}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataState}" Value="Modified">
+                                                    <Setter Property="Background" Value="{StaticResource BrPillModified}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataState}" Value="Deleted">
+                                                    <Setter Property="Background" Value="{StaticResource BrPillDeleted}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock>
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource PillTextStyle}">
+                                                <Setter Property="Text" Value="?"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DataState}" Value="Added">
+                                                        <Setter Property="Text" Value="+"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding DataState}" Value="Modified">
+                                                        <Setter Property="Text" Value="~"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding DataState}" Value="Deleted">
+                                                        <Setter Property="Text" Value="−"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Border>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn 
-                        Header="Source BuildVersion"
-                        DisplayMemberBinding="{Binding SrcFile.BuildVersion}"
-                        Width="200">
+                    <GridViewColumn Header="Source File"
+                                    DisplayMemberBinding="{Binding SrcFile.DataRelPath}"
+                                    Width="200"/>
+                    <GridViewColumn Header="Src Build V"
+                                    DisplayMemberBinding="{Binding SrcFile.BuildVersion}"
+                                    Width="90"/>
+                    <GridViewColumn Header="Src Hash" Width="75">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding SrcFile.DataHash}"
+                                           ToolTip="{Binding SrcFile.DataHash}"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxWidth="70"
+                                           FontFamily="Consolas" FontSize="11"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn 
-                        Header="Destination File"
-                        DisplayMemberBinding="{Binding DstFile.DataRelPath}"
-                        Width="200">
+                    <GridViewColumn Header="Destination File"
+                                    DisplayMemberBinding="{Binding DstFile.DataRelPath}"
+                                    Width="200"/>
+                    <GridViewColumn Header="Dst Build V"
+                                    DisplayMemberBinding="{Binding DstFile.BuildVersion}"
+                                    Width="90"/>
+                    <GridViewColumn Header="Dst Hash" Width="75">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DstFile.DataHash}"
+                                           ToolTip="{Binding DstFile.DataHash}"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxWidth="70"
+                                           FontFamily="Consolas" FontSize="11"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn 
-                        Header="Destination BuildVersion"
-                        DisplayMemberBinding="{Binding DstFile.BuildVersion}"
-                        Width="200">
+                    <GridViewColumn Header="Size (src→dst)" Width="110">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock FontSize="11">
+                                    <Run Text="{Binding SrcFile.DataSize, StringFormat='{}{0:N0}'}"/>
+                                    <Run Text="→"/>
+                                    <Run Text="{Binding DstFile.DataSize, StringFormat='{}{0:N0}'}"/>
+                                </TextBlock>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
                     </GridViewColumn>
                 </GridView>
             </ListView.View>
 
             <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="Background" Value="Transparent"/>
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding DataState}" Value="Added">
-                            <Setter Property="Background" Value="LightGreen"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding DataState}" Value="Modified">
-                            <Setter Property="Background" Value="LightCoral"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding DataState}" Value="Deleted">
-                            <Setter Property="Background" Value="LightBlue"/>
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
+                <Style TargetType="ListViewItem" BasedOn="{StaticResource DiffRowStyle}"/>
             </ListView.ItemContainerStyle>
         </ListView>
     </Grid>

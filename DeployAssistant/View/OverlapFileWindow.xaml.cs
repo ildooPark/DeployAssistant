@@ -25,13 +25,13 @@ namespace DeployAssistant.View
 
         private void NewFileFilterKeyword_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
-            NewFileDirectories.Items.Filter = FilterFilesMethod;
+            NewFileDirectories.Items.Filter = FilterNewFilesMethod;
         }
 
-        private bool FilterFilesMethod(object obj)
+        private bool FilterNewFilesMethod(object obj)
         {
-            var file = (ChangedFile)obj;
-            return file.DstFile.DataName.Contains(NewFileFilterKeyword.Text, StringComparison.OrdinalIgnoreCase);
+            var group = (GroupedOverlap)obj;
+            return group.SrcFileName.Contains(NewFileFilterKeyword.Text, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

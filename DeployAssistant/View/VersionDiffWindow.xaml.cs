@@ -25,8 +25,9 @@ namespace DeployAssistant.View
 
         private bool FilterFilesMethod(object obj)
         {
-            var file = (ProjectFile)obj;
-            return file.DataName.Contains(FilterDiffInput.Text, StringComparison.OrdinalIgnoreCase);
+            var file = (ChangedFile)obj;
+            var name = file.SrcFile?.DataName ?? file.DstFile?.DataName ?? string.Empty;
+            return name.Contains(FilterDiffInput.Text, StringComparison.OrdinalIgnoreCase);
         }
     }
 }
