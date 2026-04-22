@@ -131,6 +131,11 @@ namespace DeployAssistant.Migration
 
         private static void RollbackApplied(List<(IMigrationStepAdapter Step, object Output)> applied)
         {
+            // Each tuple holds the OUTPUT of its step, so Rollback(output) correctly
+            // reconstructs the step's input.  The reconstructed inputs are intentionally
+            // discarded here: the purpose of this path is error recovery for stateful
+            // side-effects (e.g. partial file writes), not to produce a return value.
+            // In-memory pipelines generally have no side-effects to undo.
             for (int i = applied.Count - 1; i >= 0; i--)
             {
                 applied[i].Step.Rollback(applied[i].Output);

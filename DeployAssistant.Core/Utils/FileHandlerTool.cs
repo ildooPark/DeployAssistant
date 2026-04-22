@@ -122,7 +122,7 @@ namespace DeployAssistant.Utils
                 }
 
                 // Treat version 0 (field absent) as version 1 for migration routing.
-                int fromVersion = schemaVersion < 1 ? 1 : schemaVersion;
+                int fromVersion = NormalizeLegacySchemaVersion(schemaVersion);
 
 #pragma warning disable CS0618
                 ProjectMetaData? v1Meta = JsonSerializer.Deserialize<ProjectMetaData>(jsonString);
@@ -182,6 +182,15 @@ namespace DeployAssistant.Utils
             catch { /* malformed JSON — let the full deserialisation surface the error */ }
             return 0; // absent → treat as legacy
         }
+
+        /// <summary>
+        /// Maps a raw schema version read from a file to the canonical V1 version
+        /// number used for migration routing.  Old files written before the
+        /// <c>SchemaVersion</c> field was introduced will have version 0 (field
+        /// absent); they are treated identically to an explicit version 1.
+        /// </summary>
+        private static int NormalizeLegacySchemaVersion(int rawVersion)
+            => rawVersion < 1 ? 1 : rawVersion;
 
         // ------------------------------------------------------------------ V1 legacy methods (preserved for backward compatibility)
 

@@ -55,7 +55,15 @@ namespace DeployAssistant.Model.V2
 
 #pragma warning disable CS8618
         /// <summary>Parameterless constructor for JSON deserialisation.</summary>
-        public FileRecord() { }
+        public FileRecord()
+        {
+            RelPath         = string.Empty;
+            Name            = string.Empty;
+            SrcPath         = string.Empty;
+            Hash            = string.Empty;
+            BuildVersion    = string.Empty;
+            SnapshotVersion = string.Empty;
+        }
 #pragma warning restore CS8618
 
         [JsonConstructor]
