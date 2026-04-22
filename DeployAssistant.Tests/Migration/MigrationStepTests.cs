@@ -225,6 +225,45 @@ namespace DeployAssistant.Tests.Migration
             Assert.Equal("5.5", rolled.UpdatedVersion);
         }
 
+        [Fact]
+        public void RollbackDiff_Added_DstFileIsDstFileIsTrue()
+        {
+            // V1 (DstFile, DataState) ctor must set DstFile.IsDstFile = true for non-Overlapped Added.
+            var pd = new ProjectData(@"C:\P");
+            pd.ChangedFiles.Add(new ChangedFile(MakeV1File("n.dll", "n.dll"), DataState.Added));
+            var v2     = _pdStep.Migrate(pd);
+            var rolled = _pdStep.Rollback(v2);
+            Assert.True(rolled.ChangedFiles[0].DstFile?.IsDstFile,
+                "RollbackDiff for Added must use the (DstFile, DataState) overload so DstFile.IsDstFile is set.");
+        }
+
+        [Fact]
+        public void RollbackDiff_Modified_SrcFileIsDstFileIsFalse()
+        {
+            // V1 (SrcFile, DstFile, DataState, bool) ctor must set SrcFile.IsDstFile = false.
+            var pd = new ProjectData(@"C:\P");
+            var src = MakeV1File("m.dll", "m.dll", @"C:\Src");
+            var dst = MakeV1File("m.dll", "m.dll", @"C:\Dst");
+            pd.ChangedFiles.Add(new ChangedFile(src, dst, DataState.Modified, RegisterChanges: true));
+            var v2     = _pdStep.Migrate(pd);
+            var rolled = _pdStep.Rollback(v2);
+            Assert.False(rolled.ChangedFiles[0].SrcFile?.IsDstFile,
+                "RollbackDiff for Modified must use the (SrcFile, DstFile, DataState, bool) overload so SrcFile.IsDstFile = false.");
+        }
+
+        [Fact]
+        public void RollbackDiff_Modified_DstFileIsDstFileIsTrue()
+        {
+            var pd = new ProjectData(@"C:\P");
+            var src = MakeV1File("m.dll", "m.dll", @"C:\Src");
+            var dst = MakeV1File("m.dll", "m.dll", @"C:\Dst");
+            pd.ChangedFiles.Add(new ChangedFile(src, dst, DataState.Modified, RegisterChanges: true));
+            var v2     = _pdStep.Migrate(pd);
+            var rolled = _pdStep.Rollback(v2);
+            Assert.True(rolled.ChangedFiles[0].DstFile?.IsDstFile,
+                "RollbackDiff for Modified must set DstFile.IsDstFile = true for non-Overlapped state.");
+        }
+
         // ================================================================== ProjectMetaDataMigrationStep_1to2
 
         private readonly ProjectMetaDataMigrationStep_1to2 _pmStep = new();

@@ -100,13 +100,13 @@
                                         <Style TargetType="Border">
                                             <Setter Property="Background" Value="#9E9E9E"/>
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding DataState}" Value="Added">
+                                                <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Added">
                                                     <Setter Property="Background" Value="{StaticResource BrPillAdded}"/>
                                                 </DataTrigger>
-                                                <DataTrigger Binding="{Binding DataState}" Value="Modified">
+                                                <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Modified">
                                                     <Setter Property="Background" Value="{StaticResource BrPillModified}"/>
                                                 </DataTrigger>
-                                                <DataTrigger Binding="{Binding DataState}" Value="Deleted">
+                                                <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Deleted">
                                                     <Setter Property="Background" Value="{StaticResource BrPillDeleted}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
@@ -117,13 +117,13 @@
                                             <Style TargetType="TextBlock" BasedOn="{StaticResource PillTextStyle}">
                                                 <Setter Property="Text" Value="?"/>
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding DataState}" Value="Added">
+                                                    <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Added">
                                                         <Setter Property="Text" Value="+"/>
                                                     </DataTrigger>
-                                                    <DataTrigger Binding="{Binding DataState}" Value="Modified">
+                                                    <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Modified">
                                                         <Setter Property="Text" Value="~"/>
                                                     </DataTrigger>
-                                                    <DataTrigger Binding="{Binding DataState}" Value="Deleted">
+                                                    <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Deleted">
                                                         <Setter Property="Text" Value="−"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>

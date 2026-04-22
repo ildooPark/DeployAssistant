@@ -116,6 +116,27 @@ namespace DeployAssistant.Tests.Migration
         }
 
         [Fact]
+        public void TryDeserializeProjectStore_FutureSchemaVersion_ReturnsFalse()
+        {
+            // Simulate a file written by a hypothetical future V3 application.
+            int futureVersion = FileHandlerTool.CurrentStoreSchemaVersion + 1;
+            var futureStore = new ProjectStore("FutureProj", @"C:\Future")
+            {
+                // Override SchemaVersion to a future value using the init setter (records allow this)
+                // We write raw JSON to simulate the future file.
+            };
+            string json   = System.Text.Json.JsonSerializer.Serialize(new { SchemaVersion = futureVersion, ProjectName = "FutureProj", ProjectPath = @"C:\Future" });
+            string base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
+            string path   = TempPath("future_store.bin");
+            File.WriteAllText(path, base64);
+
+            bool result = _tool.TryDeserializeProjectStore(path, out var store);
+
+            Assert.False(result);
+            Assert.Null(store);
+        }
+
+        [Fact]
         public void TryDeserializeProjectStore_MissingFile_ReturnsFalse()
         {
             bool result = _tool.TryDeserializeProjectStore(TempPath("ghost.bin"), out var store);

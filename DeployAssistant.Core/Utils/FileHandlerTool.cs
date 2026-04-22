@@ -107,11 +107,24 @@ namespace DeployAssistant.Utils
 
                 int schemaVersion  = PeekSchemaVersion(jsonString);
 
-                if (schemaVersion >= CurrentStoreSchemaVersion)
+                if (schemaVersion == CurrentStoreSchemaVersion)
                 {
-                    // Already V2 — deserialise directly.
+                    // Exact current version — deserialise directly.
                     projectStore = JsonSerializer.Deserialize<ProjectStore>(jsonString);
                     return projectStore != null;
+                }
+
+                if (schemaVersion > CurrentStoreSchemaVersion)
+                {
+                    // File was written by a newer version of the application.
+                    // Attempting to deserialise it would risk silent data loss.
+                    Trace.TraceError(
+                        $"Cannot deserialize ProjectStore from '{filePath}': " +
+                        $"file schema version {schemaVersion} is newer than the " +
+                        $"supported version {CurrentStoreSchemaVersion}. " +
+                        "Please upgrade the application.");
+                    projectStore = null;
+                    return false;
                 }
 
                 // V1 file — save .bak then migrate.

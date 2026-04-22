@@ -207,13 +207,29 @@ namespace DeployAssistant.Migration.Steps
         private static Model.ChangedFile RollbackDiff(FileDiff v2)
         {
             DataState state = RollbackChangeKind(v2.Kind);
-            Model.ProjectFile? src = v2.Before != null ? RollbackFile(v2.Before) : null;
-            Model.ProjectFile? dst = v2.After  != null ? RollbackFile(v2.After)  : null;
-            // The V1 ChangedFile JSON constructor declares both parameters as non-nullable
-            // but accepts null at runtime (tests confirm this pattern).  The null-forgiving
-            // operators suppress the compiler warning; the V1 type's nullable handling is
-            // preserved as-is rather than coupling the migration step to its internals.
-            return new Model.ChangedFile(src!, dst!, state);
+            switch (v2.Kind)
+            {
+                case ChangeKind.Added:
+                case ChangeKind.Deleted:
+                    // V1 convention for both Added and Deleted:
+                    //   SrcFile = null, DstFile = the file (stored in v2.After due to migration mapping).
+                    // The (DstFile, DataState) overload correctly sets DstFile.IsDstFile based on
+                    // whether the Overlapped lifecycle flag is set.
+                    return new Model.ChangedFile(RollbackFile(v2.After!), state);
+
+                case ChangeKind.Modified:
+                case ChangeKind.Restored:
+                    // V1 convention: SrcFile = Before, DstFile = After.
+                    // The (SrcFile, DstFile, DataState, bool) overload correctly sets
+                    //   SrcFile.IsDstFile = false and DstFile.IsDstFile = !Overlapped.
+                    return new Model.ChangedFile(RollbackFile(v2.Before!), RollbackFile(v2.After!), state, RegisterChanges: true);
+
+                default:
+                    // Unknown kind: fall back to JSON constructor (no IsDstFile mutation).
+                    Model.ProjectFile? src = v2.Before != null ? RollbackFile(v2.Before) : null;
+                    Model.ProjectFile? dst = v2.After  != null ? RollbackFile(v2.After)  : null;
+                    return new Model.ChangedFile(src!, dst!, state);
+            }
         }
 
         private static DataState RollbackStagingFlags(StagingFlags flags)
