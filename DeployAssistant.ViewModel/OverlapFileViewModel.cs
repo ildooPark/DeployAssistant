@@ -55,6 +55,7 @@ namespace DeployAssistant.ViewModel
             set
             {
                 _overlapFilesList = value;
+                _groupedOverlapList = null;
                 OnPropertyChanged(nameof(OverlapFilesList));
                 OnPropertyChanged(nameof(GroupedOverlapList));
             }
@@ -67,6 +68,7 @@ namespace DeployAssistant.ViewModel
             set
             {
                 _newFilesList = value;
+                _groupedNewList = null;
                 OnPropertyChanged(nameof(NewFilesList));
                 OnPropertyChanged(nameof(GroupedNewList));
             }
@@ -76,8 +78,9 @@ namespace DeployAssistant.ViewModel
         /// Overlap files grouped by source filename — one row per ambiguous file,
         /// ComboBox shows all candidate destination paths.
         /// </summary>
+        private List<GroupedOverlap>? _groupedOverlapList;
         public List<GroupedOverlap> GroupedOverlapList =>
-            (_overlapFilesList ?? new List<ChangedFile>())
+            _groupedOverlapList ??= (_overlapFilesList ?? new List<ChangedFile>())
                 .GroupBy(f => f.SrcFile?.DataName ?? string.Empty)
                 .Select(g => new GroupedOverlap(g.Key, g.ToList()))
                 .ToList();
@@ -86,8 +89,9 @@ namespace DeployAssistant.ViewModel
         /// New files grouped by source filename — one row per new file,
         /// ComboBox shows all candidate destination folders.
         /// </summary>
+        private List<GroupedOverlap>? _groupedNewList;
         public List<GroupedOverlap> GroupedNewList =>
-            (_newFilesList ?? new List<ChangedFile>())
+            _groupedNewList ??= (_newFilesList ?? new List<ChangedFile>())
                 .GroupBy(f => f.SrcFile?.DataName ?? string.Empty)
                 .Select(g => new GroupedOverlap(g.Key, g.ToList()))
                 .ToList();
