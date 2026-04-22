@@ -37,6 +37,17 @@ namespace DeployAssistant.Migration
                 throw new ArgumentException(
                     $"fromVersion ({fromVersion}) must be less than or equal to targetVersion ({targetVersion}).");
 
+            // Validate that every required step exists before executing anything.
+            // This ensures a missing-step condition throws InvalidOperationException
+            // directly — before the try/catch rollback handler can intercept it.
+            for (int v = fromVersion; v < targetVersion; v++)
+            {
+                if (!_steps.Any(s => s.FromVersion == v))
+                    throw new InvalidOperationException(
+                        $"No migration step registered for schema version {v}. " +
+                        $"Registered steps: [{string.Join(", ", _steps.Select(s => $"{s.FromVersion}→{s.ToVersion}"))}].");
+            }
+
             object current = rawSource;
             int currentVersion = fromVersion;
 
