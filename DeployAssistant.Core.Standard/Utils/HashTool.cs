@@ -163,13 +163,9 @@ namespace DeployAssistant.Utils
                 Trace.TraceError($"Failed to Initialize SHA256 for ProjectData Hash {projectData.ProjectName}");
                 return "";
             }
-            byte[] filesByte = Encoding.UTF8.GetBytes((string) filesListWithHash.ToString());
-            filesListWithHash.Clear();
-            for (int i = 0; i < filesByte.Length; i++)
-            {
-                filesListWithHash.Append(filesByte[i].ToString("x2")); // "x2" formats the byte as a hexadecimal string
-            }
-            return filesListWithHash.ToString();
+            byte[] inputBytes = Encoding.UTF8.GetBytes(filesListWithHash.ToString());
+            byte[] hashBytes = sha256.ComputeHash(inputBytes);
+            return BitConverter.ToString(hashBytes).Replace("-", "");
         }
     }
 }
