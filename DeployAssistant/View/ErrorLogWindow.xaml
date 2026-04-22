@@ -5,8 +5,52 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DeployAssistant.View"
         mc:Ignorable="d"
-        Title="Error Log Window" Height="450" Width="800">
+        Title="Error Log"
+        Height="480" Width="760"
+        MinHeight="300" MinWidth="500"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
     <Grid>
-        
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ── Header ── -->
+        <Border Grid.Row="0" Background="#2D2D2D" Padding="10,6">
+            <TextBlock Foreground="White" FontSize="13" FontWeight="SemiBold"
+                       Text="Error Log"/>
+        </Border>
+
+        <!-- ── Log text area ── -->
+        <TextBox Grid.Row="1"
+                 x:Name="LogTextBox"
+                 IsReadOnly="True"
+                 AcceptsReturn="True"
+                 TextWrapping="NoWrap"
+                 FontFamily="Consolas"
+                 FontSize="12"
+                 Foreground="#D4D4D4"
+                 Background="#1E1E1E"
+                 BorderThickness="0"
+                 Margin="0"
+                 VerticalScrollBarVisibility="Auto"
+                 HorizontalScrollBarVisibility="Auto"
+                 Text="{Binding LogText}"/>
+
+        <!-- ── Footer toolbar ── -->
+        <Border Grid.Row="2" Background="#F5F5F5" BorderBrush="#E0E0E0" BorderThickness="0,1,0,0" Padding="8,4">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Copy to Clipboard"
+                        Padding="10,5" Margin="4,0"
+                        Click="CopyToClipboard_Click"
+                        Style="{StaticResource ActionButtonStyle}"/>
+                <Button Content="Clear"
+                        Padding="10,5" Margin="4,0"
+                        Click="Clear_Click"
+                        Style="{StaticResource ActionButtonStyle}"/>
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

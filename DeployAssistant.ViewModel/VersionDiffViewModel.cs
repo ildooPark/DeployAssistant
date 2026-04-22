@@ -37,8 +37,18 @@ namespace DeployAssistant.ViewModel
             {
                 _diff = value;
                 OnPropertyChanged(nameof(Diff));
+                OnPropertyChanged(nameof(TotalCount));
+                OnPropertyChanged(nameof(AddedCount));
+                OnPropertyChanged(nameof(ModifiedCount));
+                OnPropertyChanged(nameof(DeletedCount));
             }
         }
+
+        // Summary counts shown in the header bar
+        public int TotalCount    => Diff.Count;
+        public int AddedCount    => Diff.Count(f => f.DataState == DataState.Added);
+        public int ModifiedCount => Diff.Count(f => f.DataState == DataState.Modified);
+        public int DeletedCount  => Diff.Count(f => f.DataState == DataState.Deleted);
 
         private readonly MetaDataManager _metaDataManager;
 

@@ -4,8 +4,17 @@ using System.Text.Json.Serialization;
 
 namespace DeployAssistant.Model
 {
+    [System.Obsolete("ProjectMetaData is a V1 schema type. Use DeployAssistant.Model.V2.ProjectStore for new code.")]
     public class ProjectMetaData
     {
+        /// <summary>
+        /// Schema version marker added in V1.1 so the migration system can detect this
+        /// document as a V1 format.  Old files written before this field existed will
+        /// deserialise it as <c>0</c> via the parameterless JSON constructor; the
+        /// migration layer treats both <c>0</c> and <c>1</c> as V1.
+        /// </summary>
+        public int SchemaVersion { get; set; } = 1;
+
         private int localUpdateCount;
         public int LocalUpdateCount { get => localUpdateCount; set => localUpdateCount = value; }  
         private string projectName;
@@ -20,6 +29,7 @@ namespace DeployAssistant.Model
         [JsonConstructor]
         public ProjectMetaData()
         {
+            SchemaVersion = 1;
             LocalUpdateCount = 0;
             ProjectName = string.Empty;
             ProjectPath = string.Empty;
@@ -30,6 +40,7 @@ namespace DeployAssistant.Model
 
         public ProjectMetaData(string projectName, string projectPath)
         {
+            this.SchemaVersion = 1;
             this.LocalUpdateCount = 0;
             this.ProjectName = projectName;
             this.ProjectPath = projectPath;

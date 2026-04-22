@@ -5,107 +5,183 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DeployAssistant.View"
         mc:Ignorable="d"
-        Title="Integrity Log Window" Height="600" Width="1250">
+        Title="Integrity Log"
+        Height="640" Width="1300"
+        MinHeight="480" MinWidth="900"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width = "3*" />
-            <ColumnDefinition Width = "7*" />
+            <ColumnDefinition Width="3*"/>
+            <ColumnDefinition Width="7*"/>
         </Grid.ColumnDefinitions>
-        <Grid Grid.Column="0">
+
+        <!-- ── Left panel: version metadata + logs ── -->
+        <Grid Grid.Column="0" Margin="6">
             <Grid.RowDefinitions>
-                <RowDefinition Height="4*"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="3*"/>
-                <RowDefinition Height="3*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="2*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="2*"/>
             </Grid.RowDefinitions>
-            <DataGrid 
-                IsReadOnly="True"
-                ItemsSource="{Binding ProjectDataReview}" 
-                AutoGenerateColumns="False">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Variable" Binding="{Binding Key}" Width="3*"/>
-                    <DataGridTextColumn Header="Data" Binding="{Binding Value}" Width="7*"/>
-                </DataGrid.Columns>
-            </DataGrid>
-            <Grid Grid.Row="1">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="25"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                <Label Grid.Row="0"
-                       Content="ChangeLog"/>
-                <TextBox Grid.Row="1"
-                    x:Name="ChangeLog"
-                    IsReadOnly="True"
-                    TextWrapping="Wrap"
-                    Text="{Binding ChangeLog}"
-                    ScrollViewer.VerticalScrollBarVisibility="Auto"
-                    ScrollViewer.CanContentScroll="True"/>
-            </Grid>
-            <Grid Grid.Row="2">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="25"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                <Label 
-                    Grid.Row="0"
-                    Content="UpdateLog"/>
-                <TextBox Grid.Row="1"
-                    x:Name="UpdateLog"
-                    TextWrapping="Wrap"
-                    IsReadOnly="True"
-                    Text="{Binding UpdateLog}"
-                    ScrollViewer.VerticalScrollBarVisibility="Auto"
-                    ScrollViewer.CanContentScroll="True"/>
-            </Grid>
+
+            <!-- Metadata key/value pairs -->
+            <TextBlock Grid.Row="0" Style="{StaticResource HeaderLabelStyle}" Text="Version info"/>
+            <Border Grid.Row="1" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="3">
+                <ItemsControl ItemsSource="{Binding ProjectDataReview}" Margin="4">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding Key}"
+                                           FontSize="11" FontWeight="SemiBold"
+                                           Foreground="#555555"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Key}"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding Value}"
+                                           FontSize="11" Foreground="#222222"
+                                           TextWrapping="Wrap"
+                                           ToolTip="{Binding Value}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+            <!-- ChangeLog -->
+            <TextBlock Grid.Row="2" Style="{StaticResource HeaderLabelStyle}" Text="Change log"/>
+            <TextBox Grid.Row="3"
+                     x:Name="ChangeLog"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     Text="{Binding ChangeLog}"
+                     FontSize="11"
+                     BorderBrush="#E0E0E0" BorderThickness="1"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     ScrollViewer.CanContentScroll="True"/>
+
+            <!-- UpdateLog -->
+            <TextBlock Grid.Row="4" Style="{StaticResource HeaderLabelStyle}" Text="Update log"/>
+            <TextBox Grid.Row="5"
+                     x:Name="UpdateLog"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     Text="{Binding UpdateLog}"
+                     FontSize="11"
+                     BorderBrush="#E0E0E0" BorderThickness="1"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     ScrollViewer.CanContentScroll="True"/>
         </Grid>
+
+        <!-- ── Right panel: file list ── -->
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="45"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <TextBox Grid.Row="0"
-                Name="FileFilterKeyword" 
-                TextChanged="FileFilterKeyword_TextChanged"
-                Height="30" Width="250" 
-                HorizontalAlignment="left" 
-                Margin="5"
-                BorderThickness="1" BorderBrush="#E0E0E0" FontSize="16"/>
 
-            <Button 
-                Grid.Row="0"
-                x:Name="ExportXLSX"
-                FontSize="18"
-                Content="Export to XLSX"
-                Width="135"
-                Margin="10, 5, 10, 5"
-                HorizontalAlignment="Right"
-                Command="{Binding ExportToXLSX}"
-                />
-            <DataGrid 
-                Grid.Row="1"
-                IsReadOnly="True"
-                Name="BackupFileList" 
-                ItemsSource='{Binding FileList}'
-                BorderBrush="#cdcdcd"
-                ScrollViewer.CanContentScroll="True"
-                ScrollViewer.VerticalScrollBarVisibility="Auto"
-                ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                CanUserAddRows="False"
-                CanUserDeleteRows="False"
-                AutoGenerateColumns="False"
-                >
+            <!-- Toolbar row: filter + export -->
+            <Grid Grid.Row="0" Margin="6,6,6,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid Grid.Column="0" Margin="0,0,8,0">
+                    <TextBox x:Name="FileFilterKeyword"
+                             TextChanged="FileFilterKeyword_TextChanged"
+                             Style="{StaticResource FilterBoxStyle}"/>
+                    <TextBlock Text="Filter files…">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource PlaceholderStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=FileFilterKeyword}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Text, ElementName=FileFilterKeyword}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
+                <Button Grid.Column="1"
+                        x:Name="ExportXLSX"
+                        Content="Export to XLSX"
+                        Padding="10,5" FontSize="13"
+                        Command="{Binding ExportToXLSX}"
+                        Style="{StaticResource ActionButtonStyle}"/>
+            </Grid>
+
+            <!-- File list -->
+            <DataGrid Grid.Row="1"
+                      x:Name="BackupFileList"
+                      IsReadOnly="True"
+                      ItemsSource="{Binding FileList}"
+                      BorderBrush="#CDCDCD"
+                      Margin="6,0,6,6"
+                      ScrollViewer.CanContentScroll="True"
+                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      AutoGenerateColumns="False">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Filename" Binding="{Binding DataName}" Width ="75"/>
-                    <DataGridTextColumn Header="FileV#" Binding="{Binding BuildVersion}" Width ="100"/>
-                    <DataGridTextColumn Header="FilePath" Binding="{Binding DataRelPath}" Width ="200"/>
-                    <DataGridTextColumn Header="HashValue" Binding="{Binding DataHash}" Width ="75"/>
-                    <DataGridTextColumn Header="UpdatedTime" Binding="{Binding UpdatedTime}" Width ="100"/>
-                    <DataGridTextColumn Header="DeployedV#" Binding="{Binding DeployedProjectVersion}" Width ="200"/>
-                    <DataGridTextColumn Header="FileSize(kb)" Binding="{Binding DataSize}" Width ="50"/>
-                    <DataGridTextColumn Header="ChangedState" Binding="{Binding DataState}" Width ="50"/>
+                    <!-- State pill -->
+                    <DataGridTemplateColumn Header="State" Width="56">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border CornerRadius="3" Padding="4,1" Margin="2,1" HorizontalAlignment="Center">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="#9E9E9E"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Added">
+                                                    <Setter Property="Background" Value="{StaticResource BrPillAdded}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Modified">
+                                                    <Setter Property="Background" Value="{StaticResource BrPillModified}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Deleted">
+                                                    <Setter Property="Background" Value="{StaticResource BrPillDeleted}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Style="{StaticResource PillTextStyle}"
+                                               Text="{Binding DataState}"
+                                               FontSize="10"/>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Filename"    Binding="{Binding DataName}"                Width="90"/>
+                    <DataGridTextColumn Header="Build V"     Binding="{Binding BuildVersion}"            Width="100"/>
+                    <DataGridTextColumn Header="File Path"   Binding="{Binding DataRelPath}"             Width="3*"/>
+                    <!-- Hash: truncated with full value in tooltip -->
+                    <DataGridTemplateColumn Header="Hash" Width="70">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DataHash}"
+                                           ToolTip="{Binding DataHash}"
+                                           TextTrimming="CharacterEllipsis"
+                                           FontFamily="Consolas" FontSize="10"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Updated"     Binding="{Binding UpdatedTime, StringFormat={}{0:yyyy-MM-dd}}"  Width="85"/>
+                    <DataGridTextColumn Header="Deployed V"  Binding="{Binding DeployedProjectVersion}"  Width="130"/>
+                    <DataGridTextColumn Header="Size (B)"    Binding="{Binding DataSize, StringFormat={}{0:N0}}"   Width="70"/>
                 </DataGrid.Columns>
             </DataGrid>
         </Grid>
-        
     </Grid>
 </Window>

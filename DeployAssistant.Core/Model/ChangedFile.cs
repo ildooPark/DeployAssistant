@@ -3,6 +3,11 @@ using System.Text.Json.Serialization;
 
 namespace DeployAssistant.Model
 {
+    /// <summary>
+    /// V1 change record with implicit null-contract and shared state enum.
+    /// Use <see cref="DeployAssistant.Model.V2.FileDiff"/> for new code.
+    /// </summary>
+    [System.Obsolete("ChangedFile is a V1 type. Use DeployAssistant.Model.V2.FileDiff for new code.")]
     public class ChangedFile
     {
         public ProjectFile? SrcFile { get; set; }

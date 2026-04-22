@@ -5,77 +5,142 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DeployAssistant.View"
         mc:Ignorable="d"
-        Title="Overlap File Window" Height="450" Width="800"
-        MinHeight="450"
-        MinWidth="800"
-        >
+        Title="Resolve File Destinations"
+        Height="560" Width="860"
+        MinHeight="450" MinWidth="700"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="0.5*"/>
-            <RowDefinition Height="4.5*"/>
-            <RowDefinition Height="0.5*"/>
-            <RowDefinition Height="0.5*"/>
-            <RowDefinition Height="1*"/>
-            <RowDefinition Height="1*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="2.5*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="1.5*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <TextBlock Grid.Row="0" Text="OverlappedFiles"/>
-        <ListBox Grid.Row="1" ItemsSource="{Binding OverlapFilesList}">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Src: "/>
-                        <TextBlock Text="{Binding SrcFile.DataName}"/>
-                        <TextBlock Text="=>"/>
-                        <TextBlock Text="     "/>
-                        <TextBlock Text="Dst: "/>
-                        <TextBlock Text="{Binding DstFile.DataRelPath}"/>
-                        <CheckBox IsChecked="{Binding DstFile.IsDstFile}"/>
-                    </StackPanel>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
-        <GridSplitter Grid.Row="1"
-                      VerticalAlignment="Bottom"
-                      HorizontalAlignment="Stretch"
-                      ResizeDirection="Rows"
-                      BorderThickness="0.5"
-                      BorderBrush="Black"
-                      />
-        <TextBlock Grid.Row="2"
-                   Text="NewFiles"/>
-        <TextBox Grid.Row="3"
-                 Name="NewFileFilterKeyword"
-                 TextChanged="NewFileFilterKeyword_TextChanged"
-                 BorderThickness="1"
-                 Margin="3"
-                 />
-        <GridSplitter Grid.Row="3"
-              VerticalAlignment="Bottom"
-              HorizontalAlignment="Stretch"
-              ResizeDirection="Rows"
-              BorderThickness="0.5"
-              BorderBrush="Black"
-              />
-        <ListBox Grid.Row="4" Name="NewFileDirectories" ItemsSource="{Binding NewFilesList}">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Src: "/>
-                        <TextBlock Text="{Binding SrcFile.DataName}"/>
-                        <TextBlock Text="=>"/>
-                        <TextBlock Text="     "/>
-                        <TextBlock Text="Dst Folder: "/>
-                        <TextBlock Text="{Binding DstFile.DataRelPath}"/>
-                        <CheckBox IsChecked="{Binding DstFile.IsDstFile}"/>
-                    </StackPanel>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
-        <Button Grid.Row="5"
-                Width="180"
+
+        <!-- ── Header explanation ── -->
+        <Border Grid.Row="0" Background="#FFF9C4" BorderBrush="#F9A825" BorderThickness="0,0,0,1" Padding="12,8">
+            <StackPanel>
+                <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#5D4037"
+                           Text="Resolve file destinations"/>
+                <TextBlock FontSize="12" Foreground="#6D4C41" Margin="0,2,0,0" TextWrapping="Wrap">
+                    Some source files were found in multiple subdirectories of the project.
+                    For each ambiguous file, select the correct destination path from the drop-down.
+                    New top-level files without a matching project path also need a destination folder.
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
+        <!-- ── Overlapped files ── -->
+        <TextBlock Grid.Row="1" Style="{StaticResource HeaderLabelStyle}"
+                   Text="Ambiguous files — pick one destination per file"/>
+        <ListView Grid.Row="2"
+                  ItemsSource="{Binding GroupedOverlapList}"
+                  BorderBrush="#CDCDCD" Margin="6,0,6,4"
+                  ScrollViewer.CanContentScroll="True"
+                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Source file" Width="200">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding SrcFileName}"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxWidth="195"
+                                           ToolTip="{Binding SrcFileName}"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="Destination path" Width="560">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <ComboBox ItemsSource="{Binding Candidates}"
+                                          SelectedItem="{Binding Selected, Mode=TwoWay}"
+                                          MinWidth="540"
+                                          DisplayMemberPath="DstFile.DataRelPath"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+        </ListView>
+
+        <!-- ── New files divider ── -->
+        <Border Grid.Row="3" Background="#F5F5F5" BorderBrush="#E0E0E0" BorderThickness="0,1,0,0" Padding="6,4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Style="{StaticResource HeaderLabelStyle}" Margin="0"
+                           Text="New files — choose a destination folder"/>
+                <Grid Grid.Column="1" Margin="0,0,6,0">
+                    <TextBox x:Name="NewFileFilterKeyword"
+                             Width="200"
+                             TextChanged="NewFileFilterKeyword_TextChanged"
+                             Style="{StaticResource FilterBoxStyle}"/>
+                    <TextBlock Text="Filter…">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource PlaceholderStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=NewFileFilterKeyword}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Text, ElementName=NewFileFilterKeyword}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <ListView Grid.Row="5"
+                  x:Name="NewFileDirectories"
+                  ItemsSource="{Binding GroupedNewList}"
+                  BorderBrush="#CDCDCD" Margin="6,0,6,4"
+                  ScrollViewer.CanContentScroll="True"
+                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="New file" Width="200">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding SrcFileName}"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxWidth="195"
+                                           ToolTip="{Binding SrcFileName}"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="Destination folder" Width="560">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <ComboBox ItemsSource="{Binding Candidates}"
+                                          SelectedItem="{Binding Selected, Mode=TwoWay}"
+                                          MinWidth="540"
+                                          DisplayMemberPath="DstFile.DataRelPath"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+        </ListView>
+
+        <!-- ── Confirm button ── -->
+        <Button Grid.Row="6"
                 Content="Confirm"
-                IsEnabled="True"
+                Padding="20,7" Margin="6,4"
                 HorizontalAlignment="Right"
-                Command="{Binding ConfirmCommand}" />
+                Command="{Binding ConfirmCommand}"
+                Style="{StaticResource DeployButtonStyle}"/>
     </Grid>
 </Window>

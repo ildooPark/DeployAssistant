@@ -6,6 +6,11 @@ using System.Text.Json.Serialization;
 
 namespace DeployAssistant.Model
 {
+    /// <summary>
+    /// V1 file record with 8 constructor overloads and mixed state concerns.
+    /// Use <see cref="DeployAssistant.Model.V2.FileRecord"/> for new code.
+    /// </summary>
+    [System.Obsolete("ProjectFile is a V1 type. Use DeployAssistant.Model.V2.FileRecord for new code.")]
     public class ProjectFile : IEquatable<ProjectFile>, IComparable<ProjectFile>, IProjectData
     {
         #region [JsonInclude]

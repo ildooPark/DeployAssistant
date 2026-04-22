@@ -2,6 +2,14 @@ using System;
 
 namespace DeployAssistant.DataComponent
 {
+    /// <summary>
+    /// V1 combined state enum that mixes change-kind bits and lifecycle bits.
+    /// Use <see cref="DeployAssistant.Model.V2.ChangeKind"/> and
+    /// <see cref="DeployAssistant.Model.V2.StagingFlags"/> instead.
+    /// </summary>
+    [Obsolete("DataState mixes change-kind and lifecycle concerns. " +
+              "Use DeployAssistant.Model.V2.ChangeKind for change kind and " +
+              "DeployAssistant.Model.V2.StagingFlags for lifecycle flags.")]
     [Flags]
     public enum DataState
     {
