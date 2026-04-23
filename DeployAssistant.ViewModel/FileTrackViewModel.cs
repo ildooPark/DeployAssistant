@@ -231,6 +231,7 @@ namespace DeployAssistant.ViewModel
         {
             if (_metaDataState != MetaDataState.Idle) return false;
             if (_srcProjectData == null) return false;
+            if (_metaDataManager.MainProjectData == null) return false;
             return true;
         }
 
