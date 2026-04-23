@@ -1,4 +1,5 @@
 ﻿using DeployAssistant.Model;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
@@ -157,15 +158,27 @@ namespace DeployAssistant.Utils
             {
                 filesListWithHash.Append($"{file.DataRelPath}\\{file.DataHash}");
             }
+            string inputStr = filesListWithHash.ToString();
             using SHA256 sha256 = SHA256.Create();
             if (sha256 == null)
             {
                 Trace.TraceError($"Failed to Initialize SHA256 for ProjectData Hash {projectData.ProjectName}");
                 return "";
             }
-            byte[] inputBytes = Encoding.UTF8.GetBytes(filesListWithHash.ToString());
-            byte[] hashBytes = sha256.ComputeHash(inputBytes);
-            return BitConverter.ToString(hashBytes).Replace("-", "");
+            // Rent a byte[] from the pool for UTF-8 encoding to avoid a one-off heap allocation.
+            int byteCount = Encoding.UTF8.GetByteCount(inputStr);
+            byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
+            try
+            {
+                int written = Encoding.UTF8.GetBytes(inputStr, 0, inputStr.Length, rented, 0);
+                byte[] hashBytes = sha256.ComputeHash(rented, 0, written);
+                return BitConverter.ToString(hashBytes).Replace("-", "");
+            }
+            finally
+            {
+                // Clear before returning to avoid leaving sensitive path data in the shared pool.
+                ArrayPool<byte>.Shared.Return(rented, clearArray: true);
+            }
         }
     }
 }
