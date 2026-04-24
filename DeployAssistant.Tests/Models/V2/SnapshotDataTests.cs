@@ -127,7 +127,7 @@ namespace DeployAssistant.Tests.Models.V2
         public void CopyConstructor_DiffsAreDeepCopied()
         {
             var source = new SnapshotData();
-            source.Diffs.Add(new FileDiff(ChangeKind.Added, null, MakeFileRecord()));
+            source.Diffs.Add(FileDiff.Added(MakeFileRecord()));
 
             var copy = new SnapshotData(source);
             copy.Diffs.Clear();
