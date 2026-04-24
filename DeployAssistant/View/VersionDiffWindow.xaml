@@ -49,13 +49,13 @@
         <!-- ── Summary bar ── -->
         <Border Grid.Row="1" Background="#F5F5F5" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1" Padding="10,4">
             <TextBlock FontSize="12" Foreground="#555555">
-                <Run Text="{Binding TotalCount,  StringFormat='{}{0} files changed'}"/>
+                <Run Text="{Binding TotalCount,  StringFormat='{}{0} files changed', Mode=OneWay}"/>
                 <Run Text=" — "/>
-                <Run Text="{Binding AddedCount,   StringFormat='{}{0} added'}"    Foreground="#388E3C" FontWeight="SemiBold"/>
+                <Run Text="{Binding AddedCount,   StringFormat='{}{0} added',    Mode=OneWay}" Foreground="#388E3C" FontWeight="SemiBold"/>
                 <Run Text=" · "/>
-                <Run Text="{Binding ModifiedCount, StringFormat='{}{0} modified'}" Foreground="#F57F17" FontWeight="SemiBold"/>
+                <Run Text="{Binding ModifiedCount, StringFormat='{}{0} modified', Mode=OneWay}" Foreground="#F57F17" FontWeight="SemiBold"/>
                 <Run Text=" · "/>
-                <Run Text="{Binding DeletedCount,  StringFormat='{}{0} deleted'}"  Foreground="#C62828" FontWeight="SemiBold"/>
+                <Run Text="{Binding DeletedCount,  StringFormat='{}{0} deleted',  Mode=OneWay}" Foreground="#C62828" FontWeight="SemiBold"/>
             </TextBlock>
         </Border>
 
