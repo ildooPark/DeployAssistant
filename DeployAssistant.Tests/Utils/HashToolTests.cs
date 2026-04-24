@@ -117,6 +117,18 @@ namespace DeployAssistant.Tests.Utils
             Assert.NotNull(id);
         }
 
+        [Fact]
+        public void GetUniqueProjectDataID_Returns64CharUppercaseHexString()
+        {
+            var data = BuildProjectData();
+
+            var id = _hashTool.GetUniqueProjectDataID(data);
+
+            // SHA-256 produces 32 bytes => 64 uppercase hex characters
+            Assert.Equal(64, id.Length);
+            Assert.Matches("^[0-9A-F]{64}$", id);
+        }
+
         private static ProjectData BuildProjectData(string hash = "DEADBEEF")
         {
             var data = new ProjectData(@"C:\Proj");

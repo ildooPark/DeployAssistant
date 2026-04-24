@@ -1,4 +1,5 @@
 ﻿using DeployAssistant.Model;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
@@ -24,61 +25,32 @@ namespace DeployAssistant.Utils
                 return false;
             }
             byte[] srcHashBytes, dstHashBytes;
-            using MD5 md5 = MD5.Create();
-            if (md5 == null)
-            {
-                Trace.TraceError("Failed to Initialize MD5");
-                result = (null, null);
-                return false;
-            }
             using (var srcStream = File.OpenRead(srcFile))
             {
-                srcHashBytes = md5.ComputeHash(srcStream);
+                srcHashBytes = MD5.HashData(srcStream);
             }
             using (var dstStream = File.OpenRead(dstFile))
             {
-                dstHashBytes = md5.ComputeHash(dstStream);
+                dstHashBytes = MD5.HashData(dstStream);
             }
-            string srcHashString = BitConverter.ToString(srcHashBytes).Replace("-", "");
-            string dstHashString = BitConverter.ToString(dstHashBytes).Replace("-", "");
+            string srcHashString = Convert.ToHexString(srcHashBytes);
+            string dstHashString = Convert.ToHexString(dstHashBytes);
             result = (srcHashString, dstHashString);
             return srcHashString == dstHashString;
         }
         public string GetFileMD5CheckSum(string projectPath, string srcFileRelPath)
         {
-            byte[] srcHashBytes;
             string srcFileFullPath = Path.Combine(projectPath, srcFileRelPath);
-            using MD5 md5 = MD5.Create();
-            if (md5 == null)
-            {
-                Trace.TraceError($"Failed to Initialize MD5 for file {srcFileRelPath}");
-                return "";
-            }
-            using (var srcStream = File.OpenRead(srcFileFullPath))
-            {
-                srcHashBytes = md5.ComputeHash(srcStream);
-            }
-            md5.Dispose();
-            return BitConverter.ToString(srcHashBytes).Replace("-", "");
+            using var srcStream = File.OpenRead(srcFileFullPath);
+            return Convert.ToHexString(MD5.HashData(srcStream));
         }
         public async Task GetFileMD5CheckSumAsync(ProjectFile file)
         {
             try
             {
-                byte[] srcHashBytes;
-                using MD5 md5 = MD5.Create();
-                if (md5 == null)
-                {
-                    Trace.TraceError("Failed to Initialize MD5 Async");
-                    return;
-                }
-                using (var srcStream = File.OpenRead(file.DataAbsPath))
-                {
-                    srcHashBytes = await md5.ComputeHashAsync(srcStream);
-                }
-                string resultHash = BitConverter.ToString(srcHashBytes).Replace("-", "");
-                file.DataHash = resultHash;
-                md5.Dispose();
+                using var srcStream = File.OpenRead(file.DataAbsPath);
+                byte[] srcHashBytes = await MD5.HashDataAsync(srcStream);
+                file.DataHash = Convert.ToHexString(srcHashBytes);
             }
             catch (Exception ex)
             {
@@ -89,20 +61,8 @@ namespace DeployAssistant.Utils
         {
             try
             {
-                byte[] srcHashBytes;
-                using MD5 md5 = MD5.Create();
-                if (md5 == null)
-                {
-                    Trace.TraceError("Failed to Initialize MD5");
-                    return;
-                }
-                using (var srcStream = File.OpenRead(file.DataAbsPath))
-                {
-                    srcHashBytes = md5.ComputeHash(srcStream);
-                }
-                string resultHash = BitConverter.ToString(srcHashBytes).Replace("-", "");
-                file.DataHash = resultHash;
-                md5.Dispose();
+                using var srcStream = File.OpenRead(file.DataAbsPath);
+                file.DataHash = Convert.ToHexString(MD5.HashData(srcStream));
             }
             catch (Exception ex)
             {
@@ -113,20 +73,9 @@ namespace DeployAssistant.Utils
         {
             try
             {
-                byte[] srcHashBytes;
-                using MD5 md5 = MD5.Create();
-                if (md5 == null)
-                {
-                    Trace.TraceError("Failed to Initialize MD5 Async");
-                    return null;
-                }
-                using (var srcStream = File.OpenRead(fileFullPath))
-                {
-                    srcHashBytes = await md5.ComputeHashAsync(srcStream);
-                }
-                string resultHash = BitConverter.ToString(srcHashBytes).Replace("-", "");
-                md5.Dispose();
-                return resultHash;
+                using var srcStream = File.OpenRead(fileFullPath);
+                byte[] srcHashBytes = await MD5.HashDataAsync(srcStream);
+                return Convert.ToHexString(srcHashBytes);
             }
             catch (Exception ex)
             {
@@ -137,18 +86,18 @@ namespace DeployAssistant.Utils
         #endregion
         public string GetUniqueComputerID(string userID)
         {
-            using (SHA256 sha256Hash = SHA256.Create())
-            {
-                byte[] bytes = sha256Hash.ComputeHash(Encoding.UTF8.GetBytes(userID));
+            // Use the exact byte count so the stackalloc threshold reflects real UTF-8 sizes,
+            // not the worst-case estimate from GetMaxByteCount.
+            int byteCount = Encoding.UTF8.GetByteCount(userID);
+            Span<byte> inputBuf = byteCount <= 256 ? stackalloc byte[byteCount] : new byte[byteCount];
+            Encoding.UTF8.GetBytes(userID, inputBuf);
 
-                // Convert the hash bytes to a 10-character string by taking the first 5 bytes (40 bits) of the hash
-                StringBuilder builder = new StringBuilder();
-                for (int i = 0; i < 5; i++)
-                {
-                    builder.Append(bytes[i].ToString("x2"));
-                }
-                return builder.ToString();
-            }
+            // Stack-allocate the 32-byte SHA-256 output buffer and use the allocation-free TryHashData overload.
+            // Convert the hash bytes to a 10-character string by taking the first 5 bytes (40 bits) of the hash.
+            Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
+            if (!SHA256.TryHashData(inputBuf, hash, out _))
+                throw new InvalidOperationException("SHA256.TryHashData failed unexpectedly.");
+            return Convert.ToHexStringLower(hash[..5]);
         }
         public string GetUniqueProjectDataID(ProjectData projectData)
         {
@@ -157,19 +106,26 @@ namespace DeployAssistant.Utils
             {
                 filesListWithHash.Append($"{file.DataRelPath}\\{file.DataHash}");
             }
-            using SHA256 sha256 = SHA256.Create();
-            if (sha256 == null)
+            string input = filesListWithHash.ToString();
+
+            // Rent a byte[] from the pool sized to the exact UTF-8 byte count to avoid unnecessary pool pressure.
+            int byteCount = Encoding.UTF8.GetByteCount(input);
+            byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
+            try
             {
-                Trace.TraceError($"Failed to Initialize SHA256 for ProjectData Hash {projectData.ProjectName}");
-                return "";
+                int written = Encoding.UTF8.GetBytes(input, rented);
+
+                // Stack-allocate the 32-byte SHA-256 output buffer.
+                Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
+                if (!SHA256.TryHashData(rented.AsSpan(0, written), hash, out _))
+                    throw new InvalidOperationException("SHA256.TryHashData failed unexpectedly.");
+                return Convert.ToHexString(hash);
             }
-            byte[] filesByte = Encoding.UTF8.GetBytes((string) filesListWithHash.ToString());
-            filesListWithHash.Clear();
-            for (int i = 0; i < filesByte.Length; i++)
+            finally
             {
-                filesListWithHash.Append(filesByte[i].ToString("x2")); // "x2" formats the byte as a hexadecimal string
+                // Clear before returning to avoid leaving sensitive path data in the shared pool.
+                ArrayPool<byte>.Shared.Return(rented, clearArray: true);
             }
-            return filesListWithHash.ToString();
         }
     }
 }
