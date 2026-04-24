@@ -1,3 +1,5 @@
+#pragma warning disable CS0618  // V1 types used intentionally for V1 integration tests
+
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.Utils;

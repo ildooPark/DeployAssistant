@@ -301,6 +301,7 @@ namespace DeployAssistant.DataComponent
                 TryAppendProjParentDirAsProjectFile(MainProjectData, projectPath);
                 TryGenerateSupplementDirectories(projectPath, newProjectData.ProjectName);
                 _settingManager.SetRecentDstDirectory(projectPath);
+                UpdateIgnoreListEventHandler?.Invoke(newIgnoreData);
 
                 CurrentState = MetaDataState.Idle;
             }
