@@ -1,0 +1,75 @@
+name: CLI Smoke Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  smoke-test:
+    name: CLI Smoke Test (Windows)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore DeployAssistant.CLI/DeployAssistant.CLI.csproj
+
+      - name: Publish CLI (self-contained, win-x64)
+        run: |
+          dotnet publish DeployAssistant.CLI/DeployAssistant.CLI.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -o ./publish/DeployAssistant.CLI
+
+      - name: Smoke test – no args shows help (exit 0)
+        shell: pwsh
+        run: |
+          $output = & ./publish/DeployAssistant.CLI/deployassistant.exe 2>&1
+          Write-Host "--- CLI output ---"
+          Write-Host $output
+          Write-Host "------------------"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Expected exit code 0 for no-args invocation, got $LASTEXITCODE"
+            exit 1
+          }
+          if ($output -notmatch 'DeployAssistant') {
+            Write-Error "Expected help output to contain 'DeployAssistant', but got:`n$output"
+            exit 1
+          }
+
+      - name: Smoke test – --help flag (exit 0)
+        shell: pwsh
+        run: |
+          $output = & ./publish/DeployAssistant.CLI/deployassistant.exe --help 2>&1
+          Write-Host "--- CLI output ---"
+          Write-Host $output
+          Write-Host "------------------"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Expected exit code 0 for --help, got $LASTEXITCODE"
+            exit 1
+          }
+
+      - name: Smoke test – unknown command returns exit code 1
+        shell: pwsh
+        run: |
+          & ./publish/DeployAssistant.CLI/deployassistant.exe _invalid_cmd_ 2>&1
+          if ($LASTEXITCODE -ne 1) {
+            Write-Error "Expected exit code 1 for unknown command, got $LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "Unknown command correctly returned exit code 1."
