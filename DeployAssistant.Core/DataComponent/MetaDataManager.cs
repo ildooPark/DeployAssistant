@@ -500,7 +500,40 @@ namespace DeployAssistant.DataComponent
             ProjComparisonCompleteEventHandler?.Invoke(srcData, MainProjectData, fileDiff);
         }
 
-        
+        /// <summary>
+        /// Deserialises a <c>.VersionLog</c> file into a <see cref="ProjectData"/> snapshot.
+        /// Returns <c>null</c> when the file cannot be read or parsed.
+        /// </summary>
+        public ProjectData? LoadExternalMetaFile(string filePath)
+        {
+            _fileHandlerTool.TryDeserializeProjectData(filePath, out ProjectData? projectData);
+            return projectData;
+        }
+
+        /// <summary>
+        /// Computes the diff between an external <paramref name="externalData"/> metafile
+        /// and the currently loaded main project.
+        /// Returns <c>null</c> when no project is loaded or the diff could not be computed.
+        /// </summary>
+        public List<ChangedFile>? ComputeMetaFileDiff(ProjectData externalData)
+        {
+            if (MainProjectData == null)
+            {
+                Trace.TraceWarning("ComputeMetaFileDiff: MainProjectData is null. Load a project first.");
+                return null;
+            }
+            return _fileManager.FindVersionDifferences(externalData, MainProjectData);
+        }
+
+        /// <summary>
+        /// Asynchronously exports only the files in <paramref name="selectedDiff"/> as a
+        /// diff-only sync package (zip + VersionLog).
+        /// </summary>
+        public void RequestExportDiffPackage(ProjectData currentProject, List<ChangedFile> selectedDiff)
+        {
+            Task.Run(() => _exportManager.ExportDiffPackage(currentProject, selectedDiff));
+        }
+
         #endregion
 
         #region Version Management Tools

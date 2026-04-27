@@ -304,6 +304,208 @@
                                 </DataGrid>
                             </Grid>
                         </avalonDockLayout:LayoutDocument>
+
+                        <!-- ═════════════════════════════════════════════════════
+                             Metafile Compare tab
+                             Drop a .VersionLog here to auto-diff against the
+                             currently open project, then import or export changes.
+                        ═══════════════════════════════════════════════════════ -->
+                        <avalonDockLayout:LayoutDocument Title="Metafile Compare"
+                                                   ContentId="MetafileComparePanel"
+                                                   CanClose="False">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Toolbar -->
+                                <Border Grid.Row="0" Background="#2D2D2D" Padding="6,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                            <Button Content="Browse…"
+                                                    Command="{Binding MetaFileDiffVM.BrowseMetaFile}"
+                                                    Style="{StaticResource ToolbarButtonStyle}"
+                                                    Margin="4,2" Padding="10,5" FontSize="13"/>
+                                            <Button Content="✓ Select Changed"
+                                                    Command="{Binding MetaFileDiffVM.SelectAllChanged}"
+                                                    Style="{StaticResource ToolbarButtonStyle}"
+                                                    Margin="4,2" Padding="10,5" FontSize="13"/>
+                                            <Button Content="☐ Deselect All"
+                                                    Command="{Binding MetaFileDiffVM.DeselectAll}"
+                                                    Style="{StaticResource ToolbarButtonStyle}"
+                                                    Margin="4,2" Padding="10,5" FontSize="13"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding MetaFileDiffVM.DropZoneMessage}"
+                                                   Foreground="#AAAAAA" FontSize="12"
+                                                   VerticalAlignment="Center" Margin="12,0"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                            <Button Content="Import Selected"
+                                                    Command="{Binding MetaFileDiffVM.ImportSelected}"
+                                                    Style="{StaticResource ToolbarButtonStyle}"
+                                                    Margin="4,2" Padding="10,5" FontSize="13"/>
+                                            <Button Content="Export Sync Package"
+                                                    Command="{Binding MetaFileDiffVM.ExportSyncPackage}"
+                                                    Style="{StaticResource ToolbarButtonStyle}"
+                                                    Margin="4,2" Padding="10,5" FontSize="13"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Summary bar -->
+                                <Border Grid.Row="1" Background="#F5F5F5"
+                                        BorderBrush="#E0E0E0" BorderThickness="0,0,0,1"
+                                        Padding="10,4">
+                                    <TextBlock FontSize="12" Foreground="#555555">
+                                        <Run Text="{Binding MetaFileDiffVM.TotalCount, StringFormat='{}{0} files changed', Mode=OneWay}"/>
+                                        <Run Text=" — "/>
+                                        <Run Text="{Binding MetaFileDiffVM.AddedCount,    StringFormat='{}{0} in metafile only', Mode=OneWay}" Foreground="#388E3C" FontWeight="SemiBold"/>
+                                        <Run Text=" · "/>
+                                        <Run Text="{Binding MetaFileDiffVM.ModifiedCount, StringFormat='{}{0} modified',         Mode=OneWay}" Foreground="#F57F17" FontWeight="SemiBold"/>
+                                        <Run Text=" · "/>
+                                        <Run Text="{Binding MetaFileDiffVM.DeletedCount,  StringFormat='{}{0} in current only',  Mode=OneWay}" Foreground="#C62828" FontWeight="SemiBold"/>
+                                    </TextBlock>
+                                </Border>
+
+                                <!-- Content area: drop zone (before load) / diff grid (after load) -->
+                                <Grid Grid.Row="2">
+
+                                    <!-- Drop zone — visible until a metafile is loaded -->
+                                    <Border x:Name="MetaFileDropZone"
+                                            AllowDrop="True"
+                                            Drop="MetaFileDropZone_Drop"
+                                            DragOver="MetaFileDropZone_DragOver"
+                                            Background="#F9F9F9"
+                                            BorderBrush="#CCCCCC"
+                                            BorderThickness="2"
+                                            CornerRadius="6"
+                                            Margin="20"
+                                            Cursor="Hand">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding MetaFileDiffVM.IsMetaFileLoaded}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <TextBlock Text="⬇" FontSize="48" HorizontalAlignment="Center" Foreground="#CCCCCC"/>
+                                            <TextBlock Text="Drop a .VersionLog file here"
+                                                       FontSize="16" HorizontalAlignment="Center"
+                                                       Foreground="#888888" Margin="0,8,0,4"/>
+                                            <TextBlock Text="or use the Browse button above"
+                                                       FontSize="12" HorizontalAlignment="Center"
+                                                       Foreground="#AAAAAA"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Diff DataGrid — visible once a metafile is loaded -->
+                                    <DataGrid x:Name="MetaFileDiffGrid"
+                                              ItemsSource="{Binding MetaFileDiffVM.DiffItems}"
+                                              BorderBrush="#CDCDCD"
+                                              AutoGenerateColumns="False"
+                                              CanUserAddRows="False"
+                                              CanUserDeleteRows="False"
+                                              ScrollViewer.CanContentScroll="True"
+                                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                              ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                                        <DataGrid.Style>
+                                            <Style TargetType="DataGrid">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding MetaFileDiffVM.IsMetaFileLoaded}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </DataGrid.Style>
+                                        <DataGrid.Columns>
+                                            <!-- Checkbox -->
+                                            <DataGridCheckBoxColumn Header="✓"
+                                                                    Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
+                                                                    Width="30"/>
+                                            <!-- State pill -->
+                                            <DataGridTemplateColumn Header="" Width="32">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Border CornerRadius="3" Padding="3,1" Margin="1">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Background" Value="#9E9E9E"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Added">
+                                                                            <Setter Property="Background" Value="{StaticResource BrPillAdded}"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Modified">
+                                                                            <Setter Property="Background" Value="{StaticResource BrPillModified}"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Deleted">
+                                                                            <Setter Property="Background" Value="{StaticResource BrPillDeleted}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <TextBlock>
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource PillTextStyle}">
+                                                                        <Setter Property="Text" Value="?"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Added">
+                                                                                <Setter Property="Text" Value="+"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Modified">
+                                                                                <Setter Property="Text" Value="~"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Deleted">
+                                                                                <Setter Property="Text" Value="−"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTextColumn Header="Filename"        Binding="{Binding FileName}"        Width="1.5*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Relative Path"   Binding="{Binding RelPath}"         Width="3*"   IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Metafile Build"  Binding="{Binding SrcBuildVersion}" Width="1.5*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Current Build"   Binding="{Binding DstBuildVersion}" Width="1.5*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Metafile Hash"   Binding="{Binding SrcHash}"         Width="0.5*" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Current Hash"    Binding="{Binding DstHash}"         Width="0.5*" IsReadOnly="True"/>
+                                        </DataGrid.Columns>
+                                        <DataGrid.RowStyle>
+                                            <Style TargetType="DataGridRow">
+                                                <Setter Property="Background" Value="Transparent"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Added">
+                                                        <Setter Property="Background" Value="{StaticResource BrAdded}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Modified">
+                                                        <Setter Property="Background" Value="{StaticResource BrModified}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding DataState, Converter={StaticResource DataStateChangeKindConverter}}" Value="Deleted">
+                                                        <Setter Property="Background" Value="{StaticResource BrDeleted}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </DataGrid.RowStyle>
+                                    </DataGrid>
+                                </Grid>
+                            </Grid>
+                        </avalonDockLayout:LayoutDocument>
+
                     </avalonDockLayout:LayoutDocumentPane>
 
                     <!-- RIGHT: Staged Changes (top) + Action Panel (bottom) -->

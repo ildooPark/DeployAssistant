@@ -320,6 +320,111 @@ namespace DeployAssistant.DataComponent
             exportPath = null;
             return false; 
         }
+
+        /// <summary>
+        /// Exports a diff-only sync package: a zip containing only the files referenced by
+        /// <paramref name="selectedDiff"/> that exist in the current project (i.e. those with
+        /// <see cref="DataState.Deleted"/> or <see cref="DataState.Modified"/> state, which
+        /// represent files that a recipient must add or update to reach the current version)
+        /// together with the project <c>.VersionLog</c>.
+        /// <para>
+        /// Files that are <see cref="DataState.Added"/> (present only in the external/baseline
+        /// metafile, absent from the current project) are intentionally omitted from the zip
+        /// because they no longer exist in the current version.
+        /// </para>
+        /// </summary>
+        public void ExportDiffPackage(ProjectData currentProject, List<ChangedFile> selectedDiff)
+        {
+            if (_backupFilesDict == null)
+            {
+                ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
+                Trace.TraceWarning("ExportDiffPackage: backup files are missing. Make sure ProjectMetaData is set.");
+                return;
+            }
+            ManagerStateEventHandler?.Invoke(MetaDataState.Exporting);
+            bool result = TryExportDiffPackage(currentProject, selectedDiff, out string? exportPath);
+            ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
+            if (result && exportPath != null)
+                ExportCompleteEventHandler?.Invoke(exportPath);
+        }
+
+        private bool TryExportDiffPackage(ProjectData currentProject, List<ChangedFile> selectedDiff, out string? exportPath)
+        {
+            try
+            {
+                if (_backupFilesDict == null) { exportPath = null; return false; }
+
+                string exportDstPath  = GetExportProjectPath(currentProject) + "_Diff";
+                string exportZipPath  = exportDstPath + ".zip";
+                string exportLogPath  = Path.Combine(exportDstPath, $"{currentProject.UpdatedVersion}.VersionLog");
+
+                // Start with a clean staging directory.
+                if (Directory.Exists(exportDstPath)) Directory.Delete(exportDstPath, true);
+                Directory.CreateDirectory(exportDstPath);
+
+                int exportCount = 0;
+                foreach (ChangedFile diff in selectedDiff)
+                {
+                    // Directory entries: create the structure for directories that exist in the
+                    // current version (i.e. those that are NOT Added-only-in-metafile).
+                    if (diff.DstFile?.DataType == ProjectDataType.Directory)
+                    {
+                        if ((diff.DataState & DataState.Added) != 0)
+                        {
+                            // Directory exists only in the external metafile, not in current — skip.
+                            continue;
+                        }
+                        _fileHandlerTool.HandleDirectory(null, Path.Combine(exportDstPath, diff.DstFile.DataRelPath), DataState.None);
+                        exportCount++;
+                        continue;
+                    }
+
+                    // Added items (in external metafile only, absent from current): skip —
+                    // the recipient will handle deletion via the VersionLog.
+                    if ((diff.DataState & DataState.Added) != 0) continue;
+
+                    // Deleted and Modified items: export the current (DstFile) version.
+                    ProjectFile? dstFile = diff.DstFile;
+                    if (dstFile == null || dstFile.DataType == ProjectDataType.Directory) continue;
+
+                    if (!_backupFilesDict.TryGetValue(dstFile.DataHash, out ProjectFile? backupFile))
+                    {
+                        Trace.TraceError($"ExportDiffPackage: backup not found for '{dstFile.DataName}' (hash: {dstFile.DataHash})");
+                        exportPath = null;
+                        return false;
+                    }
+
+                    bool ok = _fileHandlerTool.HandleFile(
+                        backupFile.DataAbsPath,
+                        Path.Combine(exportDstPath, dstFile.DataRelPath),
+                        DataState.None);
+                    if (!ok)
+                    {
+                        Trace.TraceError($"ExportDiffPackage: file copy failed for '{dstFile.DataName}'");
+                        exportPath = null;
+                        return false;
+                    }
+                    exportCount++;
+                }
+
+                if (exportCount <= 0) { exportPath = null; return false; }
+
+                // Include the VersionLog so the recipient can identify the target version.
+                _fileHandlerTool.TrySerializeProjectData(currentProject, exportLogPath);
+
+                if (File.Exists(exportZipPath)) File.Delete(exportZipPath);
+                ZipFile.CreateFromDirectory(exportDstPath, exportZipPath);
+
+                exportPath = Directory.GetParent(exportDstPath)?.ToString();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError($"ExportDiffPackage exception: {ex.Message}");
+                exportPath = null;
+                return false;
+            }
+        }
         private string GetExportXLSXPath(ProjectData projData)
         {
             return $"{_currentProjectPath}\\Export_XLSX\\{projData.UpdatedVersion}_ProjectFiles.xlsx"; 

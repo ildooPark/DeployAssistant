@@ -131,6 +131,41 @@ namespace DeployAssistant.View
             window.Show();
         }
 
+        private const string VersionLogExtension = ".VersionLog";
+
+        // ------------------------------------------------------------------ //
+        //  Metafile Compare drag-drop                                       //
+        // ------------------------------------------------------------------ //
+
+        private void MetaFileDropZone_DragOver(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+                if (files?.Any(f => f.EndsWith(VersionLogExtension, StringComparison.OrdinalIgnoreCase)) == true)
+                {
+                    e.Effects = DragDropEffects.Copy;
+                    e.Handled = true;
+                    return;
+                }
+            }
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void MetaFileDropZone_Drop(object sender, DragEventArgs e)
+        {
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+            var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+            if (files == null || files.Length == 0) return;
+
+            string? versionLogFile = files.FirstOrDefault(
+                f => f.EndsWith(VersionLogExtension, StringComparison.OrdinalIgnoreCase));
+            if (versionLogFile == null) return;
+
+            (DataContext as MainViewModel)?.MetaFileDiffVM.LoadMetaFileFromPath(versionLogFile);
+        }
+
         // ------------------------------------------------------------------ //
         //  Filter handler for the Project Files panel                        //
         // ------------------------------------------------------------------ //

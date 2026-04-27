@@ -7,16 +7,19 @@ namespace DeployAssistant.ViewModel
         private readonly MetaDataViewModel _metaDataVM;
         private readonly FileTrackViewModel _fileTrackVM;
         private readonly BackupViewModel _backupVM;
+        private readonly MetaFileDiffViewModel _metaFileDiffVM;
 
         public MetaDataViewModel MetaDataVM => _metaDataVM;
         public FileTrackViewModel FileTrackVM => _fileTrackVM;
         public BackupViewModel BackupVM => _backupVM;
+        public MetaFileDiffViewModel MetaFileDiffVM => _metaFileDiffVM;
 
         public MainViewModel(MetaDataManager metaDataManager)
         {
-            _metaDataVM = new MetaDataViewModel(metaDataManager);
-            _fileTrackVM = new FileTrackViewModel(metaDataManager);
-            _backupVM = new BackupViewModel(metaDataManager);
+            _metaDataVM     = new MetaDataViewModel(metaDataManager);
+            _fileTrackVM    = new FileTrackViewModel(metaDataManager);
+            _backupVM       = new BackupViewModel(metaDataManager);
+            _metaFileDiffVM = new MetaFileDiffViewModel(metaDataManager);
         }
     }
 }
