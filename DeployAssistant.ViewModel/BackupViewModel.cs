@@ -3,6 +3,7 @@ using DeployAssistant.Model;
 using DeployAssistant.ViewModel.Utils;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Windows;
 using System.Windows.Input;
 
 namespace DeployAssistant.ViewModel
@@ -159,8 +160,8 @@ namespace DeployAssistant.ViewModel
                 return;
             }
             var response = MessageBox.Show($"Do you want to Revert to {_selectedItem.UpdatedVersion}", "Confirm Updates",
-                MessageBoxButtons.YesNo);
-            if (response == DialogResult.Yes)
+                MessageBoxButton.YesNo);
+            if (response == MessageBoxResult.Yes)
             {
                 _metaDataManager.RequestRevertProject(_selectedItem);
             }
@@ -179,9 +180,9 @@ namespace DeployAssistant.ViewModel
                 return;
             }
             var response = MessageBox.Show($"Would You like to Restore back to Version: {SelectedItem.UpdatedVersion}\n " +
-                $"This may take longer than regular version Checkout", "Clean Restore", MessageBoxButtons.YesNo);
+                $"This may take longer than regular version Checkout", "Clean Restore", MessageBoxButton.YesNo);
 
-            if (response == DialogResult.Yes)
+            if (response == MessageBoxResult.Yes)
             {
                 Task.Run(() => _metaDataManager.RequestProjectCleanRestore(SelectedItem));
             }

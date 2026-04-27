@@ -1,9 +1,10 @@
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.ViewModel.Utils;
+using Microsoft.Win32;
 using System.Collections.ObjectModel;
+using System.Windows;
 using System.Windows.Input;
-using WinForms = System.Windows.Forms;
 
 namespace DeployAssistant.ViewModel
 {
@@ -124,8 +125,7 @@ namespace DeployAssistant.ViewModel
         {
             if (UpdaterName == "" || UpdateLog == "")
             {
-                var response = MessageBox.Show("Must Have both Deploy Version AND UpdaterName", "ok", MessageBoxButtons.OK);
-                if (response == DialogResult.OK) return;
+                MessageBox.Show("Must Have both Deploy Version AND UpdaterName", "Validation", MessageBoxButton.OK);
                 return;
             }
             _metaDataManager.RequestProjectUpdate(_updaterName, UpdateLog, CurrentProjectPath);
@@ -140,25 +140,24 @@ namespace DeployAssistant.ViewModel
         private void RetrieveProject(object parameter)
         {
             if (_projectFiles != null && _projectFiles.Count != 0) _projectFiles.Clear();
-            var openFD = new WinForms.FolderBrowserDialog();
+            var openFD = new OpenFolderDialog();
             string? projectPath;
-            if (openFD.ShowDialog() == DialogResult.OK)
+            if (openFD.ShowDialog() == true)
             {
-                projectPath = openFD.SelectedPath;
-                CurrentProjectPath = openFD.SelectedPath;
+                projectPath = openFD.FolderName;
+                CurrentProjectPath = openFD.FolderName;
             }
             else return;
-            openFD.Dispose();
             if (string.IsNullOrEmpty(projectPath)) return;
 
             bool retrieveProjectResult = _metaDataManager.RequestProjectRetrieval(projectPath);
             if (!retrieveProjectResult)
             {
                 var result = MessageBox.Show($"{projectPath}\nVersionLog file not found\nInitialize A New Project?",
-                    "Import Project", MessageBoxButtons.YesNo);
-                if (result == DialogResult.Yes)
+                    "Import Project", MessageBoxButton.YesNo);
+                if (result == MessageBoxResult.Yes)
                 {
-                    Task.Run(() => _metaDataManager.RequestProjectInitialization(openFD.SelectedPath));
+                    Task.Run(() => _metaDataManager.RequestProjectInitialization(projectPath));
                 }
                 else
                 {
