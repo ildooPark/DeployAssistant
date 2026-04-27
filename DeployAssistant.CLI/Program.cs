@@ -434,7 +434,7 @@ namespace DeployAssistant.CLI
         private static void ShowHelp()
         {
             AnsiConsole.MarkupLine("[cyan bold]DeployAssistant CLI[/]");
-            AnsiConsole.MarkupLine("[dim]Usage: deployassistant <command> [options][/]");
+            AnsiConsole.MarkupLine("[dim]Usage: deployassistant <command> [[options]][/]");
             AnsiConsole.WriteLine();
 
             var table = new Table()
