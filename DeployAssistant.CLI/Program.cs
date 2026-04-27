@@ -456,7 +456,7 @@ namespace DeployAssistant.CLI
                 "[bold]stage[/] [dim]<dst-path>[/]",
                 "Hash and promote pre-staged changes to staged state.");
             table.AddRow(
-                "[bold]deploy[/] [dim]<dst-path> [--updater N] [--log M][/]",
+                "[bold]deploy[/] [dim]<dst-path> [[--updater N]] [[--log M]][/]",
                 "Apply staged changes and record a new revision.");
             table.AddRow(
                 "[bold]revert[/] [dim]<dst-path> <version>[/]",
