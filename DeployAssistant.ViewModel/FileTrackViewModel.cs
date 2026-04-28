@@ -1,10 +1,10 @@
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.ViewModel.Utils;
+using Microsoft.Win32;
 using System.Collections.ObjectModel;
+using System.Windows;
 using System.Windows.Input;
-using WinForms = System.Windows.Forms;
-using WPF = System.Windows;
 
 namespace DeployAssistant.ViewModel
 {
@@ -123,20 +123,18 @@ namespace DeployAssistant.ViewModel
         {
             try
             {
-                var openUpdateDir = new WinForms.FolderBrowserDialog();
-                if (openUpdateDir.ShowDialog() == DialogResult.OK)
+                var openUpdateDir = new OpenFolderDialog();
+                if (openUpdateDir.ShowDialog() == true)
                 {
                     _srcProjectData = null;
-                    _deploySrcPath = openUpdateDir.SelectedPath;
+                    _deploySrcPath = openUpdateDir.FolderName;
                     _metaDataManager.RequestSrcDataRetrieval(_deploySrcPath);
                 }
                 else
                 {
                     _deploySrcPath = null;
-                    openUpdateDir.Dispose();
                     return;
                 }
-                openUpdateDir.Dispose();
             }
             catch (Exception ex)
             {
