@@ -35,6 +35,7 @@ namespace DeployAssistant.Tests.Integration
         private static MetaDataManager BuildAndAwakeManager()
         {
             var mgr = new MetaDataManager();
+            mgr.ConfirmationCallback = (_, _) => false;
             mgr.Awake();
             return mgr;
         }

@@ -434,7 +434,7 @@ namespace DeployAssistant.CLI
         private static void ShowHelp()
         {
             AnsiConsole.MarkupLine("[cyan bold]DeployAssistant CLI[/]");
-            AnsiConsole.MarkupLine("[dim]Usage: deployassistant <command> [options][/]");
+            AnsiConsole.MarkupLine("[dim]Usage: deployassistant <command> [[options]][/]");
             AnsiConsole.WriteLine();
 
             var table = new Table()
@@ -456,7 +456,7 @@ namespace DeployAssistant.CLI
                 "[bold]stage[/] [dim]<dst-path>[/]",
                 "Hash and promote pre-staged changes to staged state.");
             table.AddRow(
-                "[bold]deploy[/] [dim]<dst-path> [--updater N] [--log M][/]",
+                "[bold]deploy[/] [dim]<dst-path> [[--updater N]] [[--log M]][/]",
                 "Apply staged changes and record a new revision.");
             table.AddRow(
                 "[bold]revert[/] [dim]<dst-path> <version>[/]",
