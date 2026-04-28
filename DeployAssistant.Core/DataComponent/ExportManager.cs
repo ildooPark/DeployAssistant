@@ -407,10 +407,15 @@ namespace DeployAssistant.DataComponent
                     exportCount++;
                 }
 
-                if (exportCount <= 0) { exportPath = null; return false; }
-
                 // Include the VersionLog so the recipient can identify the target version.
-                _fileHandlerTool.TrySerializeProjectData(currentProject, exportLogPath);
+                // A diff package that only contains deletions may legitimately have no copied files,
+                // so success must depend on creating the VersionLog rather than exportCount.
+                bool versionLogSerialized = _fileHandlerTool.TrySerializeProjectData(currentProject, exportLogPath);
+                if (!versionLogSerialized || !File.Exists(exportLogPath))
+                {
+                    exportPath = null;
+                    return false;
+                }
 
                 if (File.Exists(exportZipPath)) File.Delete(exportZipPath);
                 ZipFile.CreateFromDirectory(exportDstPath, exportZipPath);
