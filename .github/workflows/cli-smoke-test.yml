@@ -40,15 +40,16 @@ jobs:
         shell: pwsh
         run: |
           $output = & ./publish/DeployAssistant.CLI/deployassistant.exe 2>&1
+          $outputStr = $output -join "`n"
           Write-Host "--- CLI output ---"
-          Write-Host $output
+          Write-Host $outputStr
           Write-Host "------------------"
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Expected exit code 0 for no-args invocation, got $LASTEXITCODE"
             exit 1
           }
-          if ($output -notmatch 'DeployAssistant') {
-            Write-Error "Expected help output to contain 'DeployAssistant', but got:`n$output"
+          if ($outputStr -notmatch 'DeployAssistant') {
+            Write-Error "Expected help output to contain 'DeployAssistant', but got:`n$outputStr"
             exit 1
           }
 

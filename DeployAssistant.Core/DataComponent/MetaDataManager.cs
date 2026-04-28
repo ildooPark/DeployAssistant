@@ -158,6 +158,7 @@ namespace DeployAssistant.DataComponent
             _backupManager.Awake();
             _updateManager.Awake();
             _updateManager.Awake();
+            _settingManager.ConfirmationCallback = ConfirmationCallback;
             _settingManager.Awake();
         }
 
