@@ -122,11 +122,17 @@ namespace DeployAssistant.ViewModel
         {
             if (!File.Exists(filePath))
             {
+                IsMetaFileLoaded = false;
+                LoadedMetaFile = null;
+                DiffItems.Clear();
                 DropZoneMessage = $"File not found: {Path.GetFileName(filePath)}";
                 return;
             }
             if (!filePath.EndsWith(VersionLogExtension, StringComparison.OrdinalIgnoreCase))
             {
+                IsMetaFileLoaded = false;
+                LoadedMetaFile = null;
+                DiffItems.Clear();
                 DropZoneMessage = "Only .VersionLog files are supported";
                 return;
             }
