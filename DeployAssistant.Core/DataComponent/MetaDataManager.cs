@@ -37,6 +37,7 @@ namespace DeployAssistant.DataComponent
         public event Action<object>? MetaDataLoadedEventHandler;
         public event Action<object>? FetchRequestEventHandler;
         public event Action<string, ObservableCollection<ProjectFile>>? IntegrityCheckCompleteEventHandler;
+        public event Action<int, int>? IntegrityCheckProgressEventHandler;
         public event Action<ProjectData, ProjectData, List<ChangedFile>>? ProjComparisonCompleteEventHandler;
         public event Action<MetaDataState> ManagerStateEventHandler;
         public event Action<ProjectIgnoreData> UpdateIgnoreListEventHandler;
@@ -147,6 +148,7 @@ namespace DeployAssistant.DataComponent
             _fileManager.DataStagedEventHandler += FileManager_DataStagedCallBack;
             _fileManager.OverlappedFileFoundEventHandler += FileManager_OverlappedFileFoundCallBack; 
             _fileManager.IntegrityCheckEventHandler += FileManager_IntegrityCheckCallBack;
+            _fileManager.IntegrityCheckProgressEventHandler += FileManager_IntegrityCheckProgressCallBack;
             _fileManager.SrcProjectDataLoadedEventHandler += FileManager_SrcProjectLoadedCallBack;
 
             _exportManager.ManagerStateEventHandler += ManagerStateCallBack;
@@ -557,6 +559,11 @@ namespace DeployAssistant.DataComponent
         private void FileManager_IntegrityCheckCallBack(string changeLog, List<ProjectFile> changedFileList)
         {
             IntegrityCheckCompleteEventHandler?.Invoke(changeLog, new ObservableCollection<ProjectFile>(changedFileList));
+        }
+
+        private void FileManager_IntegrityCheckProgressCallBack(int processed, int total)
+        {
+            IntegrityCheckProgressEventHandler?.Invoke(processed, total);
         }
 
         private void FileManager_DataPreStagedCallBack(object preStagedFileListObj)

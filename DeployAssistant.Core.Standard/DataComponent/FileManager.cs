@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading;
 
 namespace DeployAssistant.DataComponent
 {
@@ -58,6 +59,7 @@ namespace DeployAssistant.DataComponent
         public event Action<object>? DataPreStagedEventHandler;
         public event Action<object>? PreStagedDataOverlapEventHandler;
         public event Action<string, List<ProjectFile>>? IntegrityCheckEventHandler;
+        public event Action<int, int>? IntegrityCheckProgressEventHandler;
         public event Action<MetaDataState> ManagerStateEventHandler;
         #endregion
 
@@ -139,7 +141,7 @@ namespace DeployAssistant.DataComponent
                 IEnumerable<string> addedDirs = directoryRelDirs.Except(recordedDirs);
                 IEnumerable<string> deletedFiles = recordedFiles.Except(directoryRelFiles);
                 IEnumerable<string> deletedDirs = recordedDirs.Except(directoryRelDirs);
-                IEnumerable<string> intersectFiles = recordedFiles.Intersect(directoryRelFiles);
+                List<string> intersectFiles = recordedFiles.Intersect(directoryRelFiles).ToList();
 
                 foreach (string dirRelPath in addedDirs)
                 {
@@ -179,10 +181,18 @@ namespace DeployAssistant.DataComponent
                 ConcurrentDictionary<string, ProjectFile> projectFilesConcurrent = new ConcurrentDictionary<string, ProjectFile> ();
                 ConcurrentBag<string> hashFailureLog = new ConcurrentBag<string>();
                 var maxConcurrency = new ParallelOptions { MaxDegreeOfParallelism = Convert.ToInt32(Math.Ceiling((Environment.ProcessorCount * 0.75) * 1.0)) };
+                int intersectTotal = intersectFiles.Count;
+                int intersectProcessed = 0;
+                IntegrityCheckProgressEventHandler?.Invoke(0, intersectTotal);
                 Parallel.ForEach(intersectFiles, maxConcurrency, fileRelPath =>
                 {
                     //TODO : Resolve Hard coded issue -> Setting Manager Ignore
-                    if (projectFilesDict[fileRelPath].DataType == ProjectDataType.Directory) return;
+                    if (projectFilesDict[fileRelPath].DataType == ProjectDataType.Directory)
+                    {
+                        Interlocked.Increment(ref intersectProcessed);
+                        IntegrityCheckProgressEventHandler?.Invoke(intersectProcessed, intersectTotal);
+                        return;
+                    }
                     ProjectFile intersectedFile = new ProjectFile(projectFilesDict[fileRelPath]);
                     // Clear stored hash so a silent GetFileMD5CheckSum failure (it swallows exceptions
                     // internally) leaves DataHash empty and is detectable below.
@@ -191,6 +201,8 @@ namespace DeployAssistant.DataComponent
                     {
                         ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                         Trace.TraceWarning($"Couldn't Run File Integrity Check, Couldn't Hash Intersected File on {fileRelPath}");
+                        Interlocked.Increment(ref intersectProcessed);
+                        IntegrityCheckProgressEventHandler?.Invoke(intersectProcessed, intersectTotal);
                         return;
                     }
                     try
@@ -202,6 +214,8 @@ namespace DeployAssistant.DataComponent
                         ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                         Trace.TraceWarning($"Couldn't Run File Integrity Check: File async Hashing Failed\n{ex.Message}");
                         projectFilesConcurrent.TryRemove(fileRelPath, out _);
+                        Interlocked.Increment(ref intersectProcessed);
+                        IntegrityCheckProgressEventHandler?.Invoke(intersectProcessed, intersectTotal);
                         return;
                     }
                     // Empty hash after the call means silent internal failure; remove the file
@@ -211,6 +225,8 @@ namespace DeployAssistant.DataComponent
                         hashFailureLog.Add($"Warning: Failed to compute hash for {fileRelPath}, file excluded from integrity check");
                         projectFilesConcurrent.TryRemove(fileRelPath, out _);
                     }
+                    Interlocked.Increment(ref intersectProcessed);
+                    IntegrityCheckProgressEventHandler?.Invoke(intersectProcessed, intersectTotal);
                 });
 
                 foreach (string warning in hashFailureLog)

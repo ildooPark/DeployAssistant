@@ -74,6 +74,17 @@ namespace DeployAssistant.ViewModel
             }
         }
 
+        private double _integrityCheckProgress;
+        public double IntegrityCheckProgress
+        {
+            get => _integrityCheckProgress;
+            set
+            {
+                _integrityCheckProgress = value;
+                OnPropertyChanged(nameof(IntegrityCheckProgress));
+            }
+        }
+
         private string? _projectName;
         public string ProjectName
         {
@@ -110,6 +121,7 @@ namespace DeployAssistant.ViewModel
             _metaDataManager = metaDataManager;
             _metaDataManager.ProjLoadedEventHandler += MetaDataManager_ProjLoadedCallBack;
             _metaDataManager.ManagerStateEventHandler += MetaDataStateChangeCallBack;
+            _metaDataManager.IntegrityCheckProgressEventHandler += MetaDataManager_IntegrityCheckProgressCallBack;
         }
 
         #region Update Version
@@ -177,7 +189,17 @@ namespace DeployAssistant.ViewModel
             {
                 _metaDataState = state;
                 CurrentMetaDataState = state.ToString();
+                if (state != MetaDataState.IntegrityChecking)
+                    IntegrityCheckProgress = 0;
                 System.Windows.Application.Current?.MainWindow?.UpdateLayout();
+            });
+        }
+
+        private void MetaDataManager_IntegrityCheckProgressCallBack(int processed, int total)
+        {
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            {
+                IntegrityCheckProgress = total > 0 ? (double)processed / total * 100.0 : 0;
             });
         }
 
