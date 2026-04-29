@@ -181,18 +181,16 @@ namespace DeployAssistant.DataComponent
                 ConcurrentDictionary<string, ProjectFile> projectFilesConcurrent = new ConcurrentDictionary<string, ProjectFile> ();
                 ConcurrentBag<string> hashFailureLog = new ConcurrentBag<string>();
                 var maxConcurrency = new ParallelOptions { MaxDegreeOfParallelism = Convert.ToInt32(Math.Ceiling((Environment.ProcessorCount * 0.75) * 1.0)) };
-                int intersectTotal = intersectFiles.Count;
+                // Only count actual files — directories are skipped inside the loop.
+                List<string> intersectFilesList = intersectFiles
+                    .Where(p => projectFilesDict.TryGetValue(p, out var pf) && pf.DataType != ProjectDataType.Directory)
+                    .ToList();
+                int intersectTotal = intersectFilesList.Count;
                 int intersectProcessed = 0;
+                int lastReportedPercent = -1;
                 IntegrityCheckProgressEventHandler?.Invoke(0, intersectTotal);
-                Parallel.ForEach(intersectFiles, maxConcurrency, fileRelPath =>
+                Parallel.ForEach(intersectFilesList, maxConcurrency, fileRelPath =>
                 {
-                    //TODO : Resolve Hard coded issue -> Setting Manager Ignore
-                    if (projectFilesDict[fileRelPath].DataType == ProjectDataType.Directory)
-                    {
-                        Interlocked.Increment(ref intersectProcessed);
-                        IntegrityCheckProgressEventHandler?.Invoke(intersectProcessed, intersectTotal);
-                        return;
-                    }
                     ProjectFile intersectedFile = new ProjectFile(projectFilesDict[fileRelPath]);
                     // Clear stored hash so a silent GetFileMD5CheckSum failure (it swallows exceptions
                     // internally) leaves DataHash empty and is detectable below.
@@ -202,7 +200,6 @@ namespace DeployAssistant.DataComponent
                         ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                         Trace.TraceWarning($"Couldn't Run File Integrity Check, Couldn't Hash Intersected File on {fileRelPath}");
                         Interlocked.Increment(ref intersectProcessed);
-                        IntegrityCheckProgressEventHandler?.Invoke(intersectProcessed, intersectTotal);
                         return;
                     }
                     try
@@ -215,7 +212,6 @@ namespace DeployAssistant.DataComponent
                         Trace.TraceWarning($"Couldn't Run File Integrity Check: File async Hashing Failed\n{ex.Message}");
                         projectFilesConcurrent.TryRemove(fileRelPath, out _);
                         Interlocked.Increment(ref intersectProcessed);
-                        IntegrityCheckProgressEventHandler?.Invoke(intersectProcessed, intersectTotal);
                         return;
                     }
                     // Empty hash after the call means silent internal failure; remove the file
@@ -225,8 +221,12 @@ namespace DeployAssistant.DataComponent
                         hashFailureLog.Add($"Warning: Failed to compute hash for {fileRelPath}, file excluded from integrity check");
                         projectFilesConcurrent.TryRemove(fileRelPath, out _);
                     }
-                    Interlocked.Increment(ref intersectProcessed);
-                    IntegrityCheckProgressEventHandler?.Invoke(intersectProcessed, intersectTotal);
+                    int processed = Interlocked.Increment(ref intersectProcessed);
+                    // Only fire when the integer percentage changes to avoid flooding the UI dispatcher.
+                    int percent = intersectTotal > 0 ? processed * 100 / intersectTotal : 100;
+                    int prev = Interlocked.Exchange(ref lastReportedPercent, percent);
+                    if (percent != prev)
+                        IntegrityCheckProgressEventHandler?.Invoke(processed, intersectTotal);
                 });
 
                 foreach (string warning in hashFailureLog)
