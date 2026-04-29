@@ -38,12 +38,12 @@ Core responsibilities:
 
 ## 3. Project Layout
 
-The solution contains six compilable projects plus one test project:
+The solution contains eight compilable projects plus one test project:
 
 ```
 DeployAssistant.sln
 │
-├── DeployAssistant.Core/              ← net10.0-windows class library; all business logic
+├── DeployAssistant.Core.Model/        ← netstandard2.0 class library; shared model contract
 │   ├── Interfaces/
 │   │   ├── IManager.cs
 │   │   └── IProjectData.cs
@@ -52,12 +52,27 @@ DeployAssistant.sln
 │   │   ├── ProjectData.cs
 │   │   ├── ProjectFile.cs
 │   │   ├── DataState.cs               ← DataState flags enum
+│   │   ├── MetaDataState.cs           ← MetaDataState enum
 │   │   ├── ChangedFile.cs
 │   │   ├── RecordedFile.cs
 │   │   ├── ProjectIgnoreData.cs
 │   │   ├── ProjectSimilarity.cs
 │   │   ├── DeployData.cs
-│   │   └── LocalConfigData.cs
+│   │   ├── LocalConfigData.cs
+│   │   └── V2/                        ← V2 schema types
+│   │       ├── ISchemaVersion.cs
+│   │       ├── ProjectStore.cs
+│   │       ├── SnapshotData.cs
+│   │       ├── FileRecord.cs
+│   │       ├── FileDiff.cs
+│   │       ├── SnapshotSimilarity.cs
+│   │       ├── ChangeKind.cs
+│   │       ├── FileKind.cs
+│   │       └── StagingFlags.cs
+│   └── IsExternalInit.cs              ← netstandard2.0 polyfill for init-only setters
+│
+├── DeployAssistant.Core/              ← net10.0 class library; full .NET 10 services
+│   │                                    References: DeployAssistant.Core.Model
 │   ├── DataComponent/                 ← service/manager layer
 │   │   ├── MetaDataManager.cs         ← central orchestrator
 │   │   ├── FileManager.cs
@@ -66,24 +81,42 @@ DeployAssistant.sln
 │   │   ├── ExportManager.cs
 │   │   ├── SettingManager.cs
 │   │   └── LogManager.cs              ← empty stub
+│   ├── Migration/                     ← schema migration pipeline
+│   │   ├── IMigrationPipeline.cs
+│   │   ├── IMigrationStep.cs
+│   │   ├── IMigrationStepAdapter.cs
+│   │   ├── MigrationPipeline.cs
+│   │   ├── MigrationStepAdapter.cs
+│   │   ├── MigrationRollbackException.cs
+│   │   ├── NullMigrationPipeline.cs
+│   │   └── Steps/
+│   │       ├── ProjectDataMigrationStep_1to2.cs
+│   │       └── ProjectMetaDataMigrationStep_1to2.cs
 │   └── Utils/
-│       ├── FileHandlerTool.cs
-│       ├── HashTool.cs
+│       ├── FileHandlerTool.cs         ← V2-aware with migration pipeline
+│       ├── HashTool.cs                ← uses .NET 5+ MD5.HashData API
 │       └── LogTool.cs
 │
 ├── DeployAssistant.Core.Standard/     ← netstandard2.0 class library; cross-platform subset for CLI
-│   │                                    Links most source files directly from Core; has its own
-│   │                                    platform-neutral variants of FileManager, MetaDataManager,
-│   │                                    FileHandlerTool, HashTool, and a CompatHelper shim.
+│   │                                    References: DeployAssistant.Core.Model
+│   │                                    Real project (no file-linking)
 │   ├── CompatHelper.cs                ← netstandard2.0 compatibility shims
+│   ├── IsExternalInit.cs              ← netstandard2.0 polyfill for init-only setters
 │   ├── DataComponent/
 │   │   ├── MetaDataManager.cs         ← platform-neutral variant (no MessageBox, no WPF)
-│   │   └── FileManager.cs             ← platform-neutral variant
+│   │   ├── FileManager.cs             ← platform-neutral variant
+│   │   ├── BackupManager.cs
+│   │   ├── UpdateManager.cs
+│   │   ├── ExportManager.cs
+│   │   ├── SettingManager.cs
+│   │   └── LogManager.cs
+│   ├── Migration/                     ← copy of Core migration pipeline
 │   └── Utils/
-│       ├── FileHandlerTool.cs         ← platform-neutral variant
-│       └── HashTool.cs                ← platform-neutral variant
+│       ├── FileHandlerTool.cs         ← platform-neutral variant (no V2 migration pipeline)
+│       ├── HashTool.cs                ← uses legacy md5.ComputeHash (netstandard2.0 compatible)
+│       └── LogTool.cs
 │
-├── DeployAssistant.ViewModel/         ← net10.0-windows class library; WPF + WinForms
+├── DeployAssistant.ViewModel/         ← net10.0-windows class library; WPF ViewModels
 │   │                                    References: DeployAssistant.Core
 │   ├── ViewModelBase.cs
 │   ├── MainViewModel.cs
@@ -98,21 +131,25 @@ DeployAssistant.sln
 │   └── Utils/
 │       └── RelayCommand.cs
 │
-├── DeployAssistant/                   ← net10.0-windows WPF exe (main GUI application)
+├── DeployAssistant.View/              ← net10.0-windows WPF class library; XAML Views
 │   │                                    References: DeployAssistant.Core, DeployAssistant.ViewModel
-│   ├── App.xaml / App.xaml.cs         ← application entry-point; global singletons
-│   ├── AssemblyInfo.cs
-│   └── View/
-│       ├── MainWindow.xaml / .cs
-│       ├── IntegrityLogWindow.xaml / .cs
-│       ├── ErrorLogWindow.xaml / .cs
-│       ├── VersionDiffWindow.xaml / .cs
-│       ├── VersionIntegrationView.xaml / .cs
-│       ├── CompatibleVersionWindow.xaml
-│       ├── OverlapFileWindow.xaml / .cs
-│       └── VersionComparisonWindow.cs
+│   ├── MainWindow.xaml / .cs
+│   ├── IntegrityLogWindow.xaml / .cs
+│   ├── ErrorLogWindow.xaml / .cs
+│   ├── VersionDiffWindow.xaml / .cs
+│   ├── CompatibleVersionWindow.xaml
+│   ├── OverlapFileWindow.xaml / .cs
+│   ├── VersionComparisonWindow.cs
+│   ├── DataStateChangeKindConverter.cs
+│   └── SharedStyles.xaml
 │
-├── DeployAssistant.CLI/               ← net8.0 console exe; cross-platform CLI
+├── DeployAssistant/                   ← net10.0-windows WPF exe (thin host)
+│   │                                    References: DeployAssistant.Core, DeployAssistant.View
+│   ├── App.xaml / App.xaml.cs         ← application entry-point; creates MetaDataManager, injects into MainWindow
+│   ├── AssemblyInfo.cs
+│   └── Properties/
+│
+├── DeployAssistant.CLI/               ← net10.0 console exe; cross-platform CLI
 │   │                                    References: DeployAssistant.Core.Standard
 │   │                                    Binary name: deployassistant
 │   └── Program.cs
@@ -130,19 +167,24 @@ DeployAssistant.sln
         └── IntegrityCheckRobustnessTests.cs
 ```
 
-### Why two Core libraries?
+### Dependency graph
 
-`DeployAssistant.Core` targets `net10.0-windows` and can use WPF/WinForms-dependent APIs (e.g. `MessageBox`). `DeployAssistant.Core.Standard` targets `netstandard2.0` so the CLI (`net8.0`) can reference it without pulling in Windows-only assemblies. The Standard project links the platform-neutral source files from Core directly and provides its own implementations of the modules that call Windows UI APIs.
+```
+DeployAssistant.Core.Model  (netstandard2.0)  ← shared contract
+        ↑                    ↑
+DeployAssistant.Core         DeployAssistant.Core.Standard
+  (net10.0)                     (netstandard2.0)
+        ↑                             ↑
+DeployAssistant.ViewModel        DeployAssistant.CLI
+  (net10.0-windows)                (net10.0)
+        ↑
+DeployAssistant.View
+  (net10.0-windows)
+        ↑
+DeployAssistant  (net10.0-windows, thin host)
+```
 
-### Namespace irregularities (known technical debt)
-The codebase uses **two namespace prefixes** across files in the same project:
-- `DeployAssistant` / `DeployAssistant.Interfaces` / `DeployAssistant.Model` / `DeployAssistant.DataComponent` / `DeployAssistant.ViewModel` / `DeployAssistant.View` / `DeployAssistant.Utils` — the vast majority of files
-- `DeployManager.DataComponent` — `SettingManager.cs` only
-- `DeployManager.Model` — `LocalConfigData.cs` only
 
-All live in a single compiled assembly. A refactor should consolidate to the `DeployAssistant.*` namespace hierarchy.
-
----
 
 ## 4. Global Application Objects (`App.xaml.cs`)
 

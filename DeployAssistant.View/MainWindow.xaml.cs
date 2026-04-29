@@ -1,4 +1,5 @@
 using AvalonDock.Layout.Serialization;
+using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.ViewModel;
 using System.Collections.ObjectModel;
@@ -17,14 +18,15 @@ namespace DeployAssistant.View
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "DeployAssistant.layout");
 
-        public MainWindow()
+        private readonly MetaDataManager _metaDataManager;
+
+        public MainWindow(MetaDataManager metaDataManager)
         {
             InitializeComponent();
 
-            // Boot the core service layer before constructing ViewModels.
-            App.AwakeModel();
+            _metaDataManager = metaDataManager;
 
-            var mainVM = new MainViewModel(App.MetaDataManager);
+            var mainVM = new MainViewModel(_metaDataManager);
             SubscribeToViewModelEvents(mainVM);
             this.DataContext = mainVM;
         }
@@ -82,7 +84,7 @@ namespace DeployAssistant.View
 
         private void OpenOverlapFileWindow(List<ChangedFile> overlapped, List<ChangedFile> newFiles)
         {
-            var window = new OverlapFileWindow(overlapped, newFiles);
+            var window = new OverlapFileWindow(_metaDataManager, overlapped, newFiles);
             window.Owner = this;
             window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             window.Show();
@@ -91,7 +93,7 @@ namespace DeployAssistant.View
         private void OpenIntegrityLogWindowFromFileTrack(ProjectData? projData, string changeLog, ObservableCollection<ProjectFile> fileList)
         {
             if (projData == null) return;
-            var window = new IntegrityLogWindow(projData, changeLog, fileList);
+            var window = new IntegrityLogWindow(_metaDataManager, projData, changeLog, fileList);
             window.Owner = this;
             window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             window.Show();
@@ -100,7 +102,7 @@ namespace DeployAssistant.View
         private void OpenIntegrityLogWindowFromBackup(ProjectData? projData)
         {
             if (projData == null) return;
-            var window = new IntegrityLogWindow(projData);
+            var window = new IntegrityLogWindow(_metaDataManager, projData);
             window.Owner = this;
             window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             window.Show();
@@ -108,7 +110,7 @@ namespace DeployAssistant.View
 
         private void OpenVersionDiffWindow(ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff)
         {
-            var window = new VersionDiffWindow(srcProject, dstProject, diff);
+            var window = new VersionDiffWindow(_metaDataManager, srcProject, dstProject, diff);
             window.Owner = this;
             window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             window.Show();
@@ -125,7 +127,7 @@ namespace DeployAssistant.View
         private void OpenSrcProjectInfoWindow(ProjectData? projData)
         {
             if (projData == null) return;
-            var window = new IntegrityLogWindow(projData);
+            var window = new IntegrityLogWindow(_metaDataManager, projData);
             window.Owner = this;
             window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             window.Show();
@@ -182,3 +184,4 @@ namespace DeployAssistant.View
         }
     }
 }
+

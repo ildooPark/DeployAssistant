@@ -1,4 +1,4 @@
-﻿using DeployAssistant.DataComponent;
+using DeployAssistant.DataComponent;
 
 namespace DeployAssistant.Interfaces
 {

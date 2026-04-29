@@ -1,3 +1,4 @@
+using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.ViewModel;
 using System.Collections.Generic;
@@ -10,10 +11,10 @@ namespace DeployAssistant.View
     /// </summary>
     public partial class OverlapFileWindow : Window
     {
-        public OverlapFileWindow(List<ChangedFile> overlapFiles, List<ChangedFile> newFiles)
+        public OverlapFileWindow(MetaDataManager metaDataManager, List<ChangedFile> overlapFiles, List<ChangedFile> newFiles)
         {
             InitializeComponent();
-            var overlapFileVM = new OverlapFileViewModel(App.MetaDataManager, overlapFiles, newFiles);
+            var overlapFileVM = new OverlapFileViewModel(metaDataManager, overlapFiles, newFiles);
             this.DataContext = overlapFileVM;
             overlapFileVM.TaskFinishedEventHandler += TaskFinishedCallBack;
         }
@@ -35,3 +36,4 @@ namespace DeployAssistant.View
         }
     }
 }
+

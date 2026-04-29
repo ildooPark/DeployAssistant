@@ -1,4 +1,5 @@
 ﻿using DeployAssistant.DataComponent;
+using DeployAssistant.View;
 
 namespace DeployAssistant
 {
@@ -7,12 +8,14 @@ namespace DeployAssistant
     /// </summary>
     public partial class App : System.Windows.Application
     {
-        private static MetaDataManager? _metaDataManager; 
+        private static MetaDataManager? _metaDataManager;
         public static MetaDataManager MetaDataManager => _metaDataManager ??= new MetaDataManager();
 
-        public static void AwakeModel()
+        private void App_Startup(object sender, System.Windows.StartupEventArgs e)
         {
-            MetaDataManager.Awake(); 
+            MetaDataManager.Awake();
+            var mainWindow = new MainWindow(MetaDataManager);
+            mainWindow.Show();
         }
     }
 }

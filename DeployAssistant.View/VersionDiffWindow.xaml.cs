@@ -1,3 +1,4 @@
+using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.ViewModel;
 using System.Collections.Generic;
@@ -11,11 +12,11 @@ namespace DeployAssistant.View
     /// </summary>
     public partial class VersionDiffWindow : Window
     {
-        public VersionDiffWindow(ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff, string title = "Version Diff")
+        public VersionDiffWindow(MetaDataManager metaDataManager, ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff, string title = "Version Diff")
         {
             InitializeComponent();
             Title = title;
-            var versionDiffVM = new VersionDiffViewModel(App.MetaDataManager, srcProject, dstProject, diff);
+            var versionDiffVM = new VersionDiffViewModel(metaDataManager, srcProject, dstProject, diff);
             this.DataContext = versionDiffVM;
         }
 
@@ -32,3 +33,4 @@ namespace DeployAssistant.View
         }
     }
 }
+

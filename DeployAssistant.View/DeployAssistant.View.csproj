@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>DeployAssistant.View</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dirkster.AvalonDock" Version="4.74.0" />
+    <PackageReference Include="Dirkster.AvalonDock.Themes.VS2013" Version="4.74.0" />
+    <PackageReference Include="Extended.Wpf.Toolkit" Version="4.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeployAssistant.Core\DeployAssistant.Core.csproj" />
+    <ProjectReference Include="..\DeployAssistant.ViewModel\DeployAssistant.ViewModel.csproj" />
+  </ItemGroup>
+
+</Project>

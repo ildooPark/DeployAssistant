@@ -1,3 +1,4 @@
+using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.ViewModel;
 using System.Collections.ObjectModel;
@@ -10,17 +11,17 @@ namespace DeployAssistant.View
     /// </summary>
     public partial class IntegrityLogWindow : Window
     {
-        public IntegrityLogWindow(ProjectData projData, string versionLog, ObservableCollection<ProjectFile> fileList)
+        public IntegrityLogWindow(MetaDataManager metaDataManager, ProjectData projData, string versionLog, ObservableCollection<ProjectFile> fileList)
         {
             InitializeComponent();
-            var versionCheckViewModel = new VersionCheckViewModel(App.MetaDataManager, projData, versionLog, fileList);
+            var versionCheckViewModel = new VersionCheckViewModel(metaDataManager, projData, versionLog, fileList);
             this.DataContext = versionCheckViewModel;
         }
 
-        public IntegrityLogWindow(ProjectData projectData)
+        public IntegrityLogWindow(MetaDataManager metaDataManager, ProjectData projectData)
         {
             InitializeComponent();
-            var versionCheckViewModel = new VersionCheckViewModel(App.MetaDataManager, projectData);
+            var versionCheckViewModel = new VersionCheckViewModel(metaDataManager, projectData);
             this.DataContext = versionCheckViewModel;
         }
 
@@ -36,3 +37,4 @@ namespace DeployAssistant.View
         }
     }
 }
+

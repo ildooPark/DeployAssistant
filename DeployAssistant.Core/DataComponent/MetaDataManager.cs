@@ -9,20 +9,6 @@ using System.Text;
 
 namespace DeployAssistant.DataComponent
 {
-    public enum MetaDataState
-    {
-        IntegrityChecking,
-        CleanRestoring,
-        Exporting,
-        Reverting,
-        Processing,
-        Retrieving,
-        Updating,
-        IntegrationValidating,
-        Integrating,
-        Initializing,
-        Idle
-    }
     public class MetaDataManager : IManager
     {
         public string? CurrentProjectPath {  get; set; }
