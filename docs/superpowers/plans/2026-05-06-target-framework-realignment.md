@@ -14,33 +14,31 @@
 
 ---
 
-## Task 0 — Preflight
+## Task 0 — Preflight: cut branch and retarget master from net10 → net8
+
+**Why this task:** Establish a buildable baseline that requires **only .NET 9 SDK + net8 runtime** (already present on the developer machine and on `windows-latest` CI runners), instead of the .NET 10 SDK that current master demands. The realignment's end-state is net8.0-windows for GUI/Tests anyway (per spec §3); doing the retarget *now* as a no-functional-change commit means subsequent tasks can run their TDD cycles locally without any SDK install. This collapses what would otherwise be Task 0 (install SDK) + Task 4 step 1 + Task 6 step 1 into one short PR.
 
 **Files:**
 - Read: `docs/superpowers/specs/2026-05-06-target-framework-realignment-design.md`
+- Modify: `DeployAssistant/DeployAssistant.csproj`
+- Modify: `DeployAssistant.Core/DeployAssistant.Core.csproj`
+- Modify: `DeployAssistant.ViewModel/DeployAssistant.ViewModel.csproj`
+- Modify: `DeployAssistant.Tests/DeployAssistant.Tests.csproj`
+- Modify: `DeployAssistant.CLI/DeployAssistant.CLI.csproj`
+- Modify: `.github/workflows/cli-smoke-test.yml`
 
-- [ ] **Step 1: Verify SDKs are installed.**
+- [ ] **Step 1: Verify SDK + runtime availability.**
 
 ```bash
 dotnet --list-sdks
+dotnet --list-runtimes | grep -E "WindowsDesktop|NETCore" | grep " 8\."
 ```
 
-Expected: at minimum a 8.x SDK *and* a 10.x SDK present. The current `master` builds against `net10.0-windows` (GUI/Core/ViewModel/Tests) and `net10.0` (CLI), so a 10 SDK is required to keep CI green during the migration. Task 5 introduces `net472` which needs the .NET Framework 4.7.2 targeting pack — install **.NET Framework 4.8 Developer Pack** (which includes 4.7.2 reference assemblies) from https://aka.ms/msbuild/developerpacks if `msbuild`/`dotnet build` later complains about missing reference assemblies.
+Expected: at least one SDK at version 8.x or 9.x or higher (a 9.x SDK can target net8.0 fine), and `Microsoft.WindowsDesktop.App 8.x.x` + `Microsoft.NETCore.App 8.x.x` runtimes present. If runtimes for net8 aren't there, install **the .NET 8 Desktop Runtime + .NET 8 Hosting Bundle** from https://dotnet.microsoft.com/download/dotnet/8.0 (no SDK needed).
 
-If only 9.x is present (the local environment seen during onboarding), install both:
-- .NET 10 SDK from https://aka.ms/dotnet/download (any stable patch).
-- .NET 8 SDK from same.
+Task 5 also needs the .NET Framework 4.7.2 reference assemblies — install **.NET Framework 4.8 Developer Pack** (includes 4.7.2 ref assemblies) from https://aka.ms/msbuild/developerpacks before Task 5. Not blocking for Tasks 0-4.
 
-- [ ] **Step 2: Verify the current solution builds and tests pass.**
-
-```bash
-dotnet build DeployAssistant.sln -c Debug
-dotnet test  DeployAssistant.Tests/DeployAssistant.Tests.csproj
-```
-
-Expected: both succeed. If they don't, stop — the migration begins from a green baseline. Investigate before proceeding.
-
-- [ ] **Step 3: Cut the feature branch.**
+- [ ] **Step 2: Cut the feature branch from master.**
 
 ```bash
 git checkout master
@@ -48,11 +46,121 @@ git pull --ff-only
 git checkout -b feature/target-framework-realignment
 ```
 
-- [ ] **Step 4: Commit a no-op marker so subsequent task PRs branch from a known point.**
+- [ ] **Step 3: Retarget the four `net10.0-windows` projects to `net8.0-windows`.**
+
+Each csproj has one line to change. Apply the same replacement in each:
+
+```xml
+    <TargetFramework>net10.0-windows</TargetFramework>
+```
+→
+```xml
+    <TargetFramework>net8.0-windows</TargetFramework>
+```
+
+Files: `DeployAssistant/DeployAssistant.csproj`, `DeployAssistant.Core/DeployAssistant.Core.csproj`, `DeployAssistant.ViewModel/DeployAssistant.ViewModel.csproj`, `DeployAssistant.Tests/DeployAssistant.Tests.csproj`.
+
+- [ ] **Step 4: Retarget the CLI from `net10.0` → `net8.0`.**
+
+Edit `DeployAssistant.CLI/DeployAssistant.CLI.csproj`:
+
+```xml
+    <TargetFramework>net10.0</TargetFramework>
+```
+→
+```xml
+    <TargetFramework>net8.0</TargetFramework>
+```
+
+(The CLI goes to net472 in Task 5; this temporary net8 step is just to align with the rest of the solution during Tasks 1–4.)
+
+- [ ] **Step 5: Update `cli-smoke-test.yml` to use .NET 8 SDK.**
+
+Edit `.github/workflows/cli-smoke-test.yml` lines ~22-25:
+
+```yaml
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+```
+→
+```yaml
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+```
+
+(The `--self-contained` and `-p:PublishSingleFile=true` flags stay — they still work on net8 self-contained publish. They get dropped in Task 5 when CLI moves to net472.)
+
+- [ ] **Step 6: Drop the developer-machine-local PNG reference from the GUI csproj.**
+
+While we're touching `DeployAssistant.csproj`, remove this stale block (it references a path on the original developer's `Downloads/` folder and breaks anywhere else):
+
+```xml
+    <None Include="..\..\..\..\Downloads\flexible-deployment.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+```
+
+Also remove the matching `<PackageIcon>flexible-deployment.png</PackageIcon>` line from the `<PropertyGroup>`. The GUI is an exe, not a NuGet package — `PackageIcon` was orphan metadata anyway.
+
+- [ ] **Step 7: Verify the solution builds and all tests pass on net8.**
 
 ```bash
-git commit --allow-empty -m "chore: target-framework realignment branch start"
+dotnet build DeployAssistant.sln -c Debug
+dotnet test  DeployAssistant.Tests/DeployAssistant.Tests.csproj
+```
+
+Expected: both succeed. WPF API surface is identical between net8 and net10; the only likely build error would be a C# 14 language feature in the codebase, which would surface as `CS9XXX` errors.
+
+If build fails on a C# version mismatch: the projects don't currently set `<LangVersion>`, so they default to the SDK's max. With the .NET 9 SDK, the default is C# 13. If a `record` or pattern uses C# 14-only syntax, either rewrite it or pin `<LangVersion>13.0</LangVersion>` in the affected csproj. Don't bypass — track down the actual incompatibility.
+
+- [ ] **Step 8: Smoke-test the GUI launches.**
+
+```bash
+dotnet run --project DeployAssistant/DeployAssistant.csproj
+```
+
+Expected: WPF window opens; quit immediately. Confirms the runtime swap doesn't break anything visible.
+
+- [ ] **Step 9: Commit.**
+
+```bash
+git add DeployAssistant/DeployAssistant.csproj \
+        DeployAssistant.Core/DeployAssistant.Core.csproj \
+        DeployAssistant.ViewModel/DeployAssistant.ViewModel.csproj \
+        DeployAssistant.Tests/DeployAssistant.Tests.csproj \
+        DeployAssistant.CLI/DeployAssistant.CLI.csproj \
+        .github/workflows/cli-smoke-test.yml
+git commit -m "chore: retarget master from net10 to net8 baseline
+
+Establishes a buildable baseline for the target-framework realignment
+that requires only the .NET 8 runtime / 9-SDK already present locally
+and on windows-latest CI runners. End-state for GUI / Tests is
+net8.0-windows anyway (spec §3); doing this now means subsequent
+realignment tasks can TDD locally without an SDK install detour.
+
+- DeployAssistant, DeployAssistant.Core, DeployAssistant.ViewModel,
+  DeployAssistant.Tests: net10.0-windows → net8.0-windows.
+- DeployAssistant.CLI: net10.0 → net8.0 (further retargeted to net472
+  in Task 5 of the plan).
+- cli-smoke-test.yml: setup-dotnet 10.0 → 8.0.
+- Drop developer-machine-local PNG reference and orphan PackageIcon
+  from DeployAssistant.csproj.
+
+Refs: docs/superpowers/plans/2026-05-06-target-framework-realignment.md Task 0."
+```
+
+- [ ] **Step 10: Push and open PR; wait for CI green and merge before Task 1.**
+
+```bash
 git push -u origin feature/target-framework-realignment
+gh pr create --base master --head feature/target-framework-realignment \
+    --title "chore: retarget master from net10 to net8 baseline" \
+    --body "Preflight commit for the target-framework realignment effort. Pure framework retarget — no functional change. End-state for GUI/Tests is net8.0-windows per spec §3; this lands the retarget early so subsequent tasks can TDD locally without an SDK install. Plan: docs/superpowers/plans/2026-05-06-target-framework-realignment.md"
 ```
 
 ---
@@ -935,14 +1043,14 @@ gh pr create --base master --head feature/target-framework-realignment \
 
 ---
 
-## Task 4 — Retarget GUI to `net8.0-windows`; fold ViewModel; apply R1 + R2 + R3
+## Task 4 — Fold ViewModel into the GUI exe; apply R1 + R2 + R3
 
-**Why this task:** With the seams in place, the WPF GUI can drop to `net8.0-windows`, absorb the ViewModel project, replace `App.MetaDataManager` static singletons with an explicit `AppServices` composition root (R1), make `ViewModelBase : IDisposable` for child-window cleanup (R2), and trim/delete `IManager` (R3).
+**Why this task:** The GUI is already at `net8.0-windows` after Task 0. This task absorbs `DeployAssistant.ViewModel/*` into the GUI exe, replaces `App.MetaDataManager` static singletons with an explicit `AppServices` composition root (R1), makes `ViewModelBase : IDisposable` for child-window cleanup (R2), and trims/deletes `IManager` (R3).
 
 **Files:**
-- Modify: `DeployAssistant/DeployAssistant.csproj`
+- Modify: `DeployAssistant/DeployAssistant.csproj` (remove `<ProjectReference>` to ViewModel; switch Core ref to Core.Standard)
 - Move: all files in `DeployAssistant.ViewModel/` → `DeployAssistant/ViewModel/`
-- Delete: `DeployAssistant.ViewModel/DeployAssistant.ViewModel.csproj`
+- Delete (Task 7): `DeployAssistant.ViewModel/DeployAssistant.ViewModel.csproj`
 - Modify: `DeployAssistant.sln`
 - Create: `DeployAssistant/Services/WpfDialogService.cs`
 - Create: `DeployAssistant/Services/WpfUiDispatcher.cs`
@@ -956,29 +1064,15 @@ gh pr create --base master --head feature/target-framework-realignment \
 - Modify: `DeployAssistant.Core/Interfaces/IManager.cs`
 - Modify: each `*Manager.cs` (delete empty `Awake` if R3 path chosen)
 
-- [ ] **Step 1: Retarget the GUI csproj to `net8.0-windows`.**
-
-Edit `DeployAssistant/DeployAssistant.csproj`. Change:
-
-```xml
-    <TargetFramework>net10.0-windows</TargetFramework>
-```
-
-to:
-
-```xml
-    <TargetFramework>net8.0-windows</TargetFramework>
-```
-
-Drop the `<None Include="..\..\..\..\Downloads\flexible-deployment.png">` reference — it's a developer-machine-local path that has no business in the repo. (If the icon truly belongs in the package, copy the file into the repo and reference it as `<None Include="flexible-deployment.png">` instead. Use `git status` to confirm whether the file exists already.)
-
-- [ ] **Step 2: Build to confirm net8 retarget compiles.**
+- [ ] **Step 1: Confirm GUI builds at net8 baseline.**
 
 ```bash
 dotnet build DeployAssistant/DeployAssistant.csproj
 ```
 
-Expected: PASS, possibly with warnings about WPF API differences. Fix any net10-only API call (rare — WPF API surface is identical between 8 and 10).
+Expected: PASS. (The retarget happened in Task 0; this is a sanity check before structural changes.)
+
+- [ ] **Step 2 (intentionally blank).** Step skipped — retarget is already done in Task 0. Continue to Step 3.
 
 - [ ] **Step 3: Move every `.cs` file from `DeployAssistant.ViewModel/` into `DeployAssistant/ViewModel/`.**
 
@@ -1264,12 +1358,14 @@ Manually exercise: open a project, retrieve metadata, stage a change, view a dif
 
 ```bash
 git add DeployAssistant/ DeployAssistant.Core/ DeployAssistant.Core.Standard/ DeployAssistant.ViewModel/ DeployAssistant.sln
-git commit -m "refactor(gui): retarget to net8.0-windows; fold ViewModel; AppServices + R2 + R3
+git commit -m "refactor(gui): fold ViewModel; AppServices + R2 + R3
 
-- Retarget DeployAssistant.csproj to net8.0-windows.
 - Move all DeployAssistant.ViewModel/*.cs into DeployAssistant/ViewModel/.
   Project DeployAssistant.ViewModel.csproj is no longer referenced (the
   empty project directory is deleted in Task 7).
+- Switch GUI's Core reference from DeployAssistant.Core to
+  DeployAssistant.Core.Standard (consistency with Tests + CLI; old Core
+  directory is deleted in Task 7).
 - R1: AppServices composition root replaces App.MetaDataManager static
   singleton. Constructed once in App.OnStartup; passed to MainWindow;
   child windows pull from ((App)Application.Current).Services.
@@ -1279,6 +1375,8 @@ git commit -m "refactor(gui): retarget to net8.0-windows; fold ViewModel; AppSer
   call Dispose on Closed — fixes latent event-handler leak.
 - R3: IManager interface deleted; empty Awake() bodies on 4 managers
   removed. Only MetaDataManager.Awake() and SettingManager.Awake() remain.
+
+(Framework retarget from net10 → net8 happened in Task 0.)
 
 Refs: spec §5, §6.2, §8 step 4."
 ```
@@ -1423,27 +1521,9 @@ echo "exit code: $?"
 
 Expected: no-args → exit 0 with "DeployAssistant" in output; `--help` → exit 0; unknown → exit 1.
 
-- [ ] **Step 8: Update `.github/workflows/cli-smoke-test.yml`.**
+- [ ] **Step 8: Update `.github/workflows/cli-smoke-test.yml` publish step.**
 
-Replace the publish step (lines ~30-37):
-
-```yaml
-      - name: Set up .NET 10
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-```
-
-with:
-
-```yaml
-      - name: Set up .NET 8
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-```
-
-And replace:
+`setup-dotnet` is already at 8.0.x after Task 0. Replace the publish step:
 
 ```yaml
       - name: Publish CLI (self-contained, win-x64)
@@ -1495,26 +1575,29 @@ If the runner cannot find net472 reference assemblies, fall back per spec §9: s
 
 ---
 
-## Task 6 — Retarget Tests to `net8.0-windows`
+## Task 6 — Tests project tidy-up + reference shift
+
+**Why this task:** Tests are already at `net8.0-windows` after Task 0 and already reference `DeployAssistant.Core.Standard` after Task 2. This task drops the now-unused `<UseWindowsForms>` flag and adds a reference to the merged `DeployAssistant` exe so ViewModel-surface tests can find the absorbed types.
 
 **Files:**
 - Modify: `DeployAssistant.Tests/DeployAssistant.Tests.csproj`
 
-- [ ] **Step 1: Retarget tests csproj.**
+- [ ] **Step 1: Edit tests csproj.**
+
+The current state after Tasks 0 + 2 is approximately:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>True</UseWindowsForms>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
@@ -1523,16 +1606,23 @@ If the runner cannot find net472 reference assemblies, fall back per spec §9: s
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\DeployAssistant.Core.Standard\DeployAssistant.Core.Standard.csproj" />
-    <ProjectReference Include="..\DeployAssistant\DeployAssistant.csproj" />
+    <ProjectReference Include="..\DeployAssistant.ViewModel\DeployAssistant.ViewModel.csproj" />
   </ItemGroup>
-
 </Project>
 ```
 
-(Drop `<UseWindowsForms>True</UseWindowsForms>` — WinForms is no longer used; tests reference Core.Standard + the GUI exe.)
+Apply two changes:
+
+1. Delete `<UseWindowsForms>True</UseWindowsForms>` — WinForms isn't used anywhere after PR #20 + Task 4.
+2. Replace the `DeployAssistant.ViewModel.csproj` reference with the merged `DeployAssistant.csproj`:
+
+```xml
+    <ProjectReference Include="..\DeployAssistant\DeployAssistant.csproj" />
+```
+
+(The Core.Standard reference stays as-is; Task 7 will rename Core.Standard → Core and the path will update then.)
 
 - [ ] **Step 2: Build tests.**
 
@@ -1554,14 +1644,16 @@ Expected: GREEN, including the headless ViewModel test.
 
 ```bash
 git add DeployAssistant.Tests/DeployAssistant.Tests.csproj
-git commit -m "refactor(tests): retarget to net8.0-windows; reference Core.Standard + GUI
+git commit -m "refactor(tests): drop UseWindowsForms; reference merged GUI exe
 
-- DeployAssistant.Tests now targets net8.0-windows (was net10.0-windows).
-- Drop UseWindowsForms (no longer used in any project).
-- References DeployAssistant.Core.Standard (already since Task 2) and
-  the merged DeployAssistant exe for ViewModel-surface tests.
+- UseWindowsForms removed (WinForms is no longer used in any project
+  after PR #20 + Task 4).
+- ProjectReference shifts from DeployAssistant.ViewModel.csproj (deleted
+  in Task 4 step 3 by file-move; csproj entry deleted in Task 7) to the
+  merged DeployAssistant.csproj.
+- Tests target was retargeted to net8.0-windows in Task 0; no change here.
 
-Refs: spec §3, §8 step 6."
+Refs: spec §8 step 6."
 ```
 
 ---
