@@ -97,7 +97,7 @@ namespace DeployAssistant.Utils
             Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
             if (!SHA256.TryHashData(inputBuf, hash, out _))
                 throw new InvalidOperationException("SHA256.TryHashData failed unexpectedly.");
-            return Convert.ToHexStringLower(hash[..5]);
+            return Convert.ToHexString(hash[..5]).ToLowerInvariant();
         }
         public string GetUniqueProjectDataID(ProjectData projectData)
         {
