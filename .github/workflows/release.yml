@@ -19,10 +19,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up .NET 10
+      - name: Set up .NET 8
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '8.0.x'
 
       - name: Restore dependencies
         run: dotnet restore DeployAssistant.sln
@@ -43,10 +43,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up .NET 10
+      - name: Set up .NET 8
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '8.0.x'
 
       - name: Restore dependencies
         run: dotnet restore DeployAssistant.sln
@@ -60,13 +60,10 @@ jobs:
             -p:PublishSingleFile=true `
             -o ./publish/DeployAssistant
 
-      - name: Publish CLI (self-contained, win-x64)
+      - name: Publish CLI (net472 framework-dependent)
         run: |
           dotnet publish DeployAssistant.CLI/DeployAssistant.CLI.csproj `
             -c Release `
-            -r win-x64 `
-            --self-contained true `
-            -p:PublishSingleFile=true `
             -o ./publish/DeployAssistant.CLI
 
       - name: Zip WPF build output
