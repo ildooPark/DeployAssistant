@@ -27,13 +27,10 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore DeployAssistant.CLI/DeployAssistant.CLI.csproj
 
-      - name: Publish CLI (self-contained, win-x64)
+      - name: Publish CLI (net472 framework-dependent)
         run: |
           dotnet publish DeployAssistant.CLI/DeployAssistant.CLI.csproj `
             -c Release `
-            -r win-x64 `
-            --self-contained true `
-            -p:PublishSingleFile=true `
             -o ./publish/DeployAssistant.CLI
 
       - name: Smoke test – no args shows help (exit 0)
