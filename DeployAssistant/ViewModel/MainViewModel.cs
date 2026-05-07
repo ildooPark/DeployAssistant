@@ -1,5 +1,3 @@
-using DeployAssistant.DataComponent;
-
 namespace DeployAssistant.ViewModel
 {
     public class MainViewModel : ViewModelBase
@@ -14,12 +12,12 @@ namespace DeployAssistant.ViewModel
         public BackupViewModel BackupVM => _backupVM;
         public MetaFileDiffViewModel MetaFileDiffVM => _metaFileDiffVM;
 
-        public MainViewModel(MetaDataManager metaDataManager)
+        public MainViewModel(AppServices services)
         {
-            _metaDataVM     = new MetaDataViewModel(metaDataManager);
-            _fileTrackVM    = new FileTrackViewModel(metaDataManager);
-            _backupVM       = new BackupViewModel(metaDataManager);
-            _metaFileDiffVM = new MetaFileDiffViewModel(metaDataManager);
+            _metaDataVM     = new MetaDataViewModel(services.MetaDataManager, services.DialogService, services.UiDispatcher);
+            _fileTrackVM    = new FileTrackViewModel(services.MetaDataManager, services.DialogService, services.UiDispatcher);
+            _backupVM       = new BackupViewModel(services.MetaDataManager, services.DialogService, services.UiDispatcher);
+            _metaFileDiffVM = new MetaFileDiffViewModel(services.MetaDataManager, services.DialogService, services.UiDispatcher);
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using DeployAssistant.DataComponent;
+using DeployAssistant.DataComponent;
 using DeployAssistant.Interfaces;
 using DeployAssistant.Migration;
 using DeployAssistant.Migration.Steps;
@@ -84,7 +84,7 @@ namespace DeployAssistant.Utils
         /// Deserialises a <see cref="ProjectStore"/> from a Base64-encoded JSON file.
         /// <para>
         /// If the file contains a V1 <c>ProjectMetaData</c> document
-        /// (<c>SchemaVersion</c> ≤ 1 or absent), the method automatically:
+        /// (<c>SchemaVersion</c> &lt;= 1 or absent), the method automatically:
         /// <list type="number">
         ///   <item>Copies the original file to <c>{filePath}.bak</c>.</item>
         ///   <item>Runs the injected <see cref="IMigrationPipeline{T}"/> to produce
@@ -214,7 +214,7 @@ namespace DeployAssistant.Utils
                 var jsonData = JsonSerializer.Serialize(data);
                 var base64EncodedData = Convert.ToBase64String(Encoding.UTF8.GetBytes(jsonData));
                 File.WriteAllText(filePath, base64EncodedData);
-                return true; 
+                return true;
             }
             catch (Exception ex)
             {
@@ -233,15 +233,15 @@ namespace DeployAssistant.Utils
                 if (data != null)
                 {
                     projectData = data;
-                    return true; 
+                    return true;
                 }
                 projectData = null;
-                return false; 
+                return false;
             }
             catch (Exception ex)
             {
                 Console.WriteLine("Error deserializing ProjectData: " + ex.Message);
-                projectData = null; 
+                projectData = null;
                 return false;
             }
         }
@@ -257,7 +257,7 @@ namespace DeployAssistant.Utils
             catch (Exception ex)
             {
                 Console.WriteLine("Error serializing ProjectMetaData: " + ex.Message);
-                return false; 
+                return false;
             }
         }
         public bool TryDeserializeProjectMetaData(string filePath, out ProjectMetaData? projectMetaData)
@@ -275,12 +275,12 @@ namespace DeployAssistant.Utils
                 }
                 else
                     projectMetaData = null;
-                return false; 
+                return false;
             }
             catch (Exception ex)
             {
                 Console.WriteLine("Error deserializing ProjectMetaData: " + ex.Message);
-                projectMetaData = null; 
+                projectMetaData = null;
                 return false;
             }
         }
@@ -291,7 +291,7 @@ namespace DeployAssistant.Utils
                 var jsonOption = new JsonSerializerOptions { WriteIndented = true };
                 var jsonData = JsonSerializer.Serialize(serializingObject, jsonOption);
                 File.WriteAllText(filePath, jsonData);
-                return true; 
+                return true;
             }
             catch (Exception ex)
             {
@@ -351,7 +351,7 @@ namespace DeployAssistant.Utils
             {
                 result = HandleDirectory(null, dstData.DataAbsPath, state);
             }
-            return result; 
+            return result;
         }
         public bool HandleData(IProjectData? srcData, IProjectData dstData, DataState state)
         {
@@ -368,7 +368,7 @@ namespace DeployAssistant.Utils
         }
         public bool HandleData(string? srcPath, string dstPath, ProjectDataType type, DataState state)
         {
-            bool result; 
+            bool result;
             if (type == ProjectDataType.File)
             {
                 result = HandleFile(srcPath, dstPath, state);
@@ -408,7 +408,7 @@ namespace DeployAssistant.Utils
             }
             catch (Exception ex)
             {
-                Trace.TraceError(ex.Message); return false; 
+                Trace.TraceError(ex.Message); return false;
             }
         }
         public bool HandleFile(string? srcPath, string dstPath, DataState state)
@@ -419,7 +419,7 @@ namespace DeployAssistant.Utils
                 {
                     if (File.Exists(dstPath))
                         File.Delete(dstPath);
-                    return true; 
+                    return true;
                 }
                 if (srcPath == null)
                 {
@@ -428,7 +428,7 @@ namespace DeployAssistant.Utils
                 }
                 if ((state & DataState.Added) != 0)
                 {
-                    if (!Directory.Exists(Path.GetDirectoryName(dstPath))) 
+                    if (!Directory.Exists(Path.GetDirectoryName(dstPath)))
                         Directory.CreateDirectory(Path.GetDirectoryName(dstPath));
                     if (!File.Exists(dstPath))
                         File.Copy(srcPath, dstPath, true);
@@ -439,16 +439,15 @@ namespace DeployAssistant.Utils
                         Directory.CreateDirectory(Path.GetDirectoryName(dstPath));
                     if (srcPath == dstPath)
                     {
-                        //Trace.TraceWarning($"Source File and Dst File path is same for {state.ToString()}, {dstPath}");
-                        return false; 
+                        return false;
                     }
                     File.Copy(srcPath, dstPath, true);
                 }
-                return true; 
+                return true;
             }
             catch (Exception ex)
             {
-                Trace.TraceError(ex.Message); return false; 
+                Trace.TraceError(ex.Message); return false;
             }
         }
 
@@ -459,13 +458,16 @@ namespace DeployAssistant.Utils
                 if (!Directory.Exists(Path.GetDirectoryName(dstPath)))
                     Directory.CreateDirectory(Path.GetDirectoryName(dstPath));
                 if (srcPath != dstPath)
-                    File.Move(srcPath, dstPath, true); 
+                {
+                    if (File.Exists(dstPath)) File.Delete(dstPath);
+                    File.Move(srcPath, dstPath);
+                }
                 return true;
             }
             catch (Exception ex)
             {
                 Trace.TraceWarning($"Couldn't Move File {ex.Message}");
-                return false; 
+                return false;
             }
         }
     }

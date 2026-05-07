@@ -1,5 +1,6 @@
 ﻿using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
+using DeployAssistant.Services;
 using DeployAssistant.Utils;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
@@ -23,7 +24,7 @@ namespace DeployAssistant.DataComponent
         Initializing,
         Idle
     }
-    public class MetaDataManager : IManager
+    public class MetaDataManager
     {
         public string? CurrentProjectPath {  get; set; }
 
@@ -95,19 +96,16 @@ namespace DeployAssistant.DataComponent
         private ExportManager _exportManager;
         private SettingManager _settingManager;
         private FileHandlerTool _fileHandlerTool;
-        private HashTool _hashTool; 
-
-        /// <summary>
-        /// Optional callback to ask the user a yes/no question.
-        /// Parameters: (message, title). Returns true for "Yes", false for "No".
-        /// When null, defaults to true (proceed with the affirmative path).
-        /// </summary>
-        public Func<string, string, bool>? ConfirmationCallback { get; set; }
+        private HashTool _hashTool;
+        private readonly IDialogService _dialogService;
 
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-        public MetaDataManager()
+        public MetaDataManager() : this(new NullDialogService()) { }
+
+        public MetaDataManager(IDialogService dialogService)
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         {
+            _dialogService = dialogService;
             _fileHandlerTool = new FileHandlerTool();
             _hashTool = new HashTool();
         }
@@ -155,10 +153,7 @@ namespace DeployAssistant.DataComponent
             _settingManager.SetPrevProjectEventHandler += SettingManager_SetLastDstProjectCallBack;
             _settingManager.UpdateIgnoreListEventHandler += SettingManager_UpdateIgnoreListCallBack;
 
-            _backupManager.Awake();
-            _updateManager.Awake();
-            _updateManager.Awake();
-            _settingManager.ConfirmationCallback = ConfirmationCallback;
+            _settingManager.DialogService = _dialogService;
             _settingManager.Awake();
         }
 
@@ -255,7 +250,7 @@ namespace DeployAssistant.DataComponent
                         DataState.None,
                         Path.GetFileName(filePath),
                         projectPath,
-                        Path.GetRelativePath(projectPath, filePath),
+                        PathCompat.GetRelativePath(projectPath, filePath),
                         "",
                         true
                         );
@@ -279,7 +274,7 @@ namespace DeployAssistant.DataComponent
                         DataState.None,
                         Path.GetFileName(dirPath),
                         projectPath,
-                        Path.GetRelativePath(projectPath, dirPath),
+                        PathCompat.GetRelativePath(projectPath, dirPath),
                         "",
                         true
                         );
@@ -450,13 +445,13 @@ namespace DeployAssistant.DataComponent
                 }
                 if (_srcProjectData != null)
                 {
-                    bool tryIntegrate = ConfirmationCallback?.Invoke("Src Project Data Found, Try Integrate?", "Integrate Project") ?? true;
+                    bool tryIntegrate = _dialogService.Confirm("Integrate Project", "Src Project Data Found, Try Integrate?") == DialogChoice.Yes;
                     if (tryIntegrate)
                     {
                         List<ChangedFile>? fileDifferences = _fileManager.FindVersionDifferences(_srcProjectData, MainProjectData);
                         if (!_updateManager.TryIntegrateSrcProject(_srcProjectData, fileDifferences))
                         {
-                            bool updateAnyway = ConfirmationCallback?.Invoke("Integration Failed, Update Anyway?", "Update Project") ?? false;
+                            bool updateAnyway = _dialogService.Confirm("Update Project", "Integration Failed, Update Anyway?") == DialogChoice.Yes;
                             if (!updateAnyway)
                             {
                                 return;
@@ -470,7 +465,7 @@ namespace DeployAssistant.DataComponent
                     }
                     else
                     {
-                        bool updateAnyway = ConfirmationCallback?.Invoke("Update Anyway?", "Update Project") ?? false;
+                        bool updateAnyway = _dialogService.Confirm("Update Project", "Update Anyway?") == DialogChoice.Yes;
                         if (!updateAnyway)
                         {
                             return;

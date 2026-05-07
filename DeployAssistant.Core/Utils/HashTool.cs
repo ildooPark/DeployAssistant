@@ -25,32 +25,61 @@ namespace DeployAssistant.Utils
                 return false;
             }
             byte[] srcHashBytes, dstHashBytes;
+            using MD5 md5 = MD5.Create();
+            if (md5 == null)
+            {
+                Trace.TraceError("Failed to Initialize MD5");
+                result = (null, null);
+                return false;
+            }
             using (var srcStream = File.OpenRead(srcFile))
             {
-                srcHashBytes = MD5.HashData(srcStream);
+                srcHashBytes = md5.ComputeHash(srcStream);
             }
             using (var dstStream = File.OpenRead(dstFile))
             {
-                dstHashBytes = MD5.HashData(dstStream);
+                dstHashBytes = md5.ComputeHash(dstStream);
             }
-            string srcHashString = Convert.ToHexString(srcHashBytes);
-            string dstHashString = Convert.ToHexString(dstHashBytes);
+            string srcHashString = BitConverter.ToString(srcHashBytes).Replace("-", "");
+            string dstHashString = BitConverter.ToString(dstHashBytes).Replace("-", "");
             result = (srcHashString, dstHashString);
             return srcHashString == dstHashString;
         }
         public string GetFileMD5CheckSum(string projectPath, string srcFileRelPath)
         {
+            byte[] srcHashBytes;
             string srcFileFullPath = Path.Combine(projectPath, srcFileRelPath);
-            using var srcStream = File.OpenRead(srcFileFullPath);
-            return Convert.ToHexString(MD5.HashData(srcStream));
+            using MD5 md5 = MD5.Create();
+            if (md5 == null)
+            {
+                Trace.TraceError($"Failed to Initialize MD5 for file {srcFileRelPath}");
+                return "";
+            }
+            using (var srcStream = File.OpenRead(srcFileFullPath))
+            {
+                srcHashBytes = md5.ComputeHash(srcStream);
+            }
+            md5.Dispose();
+            return BitConverter.ToString(srcHashBytes).Replace("-", "");
         }
         public async Task GetFileMD5CheckSumAsync(ProjectFile file)
         {
             try
             {
-                using var srcStream = File.OpenRead(file.DataAbsPath);
-                byte[] srcHashBytes = await MD5.HashDataAsync(srcStream);
-                file.DataHash = Convert.ToHexString(srcHashBytes);
+                byte[] srcHashBytes;
+                using MD5 md5 = MD5.Create();
+                if (md5 == null)
+                {
+                    Trace.TraceError("Failed to Initialize MD5 Async");
+                    return;
+                }
+                using (var srcStream = File.OpenRead(file.DataAbsPath))
+                {
+                    srcHashBytes = await Task.Run(() => md5.ComputeHash(srcStream));
+                }
+                string resultHash = BitConverter.ToString(srcHashBytes).Replace("-", "");
+                file.DataHash = resultHash;
+                md5.Dispose();
             }
             catch (Exception ex)
             {
@@ -61,8 +90,20 @@ namespace DeployAssistant.Utils
         {
             try
             {
-                using var srcStream = File.OpenRead(file.DataAbsPath);
-                file.DataHash = Convert.ToHexString(MD5.HashData(srcStream));
+                byte[] srcHashBytes;
+                using MD5 md5 = MD5.Create();
+                if (md5 == null)
+                {
+                    Trace.TraceError("Failed to Initialize MD5");
+                    return;
+                }
+                using (var srcStream = File.OpenRead(file.DataAbsPath))
+                {
+                    srcHashBytes = md5.ComputeHash(srcStream);
+                }
+                string resultHash = BitConverter.ToString(srcHashBytes).Replace("-", "");
+                file.DataHash = resultHash;
+                md5.Dispose();
             }
             catch (Exception ex)
             {
@@ -73,9 +114,20 @@ namespace DeployAssistant.Utils
         {
             try
             {
-                using var srcStream = File.OpenRead(fileFullPath);
-                byte[] srcHashBytes = await MD5.HashDataAsync(srcStream);
-                return Convert.ToHexString(srcHashBytes);
+                byte[] srcHashBytes;
+                using MD5 md5 = MD5.Create();
+                if (md5 == null)
+                {
+                    Trace.TraceError("Failed to Initialize MD5 Async");
+                    return null;
+                }
+                using (var srcStream = File.OpenRead(fileFullPath))
+                {
+                    srcHashBytes = await Task.Run(() => md5.ComputeHash(srcStream));
+                }
+                string resultHash = BitConverter.ToString(srcHashBytes).Replace("-", "");
+                md5.Dispose();
+                return resultHash;
             }
             catch (Exception ex)
             {
@@ -86,18 +138,18 @@ namespace DeployAssistant.Utils
         #endregion
         public string GetUniqueComputerID(string userID)
         {
-            // Use the exact byte count so the stackalloc threshold reflects real UTF-8 sizes,
-            // not the worst-case estimate from GetMaxByteCount.
-            int byteCount = Encoding.UTF8.GetByteCount(userID);
-            Span<byte> inputBuf = byteCount <= 256 ? stackalloc byte[byteCount] : new byte[byteCount];
-            Encoding.UTF8.GetBytes(userID, inputBuf);
+            using (SHA256 sha256Hash = SHA256.Create())
+            {
+                byte[] bytes = sha256Hash.ComputeHash(Encoding.UTF8.GetBytes(userID));
 
-            // Stack-allocate the 32-byte SHA-256 output buffer and use the allocation-free TryHashData overload.
-            // Convert the hash bytes to a 10-character string by taking the first 5 bytes (40 bits) of the hash.
-            Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
-            if (!SHA256.TryHashData(inputBuf, hash, out _))
-                throw new InvalidOperationException("SHA256.TryHashData failed unexpectedly.");
-            return Convert.ToHexStringLower(hash[..5]);
+                // Convert the hash bytes to a 10-character string by taking the first 5 bytes (40 bits) of the hash
+                StringBuilder builder = new StringBuilder();
+                for (int i = 0; i < 5; i++)
+                {
+                    builder.Append(bytes[i].ToString("x2"));
+                }
+                return builder.ToString();
+            }
         }
         public string GetUniqueProjectDataID(ProjectData projectData)
         {
@@ -106,20 +158,21 @@ namespace DeployAssistant.Utils
             {
                 filesListWithHash.Append($"{file.DataRelPath}\\{file.DataHash}");
             }
-            string input = filesListWithHash.ToString();
-
-            // Rent a byte[] from the pool sized to the exact UTF-8 byte count to avoid unnecessary pool pressure.
-            int byteCount = Encoding.UTF8.GetByteCount(input);
+            string inputStr = filesListWithHash.ToString();
+            using SHA256 sha256 = SHA256.Create();
+            if (sha256 == null)
+            {
+                Trace.TraceError($"Failed to Initialize SHA256 for ProjectData Hash {projectData.ProjectName}");
+                return "";
+            }
+            // Rent a byte[] from the pool for UTF-8 encoding to avoid a one-off heap allocation.
+            int byteCount = Encoding.UTF8.GetByteCount(inputStr);
             byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
             try
             {
-                int written = Encoding.UTF8.GetBytes(input, rented);
-
-                // Stack-allocate the 32-byte SHA-256 output buffer.
-                Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
-                if (!SHA256.TryHashData(rented.AsSpan(0, written), hash, out _))
-                    throw new InvalidOperationException("SHA256.TryHashData failed unexpectedly.");
-                return Convert.ToHexString(hash);
+                int written = Encoding.UTF8.GetBytes(inputStr, 0, inputStr.Length, rented, 0);
+                byte[] hashBytes = sha256.ComputeHash(rented, 0, written);
+                return BitConverter.ToString(hashBytes).Replace("-", "");
             }
             finally
             {

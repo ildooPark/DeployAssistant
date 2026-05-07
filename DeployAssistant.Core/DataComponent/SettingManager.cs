@@ -1,6 +1,6 @@
 ﻿using DeployAssistant.DataComponent;
-using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
+using DeployAssistant.Services;
 using DeployAssistant.Utils;
 using System.Diagnostics;
 using System.IO;
@@ -15,19 +15,14 @@ namespace DeployAssistant.DataComponent
         Integration = 1 << 1, 
         Deploy = 1 << 2
     }
-    public class SettingManager : IManager
+    public class SettingManager
     {
         public event Action<MetaDataState>? ManagerStateEventHandler;
         public event Action<string>? SetPrevProjectEventHandler;
         public event Action<ProjectIgnoreData>? UpdateIgnoreListEventHandler;
         public ProjectIgnoreData _projectIgnoreData; 
 
-        /// <summary>
-        /// Optional callback to ask the user a yes/no question.
-        /// Parameters: (message, title). Returns true for "Yes", false for "No".
-        /// When null, defaults to true (proceed with the affirmative path).
-        /// </summary>
-        public Func<string, string, bool>? ConfirmationCallback { get; set; }
+        public IDialogService DialogService { get; set; } = new NullDialogService();
 
         private readonly string? DAMetaFilePath;
         private string? ignoreMetaFilePath;
@@ -58,9 +53,9 @@ namespace DeployAssistant.DataComponent
                 if (File.Exists(DAMetaFilePath))
                 {
                     if (!_fileHandlerTool.TryDeserializeJsonData(DAMetaFilePath, out LocalConfigData? localConfigData)) return;
-                    bool proceed = ConfirmationCallback?.Invoke(
-                        $"Recent Destination Project Path Found: Proceed with this Destination? {localConfigData?.LastOpenedDstPath}",
-                        "Import Previous Destination Project") ?? true;
+                    bool proceed = DialogService.Confirm(
+                        "Import Previous Destination Project",
+                        $"Recent Destination Project Path Found: Proceed with this Destination? {localConfigData?.LastOpenedDstPath}") == DialogChoice.Yes;
                     if (proceed && localConfigData?.LastOpenedDstPath != null)
                     {
                         SetPrevProjectEventHandler?.Invoke(localConfigData.LastOpenedDstPath);

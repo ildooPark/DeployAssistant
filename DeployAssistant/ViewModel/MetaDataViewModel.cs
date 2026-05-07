@@ -1,9 +1,11 @@
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
+using DeployAssistant.Services;
 using DeployAssistant.ViewModel.Utils;
 using Microsoft.Win32;
+using System;
 using System.Collections.ObjectModel;
-using System.Windows;
+using System.Threading.Tasks;
 using System.Windows.Input;
 
 namespace DeployAssistant.ViewModel
@@ -103,13 +105,21 @@ namespace DeployAssistant.ViewModel
         public ICommand GetProject => _getProject ??= new RelayCommand(RetrieveProject, CanRetrieveProject);
 
         private readonly MetaDataManager _metaDataManager;
+        private readonly IDialogService _dialogService;
+        private readonly IUiDispatcher _uiDispatcher;
         private MetaDataState? _metaDataState = MetaDataState.Idle;
 
-        public MetaDataViewModel(MetaDataManager metaDataManager)
+        public MetaDataViewModel(MetaDataManager metaDataManager,
+                                 IDialogService dialogService,
+                                 IUiDispatcher uiDispatcher)
         {
             _metaDataManager = metaDataManager;
+            _dialogService = dialogService;
+            _uiDispatcher = uiDispatcher;
             _metaDataManager.ProjLoadedEventHandler += MetaDataManager_ProjLoadedCallBack;
+            TrackUnsubscribe(() => _metaDataManager.ProjLoadedEventHandler -= MetaDataManager_ProjLoadedCallBack);
             _metaDataManager.ManagerStateEventHandler += MetaDataStateChangeCallBack;
+            TrackUnsubscribe(() => _metaDataManager.ManagerStateEventHandler -= MetaDataStateChangeCallBack);
         }
 
         #region Update Version
@@ -125,7 +135,7 @@ namespace DeployAssistant.ViewModel
         {
             if (UpdaterName == "" || UpdateLog == "")
             {
-                MessageBox.Show("Must Have both Deploy Version AND UpdaterName", "Validation", MessageBoxButton.OK);
+                _dialogService.Inform("Validation", "Must Have both Deploy Version AND UpdaterName");
                 return;
             }
             _metaDataManager.RequestProjectUpdate(_updaterName, UpdateLog, CurrentProjectPath);
@@ -153,15 +163,15 @@ namespace DeployAssistant.ViewModel
             bool retrieveProjectResult = _metaDataManager.RequestProjectRetrieval(projectPath);
             if (!retrieveProjectResult)
             {
-                var result = MessageBox.Show($"{projectPath}\nVersionLog file not found\nInitialize A New Project?",
-                    "Import Project", MessageBoxButton.YesNo);
-                if (result == MessageBoxResult.Yes)
+                var result = _dialogService.Confirm("Import Project",
+                    $"{projectPath}\nVersionLog file not found\nInitialize A New Project?");
+                if (result == DialogChoice.Yes)
                 {
                     Task.Run(() => _metaDataManager.RequestProjectInitialization(projectPath));
                 }
                 else
                 {
-                    MessageBox.Show("Please Select Another Project Path");
+                    _dialogService.Inform("Import Project", "Please Select Another Project Path");
                     return;
                 }
             }
@@ -173,11 +183,10 @@ namespace DeployAssistant.ViewModel
 
         private void MetaDataStateChangeCallBack(MetaDataState state)
         {
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            _uiDispatcher.Invoke(() =>
             {
                 _metaDataState = state;
                 CurrentMetaDataState = state.ToString();
-                System.Windows.Application.Current?.MainWindow?.UpdateLayout();
             });
         }
 

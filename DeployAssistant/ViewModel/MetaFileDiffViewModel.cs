@@ -1,11 +1,13 @@
-#pragma warning disable CS0618
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
+using DeployAssistant.Services;
 using DeployAssistant.ViewModel.Utils;
 using Microsoft.Win32;
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Windows;
+using System.Linq;
 using System.Windows.Input;
 
 namespace DeployAssistant.ViewModel
@@ -19,6 +21,8 @@ namespace DeployAssistant.ViewModel
     public class MetaFileDiffViewModel : ViewModelBase
     {
         private readonly MetaDataManager _metaDataManager;
+        private readonly IDialogService _dialogService;
+        private readonly IUiDispatcher _uiDispatcher;
 
         // ── Loaded metafile state ─────────────────────────────────────────
 
@@ -108,9 +112,13 @@ namespace DeployAssistant.ViewModel
 
         private const string VersionLogExtension = ".VersionLog";
 
-        public MetaFileDiffViewModel(MetaDataManager metaDataManager)
+        public MetaFileDiffViewModel(MetaDataManager metaDataManager,
+                                     IDialogService dialogService,
+                                     IUiDispatcher uiDispatcher)
         {
             _metaDataManager = metaDataManager;
+            _dialogService = dialogService;
+            _uiDispatcher = uiDispatcher;
         }
 
         // ── Public drag-drop entry point ──────────────────────────────────
@@ -213,12 +221,10 @@ namespace DeployAssistant.ViewModel
             if (selected.Count == 0) return;
 
             string targetVersion = LoadedMetaFile?.UpdatedVersion ?? "?";
-            var confirm = MessageBox.Show(
-                $"You are about to stage {selected.Count} file change(s) to match version {targetVersion}.\n\nContinue?",
+            var confirm = _dialogService.Confirm(
                 "Import / Sync",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-            if (confirm != MessageBoxResult.Yes) return;
+                $"You are about to stage {selected.Count} file change(s) to match version {targetVersion}.\n\nContinue?");
+            if (confirm != DialogChoice.Yes) return;
 
             foreach (var item in selected)
             {
@@ -262,4 +268,3 @@ namespace DeployAssistant.ViewModel
         }
     }
 }
-#pragma warning restore CS0618

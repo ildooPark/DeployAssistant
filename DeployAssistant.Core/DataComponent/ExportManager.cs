@@ -10,20 +10,13 @@ using DocumentFormat.OpenXml.Spreadsheet;
 
 namespace DeployAssistant.DataComponent
 {
-    public class ExportManager : IManager
+    public class ExportManager
     {
         private string? _currentProjectPath; 
         private Dictionary<string, ProjectFile>? _backupFilesDict;
         private FileHandlerTool _fileHandlerTool;
 
-        /// <summary>
-        /// Optional callback to ask the user a yes/no question.
-        /// Parameters: (message, title). Returns true for "Yes", false for "No".
-        /// When null, defaults to false (do not retry on failure).
-        /// </summary>
-        public Func<string, string, bool>? ConfirmationCallback { get; set; }
-
-        public ExportManager() 
+        public ExportManager()
         {
             _fileHandlerTool = new FileHandlerTool();
         }
@@ -34,7 +27,6 @@ namespace DeployAssistant.DataComponent
         public event Action<string>? ExportCompleteEventHandler;
         public event Action<MetaDataState>? ManagerStateEventHandler;
         #endregion
-        public void Awake(){}
         public void ExportProjectVersionLog(ProjectData projectData)
         {
             string exportDstPath = GetExportProjectPath(projectData);
@@ -46,18 +38,8 @@ namespace DeployAssistant.DataComponent
                 exportResult = _fileHandlerTool.TrySerializeProjectData(projectData, exportVersionLogPath);
                 if (!exportResult)
                 {
-                    bool retry = ConfirmationCallback?.Invoke(
-                        "Export Failed, Would you like to try again?",
-                        "Export Project Version Log") ?? false;
-                    if (retry)
-                    {
-                        continue;
-                    }
-                    else
-                    {
-                        Trace.TraceWarning("Export Canceled");
-                        return;
-                    }
+                    Trace.TraceWarning("Export Canceled");
+                    return;
                 }
             }
             ExportCompleteEventHandler?.Invoke(exportDstPath);
@@ -78,19 +60,9 @@ namespace DeployAssistant.DataComponent
                 exportResult = TryExportProject(projectData, out exportPath);
                 if (!exportResult)
                 {
-                    bool retry = ConfirmationCallback?.Invoke(
-                        "Export Failed, Would you like to try again?",
-                        "Export Project") ?? false;
-                    if (retry)
-                    {
-                        continue;
-                    }
-                    else
-                    {
-                        Trace.TraceWarning("Export Canceled");
-                        ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                        break;
-                    }
+                    Trace.TraceWarning("Export Canceled");
+                    ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
+                    break;
                 }
             }
             if (exportPath != null)

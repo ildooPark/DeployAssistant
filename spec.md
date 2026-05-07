@@ -21,7 +21,7 @@ Core responsibilities:
 
 | Item | Detail |
 |---|---|
-| Language | C# 14 / .NET 10.0 (Windows) for WPF/ViewModel/Core; .NET 8.0 for CLI; .NET Standard 2.0 for Core.Standard |
+| Language | C# / .NET 8.0-windows for WPF GUI + Tests; .NET Framework 4.7.2 (net472) for CLI; .NET Standard 2.0 for Core |
 | UI Framework | WPF (`UseWPF=true`) |
 | Auxiliary UI | Windows Forms (`UseWindowsForms=true`) — used for `FolderBrowserDialog`, `MessageBox`, `DialogResult` |
 | Architecture pattern | MVVM (Model / ViewModel / View) with event-driven data flow |
@@ -38,15 +38,21 @@ Core responsibilities:
 
 ## 3. Project Layout
 
-The solution contains six compilable projects plus one test project:
+The solution contains four compilable projects plus one test project:
 
 ```
 DeployAssistant.sln
 │
-├── DeployAssistant.Core/              ← net10.0-windows class library; all business logic
+├── DeployAssistant.Core/              ← netstandard2.0 class library; all business logic
 │   ├── Interfaces/
-│   │   ├── IManager.cs
-│   │   └── IProjectData.cs
+│   │   ├── IProjectData.cs            ← umbrella: IProjectDataIdentity + IProjectDataContent
+│   │   ├── IProjectDataIdentity.cs    ← Type, Name, UpdatedTime (light surface for ignore lists)
+│   │   └── IProjectDataContent.cs     ← State, RelPath, SrcPath, AbsPath, Hash (ProjectFile only)
+│   ├── Services/
+│   │   ├── IDialogService.cs          ← confirm / inform / pick-folder / open-in-shell seam
+│   │   ├── IUiDispatcher.cs           ← post / invoke on the UI thread; sync in CLI/tests
+│   │   ├── DialogChoice.cs
+│   │   └── NullDialogService.cs       ← fallback; Confirm returns the default choice
 │   ├── Model/                         ← pure data classes (serializable)
 │   │   ├── ProjectMetaData.cs
 │   │   ├── ProjectData.cs
@@ -59,7 +65,7 @@ DeployAssistant.sln
 │   │   ├── DeployData.cs
 │   │   └── LocalConfigData.cs
 │   ├── DataComponent/                 ← service/manager layer
-│   │   ├── MetaDataManager.cs         ← central orchestrator
+│   │   ├── MetaDataManager.cs         ← central orchestrator; accepts IDialogService on ctor
 │   │   ├── FileManager.cs
 │   │   ├── BackupManager.cs
 │   │   ├── UpdateManager.cs
@@ -71,37 +77,27 @@ DeployAssistant.sln
 │       ├── HashTool.cs
 │       └── LogTool.cs
 │
-├── DeployAssistant.Core.Standard/     ← netstandard2.0 class library; cross-platform subset for CLI
-│   │                                    Links most source files directly from Core; has its own
-│   │                                    platform-neutral variants of FileManager, MetaDataManager,
-│   │                                    FileHandlerTool, HashTool, and a CompatHelper shim.
-│   ├── CompatHelper.cs                ← netstandard2.0 compatibility shims
-│   ├── DataComponent/
-│   │   ├── MetaDataManager.cs         ← platform-neutral variant (no MessageBox, no WPF)
-│   │   └── FileManager.cs             ← platform-neutral variant
-│   └── Utils/
-│       ├── FileHandlerTool.cs         ← platform-neutral variant
-│       └── HashTool.cs                ← platform-neutral variant
-│
-├── DeployAssistant.ViewModel/         ← net10.0-windows class library; WPF + WinForms
+├── DeployAssistant/                   ← net8.0-windows WPF exe (main GUI application)
 │   │                                    References: DeployAssistant.Core
-│   ├── ViewModelBase.cs
-│   ├── MainViewModel.cs
-│   ├── MetaDataViewModel.cs
-│   ├── FileTrackViewModel.cs
-│   ├── BackupViewModel.cs
-│   ├── VersionDiffViewModel.cs
-│   ├── VersionIntegrationViewModel.cs
-│   ├── VersionCheckViewModel.cs
-│   ├── VersionCompatibilityViewModel.cs
-│   ├── OverlapFileViewModel.cs
-│   └── Utils/
-│       └── RelayCommand.cs
-│
-├── DeployAssistant/                   ← net10.0-windows WPF exe (main GUI application)
-│   │                                    References: DeployAssistant.Core, DeployAssistant.ViewModel
-│   ├── App.xaml / App.xaml.cs         ← application entry-point; global singletons
+│   ├── App.xaml / App.xaml.cs         ← application entry-point
+│   ├── AppServices.cs                 ← composition root; wires WpfDialogService + WpfUiDispatcher
 │   ├── AssemblyInfo.cs
+│   ├── Services/Wpf/
+│   │   ├── WpfDialogService.cs        ← IDialogService impl (MessageBox, FolderBrowserDialog)
+│   │   └── WpfUiDispatcher.cs         ← IUiDispatcher impl (Application.Current.Dispatcher)
+│   ├── ViewModel/
+│   │   ├── ViewModelBase.cs           ← INotifyPropertyChanged + IDisposable; TrackUnsubscribe
+│   │   ├── MainViewModel.cs
+│   │   ├── MetaDataViewModel.cs
+│   │   ├── FileTrackViewModel.cs
+│   │   ├── BackupViewModel.cs
+│   │   ├── VersionDiffViewModel.cs
+│   │   ├── VersionIntegrationViewModel.cs
+│   │   ├── VersionCheckViewModel.cs
+│   │   ├── VersionCompatibilityViewModel.cs
+│   │   ├── OverlapFileViewModel.cs
+│   │   └── Utils/
+│   │       └── RelayCommand.cs
 │   └── View/
 │       ├── MainWindow.xaml / .cs
 │       ├── IntegrityLogWindow.xaml / .cs
@@ -112,12 +108,13 @@ DeployAssistant.sln
 │       ├── OverlapFileWindow.xaml / .cs
 │       └── VersionComparisonWindow.cs
 │
-├── DeployAssistant.CLI/               ← net8.0 console exe; cross-platform CLI
-│   │                                    References: DeployAssistant.Core.Standard
+├── DeployAssistant.CLI/               ← net472 console exe; runs on Win10 1803+ with .NET Framework 4.7.2
+│   │                                    References: DeployAssistant.Core
 │   │                                    Binary name: deployassistant
 │   └── Program.cs
 │
-└── DeployAssistant.Tests/             ← unit test project (xUnit); references DeployAssistant.Core
+└── DeployAssistant.Tests/             ← net8.0-windows unit test project (xUnit)
+    │                                    References: DeployAssistant.Core
     ├── Models/
     │   ├── ChangedFileTests.cs
     │   ├── ProjectDataTests.cs
@@ -130,10 +127,6 @@ DeployAssistant.sln
         └── IntegrityCheckRobustnessTests.cs
 ```
 
-### Why two Core libraries?
-
-`DeployAssistant.Core` targets `net10.0-windows` and can use WPF/WinForms-dependent APIs (e.g. `MessageBox`). `DeployAssistant.Core.Standard` targets `netstandard2.0` so the CLI (`net8.0`) can reference it without pulling in Windows-only assemblies. The Standard project links the platform-neutral source files from Core directly and provides its own implementations of the modules that call Windows UI APIs.
-
 ### Namespace irregularities (known technical debt)
 The codebase uses **two namespace prefixes** across files in the same project:
 - `DeployAssistant` / `DeployAssistant.Interfaces` / `DeployAssistant.Model` / `DeployAssistant.DataComponent` / `DeployAssistant.ViewModel` / `DeployAssistant.View` / `DeployAssistant.Utils` — the vast majority of files
@@ -144,35 +137,44 @@ All live in a single compiled assembly. A refactor should consolidate to the `De
 
 ---
 
-## 4. Global Application Objects (`App.xaml.cs`)
+## 4. Global Application Objects
 
-Three lazy singletons are exposed as static properties on `App`:
+The WPF GUI uses `AppServices` as its composition root (see `DeployAssistant/AppServices.cs`). It is constructed once in `App.OnStartup` and passed to `MainWindow`, then threaded down to child windows.
 
 | Property | Type | Purpose |
 |---|---|---|
-| `App.MetaDataManager` | `MetaDataManager` | Central service hub; created once and shared by all ViewModels |
-| `App.FileHandlerTool` | `FileHandlerTool` | Low-level file I/O utility shared by all managers |
-| `App.HashTool` | `HashTool` | MD5/SHA-256 hashing utility shared by all managers |
+| `AppServices.MetaDataManager` | `MetaDataManager` | Central service hub; constructed with `IDialogService` |
+| `AppServices.DialogService` | `IDialogService` | WPF impl: `WpfDialogService` (MessageBox + FolderBrowserDialog) |
+| `AppServices.UiDispatcher` | `IUiDispatcher` | WPF impl: `WpfUiDispatcher` (wraps `Application.Current.Dispatcher`) |
 
-`App.AwakeModel()` is called from `MainViewModel` constructor and triggers `MetaDataManager.Awake()`, which constructs all sub-managers and wires up all event subscriptions.
+`AppServices` calls `MetaDataManager.Awake()` on construction, which constructs all sub-managers and wires up all event subscriptions. The old `App.MetaDataManager` / `App.FileHandlerTool` / `App.HashTool` static singletons have been replaced by `AppServices`.
 
 ---
 
 ## 5. Interfaces
 
-### `IManager`
+### `IProjectDataIdentity`
+The minimum identity surface every tracked entry must expose.
 ```csharp
-void Awake();
-event Action<MetaDataState> ManagerStateEventHandler;
+ProjectDataType DataType { get; }
+string DataName { get; }
+DateTime UpdatedTime { get; set; }
 ```
-All five DataComponent managers implement this interface. `Awake()` is called after construction for deferred initialization. All managers must fire `ManagerStateEventHandler` to report their state to the UI.
+Implemented by both `ProjectFile` and `RecordedFile`. Use this type in code that only needs to match by name/type (e.g. ignore-list filtering) to avoid coupling to path/hash fields that `RecordedFile` does not meaningfully populate.
 
-### `IProjectData`
-Implemented by `ProjectFile` and `RecordedFile`. Defines the common contract for a tracked data entry:
-- `ProjectDataType DataType` — `File` or `Directory`
-- `DataState DataState`
-- `string DataName`, `DataRelPath`, `DataSrcPath`, `DataAbsPath` (computed), `DataHash`
-- `DateTime UpdatedTime`
+### `IProjectDataContent`
+Carries the path, hash, and state of a tracked file or directory.
+```csharp
+DataState DataState { get; set; }
+string DataRelPath { get; }
+string DataSrcPath { get; set; }
+string DataAbsPath { get; }   // computed: Path.Combine(DataSrcPath, DataRelPath)
+string DataHash { get; set; }
+```
+Implemented by `ProjectFile` only. `RecordedFile` does not implement this interface.
+
+### `IProjectData : IProjectDataIdentity, IProjectDataContent`
+Compatibility umbrella combining both interfaces. Existing call sites that accept `IProjectData` continue to work unchanged. New code should prefer the narrower interface (`IProjectDataIdentity` or `IProjectDataContent`) where only part of the surface is needed.
 
 ### `ProjectDataType` (enum, defined in `IProjectData.cs`)
 ```
@@ -339,7 +341,9 @@ ViewModels subscribe to `ManagerStateEventHandler` and cache the last state. Com
 
 **Owns:** `ProjectMetaData`, `MainProjectData`, `_srcProjectData`.
 
-**Sub-managers wired in `Awake()`:** `FileManager`, `BackupManager`, `UpdateManager`, `ExportManager`, `SettingManager`.
+**Construction:** `MetaDataManager(IDialogService dialogService)`. A parameterless overload delegates to `new NullDialogService()` for backward-compat (tests, CLI scaffold). `AppServices` passes a `WpfDialogService`; the CLI passes a `ConsoleDialogService`.
+
+**`Awake()`:** constructs `FileManager`, `BackupManager`, `UpdateManager`, `ExportManager`, `SettingManager`; wires all inter-manager event subscriptions; assigns `_settingManager.DialogService = _dialogService`; calls `_settingManager.Awake()` (the only manager whose `Awake()` is called here — it reads `DeployAssistant.config` and fires the re-open prompt).
 
 All public `Request*` methods are the sole API surface that ViewModels call. The manager routes requests to the appropriate sub-manager and re-fires results as events.
 
@@ -568,14 +572,14 @@ Static helper for building changelogs in `UpdateManager`:
 - `RegisterChange(log, state, srcData, dstData)` — two-sided diff entry (shows hash and build version change)
 
 ### 9.4 `RelayCommand`
-Standard `ICommand` implementation (lives in `DeployAssistant.ViewModel/Utils/RelayCommand.cs`). Constructor takes `Action<object> execute` and optional `Func<object, bool> canExecute`. `CanExecuteChanged` is raised on `CommandManager.RequerySuggested`.
+Standard `ICommand` implementation (lives in `DeployAssistant/ViewModel/Utils/RelayCommand.cs`). Constructor takes `Action<object> execute` and optional `Func<object, bool> canExecute`. `CanExecuteChanged` is raised on `CommandManager.RequerySuggested`.
 
 ---
 
 ## 10. ViewModel Layer
 
 ### 10.1 `ViewModelBase`
-Implements `INotifyPropertyChanged`. Provides `OnPropertyChanged(string propertyName)`.
+Implements `INotifyPropertyChanged` and `IDisposable`. Provides `OnPropertyChanged(string propertyName)` and `SetField<T>(ref field, value)`. Child classes register event-handler teardowns via `TrackUnsubscribe(Action)` — all registered unsubscribers are invoked when the ViewModel is disposed, preventing event-handler leaks when secondary windows are closed.
 
 ### 10.2 `MainViewModel`
 Root ViewModel composed in `MainWindow`. Constructs and exposes:
@@ -763,8 +767,6 @@ The following issues were observed in the current implementation and should be a
 
 6. **Inconsistent namespace** (`DeployAssistant.*` vs `DeployManager.*`): `SettingManager.cs` uses namespace `DeployManager.DataComponent` and `LocalConfigData.cs` uses `DeployManager.Model`. All files should be unified under the `DeployAssistant.*` hierarchy.
 
-7. **Double `_updateManager.Awake()` call** (`MetaDataManager.Awake()`, lines 154–155): `_updateManager.Awake()` is called twice in succession; `_fileManager.Awake()` and `_exportManager.Awake()` are never called.
-
 8. **CS8618 suppression**: Many constructors suppress the nullable reference warning. Most could be resolved with proper nullable annotations or constructor chaining.
 
 9. **Direct `MessageBox` calls in DataComponent**: Business logic managers call `MessageBox.Show` and `WPF.MessageBox.Show` directly, coupling them to the UI. These should be replaced with events or exceptions.
@@ -786,7 +788,7 @@ The following issues were observed in the current implementation and should be a
 All UI actions are bound to `ICommand` properties using `RelayCommand`. `CanExecute` guards check both `_metaDataState == Idle` and data preconditions.
 
 ### Deferred initialization
-All managers implement `Awake()` for post-constructor setup. This pattern should be preserved or replaced with dependency injection during refactoring.
+Managers use `Awake()` for post-constructor setup. `MetaDataManager.Awake()` is the single call site; sub-managers do not implement a shared interface for this — each is wired individually in that method.
 
 ### Immutable snapshot copies
 `ProjectData` and `ProjectFile` are copied (not shared by reference) when stored in `ProjectMetaData.ProjectDataList`. Deep-copy constructors exist on both classes and must be maintained.
@@ -798,7 +800,7 @@ All managers implement `Awake()` for post-constructor setup. This pattern should
 
 ## 16. CLI Reference (`DeployAssistant.CLI`)
 
-Binary name: `deployassistant`. Targets `net8.0` (cross-platform). References `DeployAssistant.Core.Standard`.
+Binary name: `deployassistant`. Targets `net472` (framework-dependent). References `DeployAssistant.Core`. Ships as `deployassistant.exe` plus supporting DLLs in a single output folder; requires .NET Framework 4.7.2 pre-installed on the target machine (present by default on Windows 10 1803 and later).
 
 ### 16.1 Commands
 
@@ -889,7 +891,7 @@ Use **`Spectre.Console`** (NuGet `Spectre.Console`) in `DeployAssistant.CLI`:
 - `AnsiConsole.Status()` for the spinner around blocking wait loops.
 - `AnsiConsole.Write(new Table())` for `list` and `load` output.
 
-The `DeployAssistant.Core.Standard` layer fires events (`FileChangesEventHandler`, `ManagerStateEventHandler`) that the CLI can subscribe to in order to drive live progress updates without changing core logic.
+The `DeployAssistant.Core` layer fires events (`FileChangesEventHandler`, `ManagerStateEventHandler`) that the CLI can subscribe to in order to drive live progress updates without changing core logic.
 
 ---
 

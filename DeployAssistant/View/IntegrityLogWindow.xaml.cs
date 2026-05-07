@@ -13,15 +13,19 @@ namespace DeployAssistant.View
         public IntegrityLogWindow(ProjectData projData, string versionLog, ObservableCollection<ProjectFile> fileList)
         {
             InitializeComponent();
-            var versionCheckViewModel = new VersionCheckViewModel(App.MetaDataManager, projData, versionLog, fileList);
+            var services = ((App)Application.Current).Services!;
+            var versionCheckViewModel = new VersionCheckViewModel(services.MetaDataManager, projData, versionLog, fileList);
             this.DataContext = versionCheckViewModel;
+            Closed += (_, _) => (versionCheckViewModel as IDisposable)?.Dispose();
         }
 
         public IntegrityLogWindow(ProjectData projectData)
         {
             InitializeComponent();
-            var versionCheckViewModel = new VersionCheckViewModel(App.MetaDataManager, projectData);
+            var services = ((App)Application.Current).Services!;
+            var versionCheckViewModel = new VersionCheckViewModel(services.MetaDataManager, projectData);
             this.DataContext = versionCheckViewModel;
+            Closed += (_, _) => (versionCheckViewModel as IDisposable)?.Dispose();
         }
 
         private void FileFilterKeyword_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)

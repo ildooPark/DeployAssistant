@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
+using DeployAssistant.Services;
 using Spectre.Console;
 
 namespace DeployAssistant.CLI
@@ -13,6 +14,8 @@ namespace DeployAssistant.CLI
     {
         private static int Main(string[] args)
         {
+            var dialog = new ConsoleDialogService(autoYes: args.Contains("--yes"));
+
             if (args.Length == 0)
             {
                 ShowHelp();
@@ -24,15 +27,15 @@ namespace DeployAssistant.CLI
 
             return command switch
             {
-                "init"             => RunInit(rest),
-                "load"             => RunLoad(rest),
-                "scan"             => RunScan(rest),
-                "stage"            => RunStage(rest),
-                "deploy"           => RunDeploy(rest),
-                "revert"           => RunRevert(rest),
-                "export"           => RunExport(rest),
-                "list"             => RunList(rest),
-                "integrity-check"  => RunIntegrityCheck(rest),
+                "init"             => RunInit(rest, dialog),
+                "load"             => RunLoad(rest, dialog),
+                "scan"             => RunScan(rest, dialog),
+                "stage"            => RunStage(rest, dialog),
+                "deploy"           => RunDeploy(rest, dialog),
+                "revert"           => RunRevert(rest, dialog),
+                "export"           => RunExport(rest, dialog),
+                "list"             => RunList(rest, dialog),
+                "integrity-check"  => RunIntegrityCheck(rest, dialog),
                 "--help" or "help" => Help(),
                 _ => UnknownCommand(command)
             };
@@ -42,15 +45,14 @@ namespace DeployAssistant.CLI
         //  Commands                                                           //
         // ------------------------------------------------------------------ //
 
-        private static int RunInit(string[] args)
+        private static int RunInit(string[] args, ConsoleDialogService dialog)
         {
             if (args.Length < 1) return UsageError("init <path>");
             string path = args[0];
 
-            var mgr = CreateManager();
+            var mgr = CreateManager(dialog);
             using var done = new ManualResetEventSlim(false);
             mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
-            mgr.ConfirmationCallback = (_, _) => true;
 
             AnsiConsole.Status()
                 .Spinner(Spinner.Known.Dots)
@@ -65,13 +67,12 @@ namespace DeployAssistant.CLI
             return 0;
         }
 
-        private static int RunLoad(string[] args)
+        private static int RunLoad(string[] args, ConsoleDialogService dialog)
         {
             if (args.Length < 1) return UsageError("load <path>");
             string path = args[0];
 
-            var mgr = CreateManager();
-            mgr.ConfirmationCallback = (_, _) => false;
+            var mgr = CreateManager(dialog);
 
             bool ok = mgr.RequestProjectRetrieval(path);
             if (!ok)
@@ -84,13 +85,13 @@ namespace DeployAssistant.CLI
             return 0;
         }
 
-        private static int RunScan(string[] args)
+        private static int RunScan(string[] args, ConsoleDialogService dialog)
         {
             if (args.Length < 2) return UsageError("scan <dst-path> <src-path>");
             string dstPath = args[0];
             string srcPath = args[1];
 
-            var mgr = LoadOrFail(dstPath);
+            var mgr = LoadOrFail(dstPath, dialog);
             if (mgr == null) return 1;
 
             using var done = new ManualResetEventSlim(false);
@@ -124,12 +125,12 @@ namespace DeployAssistant.CLI
             return 0;
         }
 
-        private static int RunStage(string[] args)
+        private static int RunStage(string[] args, ConsoleDialogService dialog)
         {
             if (args.Length < 1) return UsageError("stage <dst-path>");
             string dstPath = args[0];
 
-            var mgr = LoadOrFail(dstPath);
+            var mgr = LoadOrFail(dstPath, dialog);
             if (mgr == null) return 1;
 
             using var done = new ManualResetEventSlim(false);
@@ -156,21 +157,20 @@ namespace DeployAssistant.CLI
             return 0;
         }
 
-        private static int RunDeploy(string[] args)
+        private static int RunDeploy(string[] args, ConsoleDialogService dialog)
         {
             if (args.Length < 1) return UsageError("deploy <dst-path> [--updater <name>] [--log <message>]");
             string dstPath = args[0];
             string updater = ParseFlag(args, "--updater") ?? Environment.UserName;
             string log     = ParseFlag(args, "--log")     ?? "CLI deploy";
 
-            var mgr = LoadOrFail(dstPath);
+            var mgr = LoadOrFail(dstPath, dialog);
             if (mgr == null) return 1;
 
             using var done = new ManualResetEventSlim(false);
             string? newVersion = null;
             mgr.ProjLoadedEventHandler += obj => { if (obj is ProjectData pd) newVersion = pd.UpdatedVersion; };
             mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
-            mgr.ConfirmationCallback = (_, _) => true;
 
             AnsiConsole.Status()
                 .Spinner(Spinner.Known.Dots)
@@ -188,13 +188,13 @@ namespace DeployAssistant.CLI
             return 0;
         }
 
-        private static int RunRevert(string[] args)
+        private static int RunRevert(string[] args, ConsoleDialogService dialog)
         {
             if (args.Length < 2) return UsageError("revert <dst-path> <version>");
             string dstPath  = args[0];
             string version  = args[1];
 
-            var mgr = LoadOrFail(dstPath);
+            var mgr = LoadOrFail(dstPath, dialog);
             if (mgr == null) return 1;
 
             ProjectData? target = mgr.ProjectMetaData?.ProjectDataList
@@ -207,7 +207,6 @@ namespace DeployAssistant.CLI
 
             using var done = new ManualResetEventSlim(false);
             mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
-            mgr.ConfirmationCallback = (_, _) => true;
 
             AnsiConsole.Status()
                 .Spinner(Spinner.Known.Dots)
@@ -222,13 +221,13 @@ namespace DeployAssistant.CLI
             return 0;
         }
 
-        private static int RunExport(string[] args)
+        private static int RunExport(string[] args, ConsoleDialogService dialog)
         {
             if (args.Length < 2) return UsageError("export <dst-path> <version>");
             string dstPath = args[0];
             string version = args[1];
 
-            var mgr = LoadOrFail(dstPath);
+            var mgr = LoadOrFail(dstPath, dialog);
             if (mgr == null) return 1;
 
             ProjectData? target = mgr.ProjectMetaData?.ProjectDataList
@@ -247,7 +246,6 @@ namespace DeployAssistant.CLI
                 done.Set();
             };
             mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
-            mgr.ConfirmationCallback = (_, _) => true;
 
             AnsiConsole.Status()
                 .Spinner(Spinner.Known.Dots)
@@ -265,12 +263,12 @@ namespace DeployAssistant.CLI
             return 0;
         }
 
-        private static int RunList(string[] args)
+        private static int RunList(string[] args, ConsoleDialogService dialog)
         {
             if (args.Length < 1) return UsageError("list <dst-path>");
             string dstPath = args[0];
 
-            var mgr = LoadOrFail(dstPath);
+            var mgr = LoadOrFail(dstPath, dialog);
             if (mgr == null) return 1;
 
             var list = mgr.ProjectMetaData?.ProjectDataList;
@@ -312,12 +310,12 @@ namespace DeployAssistant.CLI
             return 0;
         }
 
-        private static int RunIntegrityCheck(string[] args)
+        private static int RunIntegrityCheck(string[] args, ConsoleDialogService dialog)
         {
             if (args.Length < 1) return UsageError("integrity-check <dst-path>");
             string dstPath = args[0];
 
-            var mgr = LoadOrFail(dstPath);
+            var mgr = LoadOrFail(dstPath, dialog);
             if (mgr == null) return 1;
 
             using var done = new ManualResetEventSlim(false);
@@ -354,17 +352,16 @@ namespace DeployAssistant.CLI
         //  Helpers                                                            //
         // ------------------------------------------------------------------ //
 
-        private static MetaDataManager CreateManager()
+        private static MetaDataManager CreateManager(IDialogService? dialogService = null)
         {
-            var mgr = new MetaDataManager();
+            var mgr = new MetaDataManager(dialogService ?? new NullDialogService());
             mgr.Awake();
             return mgr;
         }
 
-        private static MetaDataManager? LoadOrFail(string dstPath)
+        private static MetaDataManager? LoadOrFail(string dstPath, IDialogService? dialogService = null)
         {
-            var mgr = CreateManager();
-            mgr.ConfirmationCallback = (_, _) => false;
+            var mgr = CreateManager(dialogService);
 
             if (!mgr.RequestProjectRetrieval(dstPath))
             {
@@ -473,6 +470,9 @@ namespace DeployAssistant.CLI
             table.AddRow(
                 "[bold]help[/] [dim]/ --help[/]",
                 "Show this help text.");
+            table.AddRow(
+                "[bold]--yes[/]",
+                "Auto-confirm all prompts (non-interactive runs).");
 
             AnsiConsole.Write(table);
         }

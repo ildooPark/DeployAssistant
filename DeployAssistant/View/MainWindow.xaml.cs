@@ -21,10 +21,8 @@ namespace DeployAssistant.View
         {
             InitializeComponent();
 
-            // Boot the core service layer before constructing ViewModels.
-            App.AwakeModel();
-
-            var mainVM = new MainViewModel(App.MetaDataManager);
+            var services = ((App)Application.Current).Services!;
+            var mainVM = new MainViewModel(services);
             SubscribeToViewModelEvents(mainVM);
             this.DataContext = mainVM;
         }

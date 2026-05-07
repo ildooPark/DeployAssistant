@@ -8,7 +8,20 @@ using System.Text;
 
 namespace DeployAssistant.DataComponent
 {
-    public class FileManager : IManager
+    [Flags]
+    public enum DataState
+    {
+        None = 0,
+        Added = 1,
+        Deleted = 1 << 1,
+        Restored = 1 << 2,
+        Modified = 1 << 3,
+        PreStaged = 1 << 4,
+        IntegrityChecked = 1 << 5,
+        Backup = 1 << 6, 
+        Overlapped = 1 << 7
+    }
+    public class FileManager
     {
         #region Class Variables 
         private Dictionary<string, ProjectFile> _backupFilesDict;
@@ -48,13 +61,6 @@ namespace DeployAssistant.DataComponent
         public event Action<MetaDataState> ManagerStateEventHandler;
         #endregion
 
-        /// <summary>
-        /// Optional callback used to ask the user a yes/no question.
-        /// Parameters: (message, title). Returns true for "Yes", false for "No".
-        /// When null, defaults to true (proceed with the affirmative path).
-        /// </summary>
-        public Func<string, string, bool>? ConfirmationCallback { get; set; }
-
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         public FileManager()
         {
@@ -68,9 +74,6 @@ namespace DeployAssistant.DataComponent
             _asyncControl = new SemaphoreSlim(12);
         }
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-        public void Awake()
-        {
-        }
         #region Calls For File Differences
         public async void MainProjectIntegrityCheck()
         {
@@ -114,12 +117,12 @@ namespace DeployAssistant.DataComponent
 
                 foreach (string absPathFile in directoryFiles)
                 {
-                    directoryRelFiles.Add(Path.GetRelativePath(_dstProjectData.ProjectPath, absPathFile));
+                    directoryRelFiles.Add(PathCompat.GetRelativePath(_dstProjectData.ProjectPath, absPathFile));
                 }
 
                 foreach (string absPathDir in directoryDirs)
                 {
-                    directoryRelDirs.Add(Path.GetRelativePath(_dstProjectData.ProjectPath, absPathDir));
+                    directoryRelDirs.Add(PathCompat.GetRelativePath(_dstProjectData.ProjectPath, absPathDir));
                 }
 
                 IEnumerable<string> addedFiles = directoryRelFiles.Except(recordedFiles);
@@ -314,12 +317,12 @@ namespace DeployAssistant.DataComponent
 
                 foreach (string absPathFile in directoryFiles)
                 {
-                    directoryRelFiles.Add(Path.GetRelativePath(targetProject.ProjectPath, absPathFile));
+                    directoryRelFiles.Add(PathCompat.GetRelativePath(targetProject.ProjectPath, absPathFile));
                 }
 
                 foreach (string absPathDir in directoryDirs)
                 {
-                    directoryRelDirs.Add(Path.GetRelativePath(targetProject.ProjectPath, absPathDir));
+                    directoryRelDirs.Add(PathCompat.GetRelativePath(targetProject.ProjectPath, absPathDir));
                 }
 
                 IEnumerable<string> filesToDelete = directoryRelFiles.Except(recordedFiles);
@@ -680,25 +683,15 @@ namespace DeployAssistant.DataComponent
         {
             if (TryGetDeployMetaFile(srcDirPath, out DeployData? deployData))
             {
-                bool useDeployResponse = ConfirmationCallback?.Invoke(
-                    "Deploy Data Found, Allocate file using previous settings or Reconfigure Allocation?",
-                    "Source File Allocation") ?? true;
-                if (useDeployResponse)
+                if (TryValidateDeployMetaFile(srcDirPath, deployData))
                 {
-                    if (TryValidateDeployMetaFile(srcDirPath, deployData))
-                    {
-                        RegisterFilesFromDeployData(srcDirPath, deployData);
-                        RegisterFilesUnderSubDirectory(srcDirPath); 
-                        return; 
-                    }
-                    else
-                    {
-                        Trace.TraceWarning("Failed to Allocate src files using previous settings. Allocate Manually");
-                    }
+                    RegisterFilesFromDeployData(srcDirPath, deployData);
+                    RegisterFilesUnderSubDirectory(srcDirPath);
+                    return;
                 }
                 else
                 {
-                    TryRemovePreRegisteredAllocation(srcDirPath, deployData); 
+                    Trace.TraceWarning("Failed to Allocate src files using previous settings. Allocate Manually");
                 }
             }
             try
@@ -766,7 +759,7 @@ namespace DeployAssistant.DataComponent
                         FileVersionInfo.GetVersionInfo(subDirFileAbsPath).FileVersion,
                         Path.GetFileName(subDirFileAbsPath),
                         srcDirPath,
-                        Path.GetRelativePath(srcDirPath, subDirFileAbsPath)
+                        PathCompat.GetRelativePath(srcDirPath, subDirFileAbsPath)
                         );
                     _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
                 }
@@ -778,7 +771,7 @@ namespace DeployAssistant.DataComponent
                         (
                         Path.GetFileName(dirAbsPath),
                         srcDirPath,
-                        Path.GetRelativePath(srcDirPath, dirAbsPath)
+                        PathCompat.GetRelativePath(srcDirPath, dirAbsPath)
                         );
                     _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
                 }
@@ -827,7 +820,7 @@ namespace DeployAssistant.DataComponent
                         FileVersionInfo.GetVersionInfo(subDirFileAbsPath).FileVersion,
                         Path.GetFileName(subDirFileAbsPath),
                         srcDirPath,
-                        Path.GetRelativePath(srcDirPath, subDirFileAbsPath)
+                        PathCompat.GetRelativePath(srcDirPath, subDirFileAbsPath)
                         );
                     _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile); 
                 }
@@ -839,7 +832,7 @@ namespace DeployAssistant.DataComponent
                         (
                         Path.GetFileName(dirAbsPath),
                         srcDirPath,
-                        Path.GetRelativePath(srcDirPath, dirAbsPath)
+                        PathCompat.GetRelativePath(srcDirPath, dirAbsPath)
                         );
                     _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
                 }
@@ -904,7 +897,7 @@ namespace DeployAssistant.DataComponent
                         FileVersionInfo.GetVersionInfo(topDirFilePaths[i]).FileVersion,
                         Path.GetFileName(topDirFilePaths[i]),
                         srcPath,
-                        Path.GetRelativePath(srcPath, topDirFilePaths[i])
+                        PathCompat.GetRelativePath(srcPath, topDirFilePaths[i])
                         );
                     //Filter process 
                     List<ProjectFile> filteredFileList = [];
@@ -944,7 +937,7 @@ namespace DeployAssistant.DataComponent
                         FileVersionInfo.GetVersionInfo(newSrcFilePath).FileVersion,
                         Path.GetFileName(newSrcFilePath),
                         srcPath,
-                        Path.GetRelativePath(srcPath, newSrcFilePath)
+                        PathCompat.GetRelativePath(srcPath, newSrcFilePath)
                         );
 
                     _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
@@ -958,7 +951,7 @@ namespace DeployAssistant.DataComponent
                         FileVersionInfo.GetVersionInfo(topDirFilePaths[i]).FileVersion,
                         Path.GetFileName(topDirFilePaths[i]),
                         srcPath,
-                        Path.GetRelativePath(srcPath, topDirFilePaths[i])
+                        PathCompat.GetRelativePath(srcPath, topDirFilePaths[i])
                         );
                     foreach (ProjectFile projDir in _projDirFileList)
                     {

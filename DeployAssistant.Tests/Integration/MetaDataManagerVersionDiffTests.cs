@@ -2,6 +2,7 @@
 
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
+using DeployAssistant.Services;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -34,8 +35,7 @@ namespace DeployAssistant.Tests.Integration
 
         private static MetaDataManager BuildAndAwakeManager()
         {
-            var mgr = new MetaDataManager();
-            mgr.ConfirmationCallback = (_, _) => false;
+            var mgr = new MetaDataManager(new NullDialogService());
             mgr.Awake();
             return mgr;
         }

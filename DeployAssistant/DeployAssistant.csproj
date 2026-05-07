@@ -2,14 +2,13 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <IncludeSymbols>False</IncludeSymbols>
     <FileVersion>1.1</FileVersion>
-    <PackageIcon>flexible-deployment.png</PackageIcon>
     <ApplicationIcon>3700468-archive-document-education-exam-file-test_108747.ico</ApplicationIcon>
   </PropertyGroup>
 
@@ -18,10 +17,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\..\..\Downloads\flexible-deployment.png">
-      <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
-    </None>
     <None Include="..\.editorconfig" Link=".editorconfig" />
   </ItemGroup>
 
@@ -33,7 +28,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DeployAssistant.Core\DeployAssistant.Core.csproj" />
-    <ProjectReference Include="..\DeployAssistant.ViewModel\DeployAssistant.ViewModel.csproj" />
   </ItemGroup>
 
   <ItemGroup>

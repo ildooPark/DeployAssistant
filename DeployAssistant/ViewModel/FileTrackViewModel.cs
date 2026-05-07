@@ -1,9 +1,12 @@
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
+using DeployAssistant.Services;
 using DeployAssistant.ViewModel.Utils;
 using Microsoft.Win32;
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Windows;
+using System.Threading.Tasks;
 using System.Windows.Input;
 
 namespace DeployAssistant.ViewModel
@@ -93,23 +96,38 @@ namespace DeployAssistant.ViewModel
         public ICommand GetDeploySrcDir => _getDeploySrcDir ??= new RelayCommand(SetDeploySrcDirectory, CanSetDeployDir);
 
         private readonly MetaDataManager _metaDataManager;
+        private readonly IDialogService _dialogService;
+        private readonly IUiDispatcher _uiDispatcher;
         private MetaDataState _metaDataState = MetaDataState.Idle;
         private ProjectData? _srcProjectData;
         private ProjectData? _dstProjData;
         private string? _deploySrcPath;
 
-        public FileTrackViewModel(MetaDataManager metaDataManager)
+        public FileTrackViewModel(MetaDataManager metaDataManager,
+                                  IDialogService dialogService,
+                                  IUiDispatcher uiDispatcher)
         {
             _metaDataManager = metaDataManager;
+            _dialogService = dialogService;
+            _uiDispatcher = uiDispatcher;
             _metaDataManager.OverlappedFileSortEventHandler += OverlapFileSortCallBack;
+            TrackUnsubscribe(() => _metaDataManager.OverlappedFileSortEventHandler -= OverlapFileSortCallBack);
             _metaDataManager.SrcProjectLoadedEventHandler += SrcProjectDataCallBack;
+            TrackUnsubscribe(() => _metaDataManager.SrcProjectLoadedEventHandler -= SrcProjectDataCallBack);
             _metaDataManager.PreStagedChangesEventHandler += PreStagedChangesCallBack;
+            TrackUnsubscribe(() => _metaDataManager.PreStagedChangesEventHandler -= PreStagedChangesCallBack);
             _metaDataManager.IntegrityCheckCompleteEventHandler += ProjectIntegrityCheckCallBack;
+            TrackUnsubscribe(() => _metaDataManager.IntegrityCheckCompleteEventHandler -= ProjectIntegrityCheckCallBack);
             _metaDataManager.FileChangesEventHandler += MetaDataManager_FileChangeCallBack;
+            TrackUnsubscribe(() => _metaDataManager.FileChangesEventHandler -= MetaDataManager_FileChangeCallBack);
             _metaDataManager.ManagerStateEventHandler += MetaDataManager_IssueEventCallBack;
+            TrackUnsubscribe(() => _metaDataManager.ManagerStateEventHandler -= MetaDataManager_IssueEventCallBack);
             _metaDataManager.ProjLoadedEventHandler += MetaDataManager_ProjLoadedCallBack;
+            TrackUnsubscribe(() => _metaDataManager.ProjLoadedEventHandler -= MetaDataManager_ProjLoadedCallBack);
             _metaDataManager.ProjComparisonCompleteEventHandler += MetaDataManager_ProjComparisonCompleteCallBack;
+            TrackUnsubscribe(() => _metaDataManager.ProjComparisonCompleteEventHandler -= MetaDataManager_ProjComparisonCompleteCallBack);
             _metaDataManager.SimilarityCheckCompleteEventHandler += MetaDataManager_SimilarityCheckCompleteCallBack;
+            TrackUnsubscribe(() => _metaDataManager.SimilarityCheckCompleteEventHandler -= MetaDataManager_SimilarityCheckCompleteCallBack);
         }
 
         private bool CanSetDeployDir(object obj)
@@ -138,7 +156,7 @@ namespace DeployAssistant.ViewModel
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message);
+                _dialogService.Inform("Error", ex.Message);
             }
         }
 
@@ -191,7 +209,7 @@ namespace DeployAssistant.ViewModel
         {
             if (_deploySrcPath == null)
             {
-                MessageBox.Show("Please Set Src Deploy Path");
+                _dialogService.Inform("Refresh", "Please Set Src Deploy Path");
             }
             _metaDataManager.RequestClearStagedFiles();
             _metaDataManager.RequestSrcDataRetrieval(_deploySrcPath);
@@ -203,7 +221,7 @@ namespace DeployAssistant.ViewModel
             {
                 if ((file.DataState & DataState.IntegrityChecked) == 0)
                 {
-                    MessageBox.Show("Only Applicable for Integrity Check Failed Files");
+                    _dialogService.Inform("Revert Change", "Only Applicable for Integrity Check Failed Files");
                     return;
                 }
                 _metaDataManager.RequestRevertChange(file);
@@ -248,7 +266,7 @@ namespace DeployAssistant.ViewModel
 
         private void OverlapFileSortCallBack(List<ChangedFile> overlappedFileObj, List<ChangedFile> newFileObj)
         {
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            _uiDispatcher.Invoke(() =>
             {
                 OverlapWindowRequested?.Invoke(overlappedFileObj, newFileObj);
             });
@@ -271,11 +289,11 @@ namespace DeployAssistant.ViewModel
         {
             if (changedFileList == null)
             {
-                MessageBox.Show("Model Binding Issue: ChangedList is Empty");
+                _dialogService.Inform("Integrity Check", "Model Binding Issue: ChangedList is Empty");
                 return;
             }
 
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            _uiDispatcher.Invoke(() =>
             {
                 IntegrityLogWindowRequested?.Invoke(_dstProjData, changeLog, changedFileList);
             });
@@ -283,7 +301,7 @@ namespace DeployAssistant.ViewModel
 
         private void MetaDataManager_ProjComparisonCompleteCallBack(ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff)
         {
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            _uiDispatcher.Invoke(() =>
             {
                 VersionDiffWindowRequested?.Invoke(srcProject, dstProject, diff);
             });
@@ -291,16 +309,15 @@ namespace DeployAssistant.ViewModel
 
         private void MetaDataManager_IssueEventCallBack(MetaDataState state)
         {
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            _uiDispatcher.Invoke(() =>
             {
                 _metaDataState = state;
-                System.Windows.Application.Current?.MainWindow?.UpdateLayout();
             });
         }
 
         private void MetaDataManager_SimilarityCheckCompleteCallBack(ProjectData data, List<ProjectSimilarity> diffList)
         {
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            _uiDispatcher.Invoke(() =>
             {
                 VersionComparisonWindowRequested?.Invoke(data, diffList);
             });
