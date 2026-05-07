@@ -12,10 +12,15 @@
   <ItemGroup>
     <PackageReference Include="Spectre.Console" Version="0.49.1" />
     <PackageReference Include="System.Memory" Version="4.5.5" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DeployAssistant.Core\DeployAssistant.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DeployAssistant.CLI.Tests" />
   </ItemGroup>
 
 </Project>
