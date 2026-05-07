@@ -250,7 +250,7 @@ namespace DeployAssistant.DataComponent
                         DataState.None,
                         Path.GetFileName(filePath),
                         projectPath,
-                        Path.GetRelativePath(projectPath, filePath),
+                        PathCompat.GetRelativePath(projectPath, filePath),
                         "",
                         true
                         );
@@ -274,7 +274,7 @@ namespace DeployAssistant.DataComponent
                         DataState.None,
                         Path.GetFileName(dirPath),
                         projectPath,
-                        Path.GetRelativePath(projectPath, dirPath),
+                        PathCompat.GetRelativePath(projectPath, dirPath),
                         "",
                         true
                         );

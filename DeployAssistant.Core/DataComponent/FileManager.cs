@@ -8,6 +8,19 @@ using System.Text;
 
 namespace DeployAssistant.DataComponent
 {
+    [Flags]
+    public enum DataState
+    {
+        None = 0,
+        Added = 1,
+        Deleted = 1 << 1,
+        Restored = 1 << 2,
+        Modified = 1 << 3,
+        PreStaged = 1 << 4,
+        IntegrityChecked = 1 << 5,
+        Backup = 1 << 6, 
+        Overlapped = 1 << 7
+    }
     public class FileManager
     {
         #region Class Variables 
@@ -104,12 +117,12 @@ namespace DeployAssistant.DataComponent
 
                 foreach (string absPathFile in directoryFiles)
                 {
-                    directoryRelFiles.Add(Path.GetRelativePath(_dstProjectData.ProjectPath, absPathFile));
+                    directoryRelFiles.Add(PathCompat.GetRelativePath(_dstProjectData.ProjectPath, absPathFile));
                 }
 
                 foreach (string absPathDir in directoryDirs)
                 {
-                    directoryRelDirs.Add(Path.GetRelativePath(_dstProjectData.ProjectPath, absPathDir));
+                    directoryRelDirs.Add(PathCompat.GetRelativePath(_dstProjectData.ProjectPath, absPathDir));
                 }
 
                 IEnumerable<string> addedFiles = directoryRelFiles.Except(recordedFiles);
@@ -304,12 +317,12 @@ namespace DeployAssistant.DataComponent
 
                 foreach (string absPathFile in directoryFiles)
                 {
-                    directoryRelFiles.Add(Path.GetRelativePath(targetProject.ProjectPath, absPathFile));
+                    directoryRelFiles.Add(PathCompat.GetRelativePath(targetProject.ProjectPath, absPathFile));
                 }
 
                 foreach (string absPathDir in directoryDirs)
                 {
-                    directoryRelDirs.Add(Path.GetRelativePath(targetProject.ProjectPath, absPathDir));
+                    directoryRelDirs.Add(PathCompat.GetRelativePath(targetProject.ProjectPath, absPathDir));
                 }
 
                 IEnumerable<string> filesToDelete = directoryRelFiles.Except(recordedFiles);
@@ -746,7 +759,7 @@ namespace DeployAssistant.DataComponent
                         FileVersionInfo.GetVersionInfo(subDirFileAbsPath).FileVersion,
                         Path.GetFileName(subDirFileAbsPath),
                         srcDirPath,
-                        Path.GetRelativePath(srcDirPath, subDirFileAbsPath)
+                        PathCompat.GetRelativePath(srcDirPath, subDirFileAbsPath)
                         );
                     _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
                 }
@@ -758,7 +771,7 @@ namespace DeployAssistant.DataComponent
                         (
                         Path.GetFileName(dirAbsPath),
                         srcDirPath,
-                        Path.GetRelativePath(srcDirPath, dirAbsPath)
+                        PathCompat.GetRelativePath(srcDirPath, dirAbsPath)
                         );
                     _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
                 }
@@ -807,7 +820,7 @@ namespace DeployAssistant.DataComponent
                         FileVersionInfo.GetVersionInfo(subDirFileAbsPath).FileVersion,
                         Path.GetFileName(subDirFileAbsPath),
                         srcDirPath,
-                        Path.GetRelativePath(srcDirPath, subDirFileAbsPath)
+                        PathCompat.GetRelativePath(srcDirPath, subDirFileAbsPath)
                         );
                     _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile); 
                 }
@@ -819,7 +832,7 @@ namespace DeployAssistant.DataComponent
                         (
                         Path.GetFileName(dirAbsPath),
                         srcDirPath,
-                        Path.GetRelativePath(srcDirPath, dirAbsPath)
+                        PathCompat.GetRelativePath(srcDirPath, dirAbsPath)
                         );
                     _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
                 }
@@ -884,7 +897,7 @@ namespace DeployAssistant.DataComponent
                         FileVersionInfo.GetVersionInfo(topDirFilePaths[i]).FileVersion,
                         Path.GetFileName(topDirFilePaths[i]),
                         srcPath,
-                        Path.GetRelativePath(srcPath, topDirFilePaths[i])
+                        PathCompat.GetRelativePath(srcPath, topDirFilePaths[i])
                         );
                     //Filter process 
                     List<ProjectFile> filteredFileList = [];
@@ -924,7 +937,7 @@ namespace DeployAssistant.DataComponent
                         FileVersionInfo.GetVersionInfo(newSrcFilePath).FileVersion,
                         Path.GetFileName(newSrcFilePath),
                         srcPath,
-                        Path.GetRelativePath(srcPath, newSrcFilePath)
+                        PathCompat.GetRelativePath(srcPath, newSrcFilePath)
                         );
 
                     _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
@@ -938,7 +951,7 @@ namespace DeployAssistant.DataComponent
                         FileVersionInfo.GetVersionInfo(topDirFilePaths[i]).FileVersion,
                         Path.GetFileName(topDirFilePaths[i]),
                         srcPath,
-                        Path.GetRelativePath(srcPath, topDirFilePaths[i])
+                        PathCompat.GetRelativePath(srcPath, topDirFilePaths[i])
                         );
                     foreach (ProjectFile projDir in _projDirFileList)
                     {
