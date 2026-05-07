@@ -5,10 +5,29 @@ using System.Linq;
 using System.Threading;
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
+using DeployAssistant.Services;
 using Spectre.Console;
 
 namespace DeployAssistant.CLI
 {
+    /// <summary>IDialogService that always returns Yes. Used by CLI commands that need auto-confirm.</summary>
+    internal sealed class AlwaysYesDialogService : IDialogService
+    {
+        public DialogChoice Confirm(string title, string message, DialogChoice defaultChoice = DialogChoice.No) => DialogChoice.Yes;
+        public void Inform(string title, string message) { }
+        public string? PickFolder(string title, string? initialPath = null) => null;
+        public void OpenInShell(string path) { }
+    }
+
+    /// <summary>IDialogService that always returns No. Used by CLI commands that need auto-decline.</summary>
+    internal sealed class AlwaysNoDialogService : IDialogService
+    {
+        public DialogChoice Confirm(string title, string message, DialogChoice defaultChoice = DialogChoice.No) => DialogChoice.No;
+        public void Inform(string title, string message) { }
+        public string? PickFolder(string title, string? initialPath = null) => null;
+        public void OpenInShell(string path) { }
+    }
+
     internal class Program
     {
         private static int Main(string[] args)
@@ -47,10 +66,9 @@ namespace DeployAssistant.CLI
             if (args.Length < 1) return UsageError("init <path>");
             string path = args[0];
 
-            var mgr = CreateManager();
+            var mgr = CreateManager(new AlwaysYesDialogService());
             using var done = new ManualResetEventSlim(false);
             mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
-            mgr.ConfirmationCallback = (_, _) => true;
 
             AnsiConsole.Status()
                 .Spinner(Spinner.Known.Dots)
@@ -70,8 +88,7 @@ namespace DeployAssistant.CLI
             if (args.Length < 1) return UsageError("load <path>");
             string path = args[0];
 
-            var mgr = CreateManager();
-            mgr.ConfirmationCallback = (_, _) => false;
+            var mgr = CreateManager(new AlwaysNoDialogService());
 
             bool ok = mgr.RequestProjectRetrieval(path);
             if (!ok)
@@ -163,14 +180,13 @@ namespace DeployAssistant.CLI
             string updater = ParseFlag(args, "--updater") ?? Environment.UserName;
             string log     = ParseFlag(args, "--log")     ?? "CLI deploy";
 
-            var mgr = LoadOrFail(dstPath);
+            var mgr = LoadOrFail(dstPath, new AlwaysYesDialogService());
             if (mgr == null) return 1;
 
             using var done = new ManualResetEventSlim(false);
             string? newVersion = null;
             mgr.ProjLoadedEventHandler += obj => { if (obj is ProjectData pd) newVersion = pd.UpdatedVersion; };
             mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
-            mgr.ConfirmationCallback = (_, _) => true;
 
             AnsiConsole.Status()
                 .Spinner(Spinner.Known.Dots)
@@ -194,7 +210,7 @@ namespace DeployAssistant.CLI
             string dstPath  = args[0];
             string version  = args[1];
 
-            var mgr = LoadOrFail(dstPath);
+            var mgr = LoadOrFail(dstPath, new AlwaysYesDialogService());
             if (mgr == null) return 1;
 
             ProjectData? target = mgr.ProjectMetaData?.ProjectDataList
@@ -207,7 +223,6 @@ namespace DeployAssistant.CLI
 
             using var done = new ManualResetEventSlim(false);
             mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
-            mgr.ConfirmationCallback = (_, _) => true;
 
             AnsiConsole.Status()
                 .Spinner(Spinner.Known.Dots)
@@ -228,7 +243,7 @@ namespace DeployAssistant.CLI
             string dstPath = args[0];
             string version = args[1];
 
-            var mgr = LoadOrFail(dstPath);
+            var mgr = LoadOrFail(dstPath, new AlwaysYesDialogService());
             if (mgr == null) return 1;
 
             ProjectData? target = mgr.ProjectMetaData?.ProjectDataList
@@ -247,7 +262,6 @@ namespace DeployAssistant.CLI
                 done.Set();
             };
             mgr.ManagerStateEventHandler += state => { if (state == MetaDataState.Idle) done.Set(); };
-            mgr.ConfirmationCallback = (_, _) => true;
 
             AnsiConsole.Status()
                 .Spinner(Spinner.Known.Dots)
@@ -354,17 +368,16 @@ namespace DeployAssistant.CLI
         //  Helpers                                                            //
         // ------------------------------------------------------------------ //
 
-        private static MetaDataManager CreateManager()
+        private static MetaDataManager CreateManager(IDialogService? dialogService = null)
         {
-            var mgr = new MetaDataManager();
+            var mgr = new MetaDataManager(dialogService ?? new NullDialogService());
             mgr.Awake();
             return mgr;
         }
 
-        private static MetaDataManager? LoadOrFail(string dstPath)
+        private static MetaDataManager? LoadOrFail(string dstPath, IDialogService? dialogService = null)
         {
-            var mgr = CreateManager();
-            mgr.ConfirmationCallback = (_, _) => false;
+            var mgr = CreateManager(dialogService ?? new AlwaysNoDialogService());
 
             if (!mgr.RequestProjectRetrieval(dstPath))
             {

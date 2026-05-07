@@ -18,11 +18,11 @@ namespace DeployAssistant.Tests.Integration
         }
 
         [Fact]
-        public void Awake_DoesNotThrow_WhenConfirmationCallbackUnset()
+        public void Awake_DoesNotThrow_WhenDialogServiceIsNullDialog()
         {
+            // Pin: a manager constructed without a dialog service falls back to
+            // NullDialogService; Awake() must complete without throwing.
             var m = new MetaDataManager();
-            // ConfirmationCallback intentionally left null — pin that current Awake
-            // tolerates this. After Task 3 (B2), this property is gone entirely.
             m.Awake();
         }
     }

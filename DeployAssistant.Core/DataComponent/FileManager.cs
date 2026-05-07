@@ -48,13 +48,6 @@ namespace DeployAssistant.DataComponent
         public event Action<MetaDataState> ManagerStateEventHandler;
         #endregion
 
-        /// <summary>
-        /// Optional callback used to ask the user a yes/no question.
-        /// Parameters: (message, title). Returns true for "Yes", false for "No".
-        /// When null, defaults to true (proceed with the affirmative path).
-        /// </summary>
-        public Func<string, string, bool>? ConfirmationCallback { get; set; }
-
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         public FileManager()
         {
@@ -680,25 +673,15 @@ namespace DeployAssistant.DataComponent
         {
             if (TryGetDeployMetaFile(srcDirPath, out DeployData? deployData))
             {
-                bool useDeployResponse = ConfirmationCallback?.Invoke(
-                    "Deploy Data Found, Allocate file using previous settings or Reconfigure Allocation?",
-                    "Source File Allocation") ?? true;
-                if (useDeployResponse)
+                if (TryValidateDeployMetaFile(srcDirPath, deployData))
                 {
-                    if (TryValidateDeployMetaFile(srcDirPath, deployData))
-                    {
-                        RegisterFilesFromDeployData(srcDirPath, deployData);
-                        RegisterFilesUnderSubDirectory(srcDirPath); 
-                        return; 
-                    }
-                    else
-                    {
-                        Trace.TraceWarning("Failed to Allocate src files using previous settings. Allocate Manually");
-                    }
+                    RegisterFilesFromDeployData(srcDirPath, deployData);
+                    RegisterFilesUnderSubDirectory(srcDirPath);
+                    return;
                 }
                 else
                 {
-                    TryRemovePreRegisteredAllocation(srcDirPath, deployData); 
+                    Trace.TraceWarning("Failed to Allocate src files using previous settings. Allocate Manually");
                 }
             }
             try

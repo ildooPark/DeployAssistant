@@ -1,9 +1,13 @@
+#pragma warning disable CS0618
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
+using DeployAssistant.Services;
+using DeployAssistant.ViewModel.Internal;
 using DeployAssistant.ViewModel.Utils;
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
-using System.Windows;
+using System.Threading.Tasks;
 using System.Windows.Input;
 
 namespace DeployAssistant.ViewModel
@@ -98,16 +102,27 @@ namespace DeployAssistant.ViewModel
         }
 
         private readonly MetaDataManager _metaDataManager;
+        private readonly IDialogService _dialogService;
+        private readonly IUiDispatcher _uiDispatcher;
         private MetaDataState? _metaDataState = MetaDataState.Idle;
 
-        public BackupViewModel(MetaDataManager metaDataManager)
+        public BackupViewModel(MetaDataManager metaDataManager,
+                               IDialogService dialogService,
+                               IUiDispatcher uiDispatcher)
         {
             _metaDataManager = metaDataManager;
+            _dialogService = dialogService;
+            _uiDispatcher = uiDispatcher;
             _metaDataManager.FetchRequestEventHandler += FetchRequestCallBack;
             _metaDataManager.ProjExportEventHandler += ExportRequestCallBack;
             _metaDataManager.ManagerStateEventHandler += MetaDataStateChangeCallBack;
             _metaDataManager.ProjComparisonCompleteEventHandler += ProjComparisonCompleteCallBack;
         }
+
+        [Obsolete("Temporary scaffold — replaced by AppServices wiring in Task 4")]
+        public BackupViewModel(MetaDataManager metaDataManager)
+            : this(metaDataManager, new NullDialogService(), new SyncFallbackDispatcher())
+        { }
 
         private bool CanFetch(object obj)
         {
@@ -139,7 +154,7 @@ namespace DeployAssistant.ViewModel
         {
             if (SelectedItem == null)
             {
-                MessageBox.Show("Couldn't Get the Log, Selected Item is Null");
+                _dialogService.Inform("View Log", "Couldn't Get the Log, Selected Item is Null");
                 return;
             }
             IntegrityLogWindowRequested?.Invoke(SelectedItem);
@@ -156,12 +171,12 @@ namespace DeployAssistant.ViewModel
         {
             if (_selectedItem == null)
             {
-                MessageBox.Show("BUVM 164: Selected BackupVersion is null");
+                _dialogService.Inform("Revert", "BUVM 164: Selected BackupVersion is null");
                 return;
             }
-            var response = MessageBox.Show($"Do you want to Revert to {_selectedItem.UpdatedVersion}", "Confirm Updates",
-                MessageBoxButton.YesNo);
-            if (response == MessageBoxResult.Yes)
+            var response = _dialogService.Confirm("Confirm Updates",
+                $"Do you want to Revert to {_selectedItem.UpdatedVersion}");
+            if (response == DialogChoice.Yes)
             {
                 _metaDataManager.RequestRevertProject(_selectedItem);
             }
@@ -176,13 +191,14 @@ namespace DeployAssistant.ViewModel
         {
             if (SelectedItem == null)
             {
-                MessageBox.Show("Must Select Certain Backup For Clean Backup Restoration");
+                _dialogService.Inform("Clean Restore", "Must Select Certain Backup For Clean Backup Restoration");
                 return;
             }
-            var response = MessageBox.Show($"Would You like to Restore back to Version: {SelectedItem.UpdatedVersion}\n " +
-                $"This may take longer than regular version Checkout", "Clean Restore", MessageBoxButton.YesNo);
+            var response = _dialogService.Confirm("Clean Restore",
+                $"Would You like to Restore back to Version: {SelectedItem.UpdatedVersion}\n " +
+                $"This may take longer than regular version Checkout");
 
-            if (response == MessageBoxResult.Yes)
+            if (response == DialogChoice.Yes)
             {
                 Task.Run(() => _metaDataManager.RequestProjectCleanRestore(SelectedItem));
             }
@@ -197,7 +213,7 @@ namespace DeployAssistant.ViewModel
         {
             if (SelectedItem == null)
             {
-                MessageBox.Show("Must Select Certain Backup For Clean Backup Restoration");
+                _dialogService.Inform("Export", "Must Select Certain Backup For Clean Backup Restoration");
                 return;
             }
             Task.Run(() => _metaDataManager.RequestExportProjectBackup(SelectedItem));
@@ -207,7 +223,7 @@ namespace DeployAssistant.ViewModel
         {
             if (SelectedItem == null)
             {
-                MessageBox.Show("Must Select Certain Backup For Clean Backup Restoration");
+                _dialogService.Inform("Extract Version Log", "Must Select Certain Backup For Clean Backup Restoration");
                 return;
             }
             _metaDataManager.RequestExportProjectVersionLog(SelectedItem);
@@ -226,26 +242,25 @@ namespace DeployAssistant.ViewModel
             if (exportPathObj is not string exportPath) return;
             try
             {
-                Process.Start("explorer.exe", exportPath);
+                _dialogService.OpenInShell(exportPath);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"{exportPath} does not Exists! : ERROR: {ex.Message}");
+                _dialogService.Inform("Export", $"{exportPath} does not Exists! : ERROR: {ex.Message}");
             }
         }
 
         private void MetaDataStateChangeCallBack(MetaDataState state)
         {
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            _uiDispatcher.Invoke(() =>
             {
                 _metaDataState = state;
-                System.Windows.Application.Current?.MainWindow?.UpdateLayout();
             });
         }
 
         private void ProjComparisonCompleteCallBack(ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff)
         {
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            _uiDispatcher.Invoke(() =>
             {
                 VersionDiffWindowRequested?.Invoke(srcProject, dstProject, diff);
             });
@@ -254,3 +269,4 @@ namespace DeployAssistant.ViewModel
         #endregion
     }
 }
+#pragma warning restore CS0618

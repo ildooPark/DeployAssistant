@@ -16,6 +16,11 @@
   </ItemGroup>
   <!-- Link unchanged source files directly from DeployAssistant.Core -->
   <ItemGroup>
+    <!-- Services -->
+    <Compile Include="../DeployAssistant.Core/Services/IDialogService.cs" Link="Services/IDialogService.cs" />
+    <Compile Include="../DeployAssistant.Core/Services/IUiDispatcher.cs" Link="Services/IUiDispatcher.cs" />
+    <Compile Include="../DeployAssistant.Core/Services/DialogChoice.cs" Link="Services/DialogChoice.cs" />
+    <Compile Include="../DeployAssistant.Core/Services/NullDialogService.cs" Link="Services/NullDialogService.cs" />
     <!-- Interfaces -->
     <Compile Include="../DeployAssistant.Core/Interfaces/IManager.cs" Link="Interfaces/IManager.cs" />
     <Compile Include="../DeployAssistant.Core/Interfaces/IProjectData.cs" Link="Interfaces/IProjectData.cs" />

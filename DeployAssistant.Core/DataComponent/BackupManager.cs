@@ -26,13 +26,6 @@ namespace DeployAssistant.DataComponent
         public event Action<object>? FetchCompleteEventHandler;
         public event Action<MetaDataState> ManagerStateEventHandler;
 
-        /// <summary>
-        /// Optional callback to ask the user a yes/no question.
-        /// Parameters: (message, title). Returns true for "Yes", false for "No".
-        /// When null, defaults to false (do not retry on failure).
-        /// </summary>
-        public Func<string, string, bool>? ConfirmationCallback { get; set; }
-
         private FileHandlerTool _fileHandlerTool;
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         public BackupManager()
@@ -147,15 +140,7 @@ namespace DeployAssistant.DataComponent
                     revertSuccess = _fileHandlerTool.TryApplyFileChanges(FileDifferences);
                     if (!revertSuccess)
                     {
-                        bool retry = ConfirmationCallback?.Invoke("Update Failed, Would you like to Retry?", "Update Project") ?? false;
-                        if (retry)
-                        {
-                            continue;
-                        }
-                        else
-                        {
-                            Trace.TraceWarning("Revert Failed"); return;
-                        }
+                        Trace.TraceWarning("Revert Failed"); return;
                     }
                 }
                 ProjectRevertEventHandler?.Invoke(revertingProjectData);
