@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## SDK requirement
 
-Most projects target `net10.0-windows`; the CLI targets `net8.0`. CI uses `actions/setup-dotnet@v4` with `dotnet-version: '10.0.x'`. A machine with only .NET 9 SDK will fail every build with `NETSDK1045`. Install .NET 10 (and 8) from <https://aka.ms/dotnet/download> before attempting local builds. Default git branch is `master`, not `main`.
+The WPF GUI and test project target `net8.0-windows`; the CLI targets `net472`. Builds require the **.NET 8 SDK** plus the **.NET Framework 4.8 Developer Pack** (which ships the 4.7.2 reference assemblies the CLI needs). Install the SDK from <https://aka.ms/dotnet/download> and the Developer Pack from <https://aka.ms/msbuild/developertools>. A machine without the Developer Pack will fail CLI builds with a missing-target-framework error. Default git branch is `master`, not `main`.
 
 ## Common commands
 
@@ -24,9 +24,9 @@ dotnet run --project DeployAssistant/DeployAssistant.csproj         # WPF GUI (W
 dotnet run --project DeployAssistant.CLI/DeployAssistant.CLI.csproj -- --help
 
 # CLI publish (mirrors CI smoke test)
+# net472 — framework-dependent; ships as deployassistant.exe + DLLs in a single folder
 dotnet publish DeployAssistant.CLI/DeployAssistant.CLI.csproj \
-  -c Release -r win-x64 --self-contained true \
-  -p:PublishSingleFile=true -o ./publish/DeployAssistant.CLI
+  -c Release -o ./publish/DeployAssistant.CLI
 ```
 
 xUnit 2.9.2 is the test framework. There is no enforced formatter; `.editorconfig` only suppresses `CS8604`.
@@ -37,7 +37,7 @@ DeployAssistant (assembly name `SimpleBinaryVCS`) is a Windows desktop VCS for b
 
 ## Manager / event-driven flow (the part you must understand)
 
-ViewModels never instantiate managers. There are three lazy singletons on `App` (`App.MetaDataManager`, `App.FileHandlerTool`, `App.HashTool`); `App.AwakeModel()` is invoked from the `MainViewModel` constructor and triggers `MetaDataManager.Awake()`, which constructs and wires all sub-managers (`FileManager`, `BackupManager`, `UpdateManager`, `ExportManager`, `SettingManager`). Every `DataComponent/*Manager` implements `IManager` (`Awake()` + `ManagerStateEventHandler`).
+ViewModels never instantiate managers. `AppServices` (constructed once in `App.OnStartup`) is the composition root: it creates a `WpfDialogService`, a `WpfUiDispatcher`, and a `MetaDataManager(dialogService)`, then calls `MetaDataManager.Awake()`, which constructs and wires all sub-managers (`FileManager`, `BackupManager`, `UpdateManager`, `ExportManager`, `SettingManager`).
 
 ViewModels call **only** `MetaDataManager.Request*` methods. Results return as events on `MetaDataManager`. The full event surface is documented in `spec.md` §8.1; common ones include `ProjLoadedEventHandler`, `FileChangesEventHandler`, `IntegrityCheckCompleteEventHandler`, `ProjComparisonCompleteEventHandler`, and `UpdateIgnoreListEventHandler`. **When adding new manager interactions, dispatch through these events rather than direct calls** — regression #17 was a missed `UpdateIgnoreListEventHandler` dispatch causing integrity checks to be skipped.
 
@@ -45,16 +45,17 @@ A `MetaDataState` enum (`Idle`, `Initializing`, `Retrieving`, `Processing`, `Upd
 
 `FileManager` enforces a `SemaphoreSlim(12)` limit on concurrent MD5 operations — keep new hashing paths inside that limiter to avoid disk thrash.
 
-## Two Core libraries (don't get this wrong)
+## Single Core library
 
-- `DeployAssistant.Core` (net10.0-windows) — full business logic, may use WPF/WinForms-coupled APIs.
-- `DeployAssistant.Core.Standard` (netstandard2.0) — cross-platform subset for the CLI. It links most files from `Core` directly via `<Compile Include="..\..\DeployAssistant.Core\..." Link="..." />`, and ships its own platform-neutral variants of `FileManager`, `MetaDataManager`, `FileHandlerTool`, `HashTool`, plus a `CompatHelper` shim.
+`DeployAssistant.Core` targets `netstandard2.0` and contains all business logic. It is referenced by the WPF GUI, the CLI, and the tests directly — there is no separate `Core.Standard` project. Platform-specific behavior (dialogs, shell operations, UI dispatch) is injected via `IDialogService` and `IUiDispatcher` so Core stays UI-agnostic.
 
-When you add a file to `DeployAssistant.Core/`, decide whether it should be linked into `Core.Standard.csproj`. The `.github/workflows/sync-core-standard.yml` workflow auto-syncs additions on push (working branch `auto/sync-core-standard`), but verify the result rather than assuming. Anything that touches `MessageBox` / WPF / WinForms must **not** be linked into `Core.Standard`; provide a platform-neutral variant instead.
+When adding new code that touches Windows UI, put the implementation in the WPF or CLI project under the appropriate `Services/` subfolder, not in Core.
 
 ## CLI specifics
 
-`DeployAssistant.CLI` (binary `deployassistant`) uses `Spectre.Console`. Literal `[` / `]` in user-facing strings must be escaped by doubling (`[[options]]`); failing to do so crashes startup (PR #19). The CI smoke test asserts: no-args → exit 0 with "DeployAssistant" in output; `--help` → exit 0; unknown command → exit 1.
+`DeployAssistant.CLI` (binary `deployassistant`) targets `net472` and uses `Spectre.Console`. It is published framework-dependent: the output folder contains `deployassistant.exe` plus supporting DLLs; the machine must have .NET Framework 4.7.2 installed (default on Windows 10 1803+). Pass `--yes` to auto-confirm all prompts for non-interactive / CI runs.
+
+Literal `[` / `]` in user-facing strings must be escaped by doubling (`[[options]]`); failing to do so crashes startup (PR #19). The CI smoke test asserts: no-args → exit 0 with "DeployAssistant" in output; `--help` → exit 0; unknown command → exit 1.
 
 ## UI testing
 
@@ -69,8 +70,7 @@ There is no automated UI test harness. WPF changes require manually running the 
 
 ## When work is "done"
 
-1. `dotnet build DeployAssistant.sln -c Debug` clean across all six projects.
+1. `dotnet build DeployAssistant.sln -c Debug` clean across all four projects + test project.
 2. `dotnet test DeployAssistant.Tests/DeployAssistant.Tests.csproj` green.
 3. If CLI was touched, run the publish + smoke commands above (mirror `cli-smoke-test.yml`).
-4. If a Core file was added/renamed, confirm `Core.Standard.csproj` is in sync (or that the linked file should not be in Standard).
-5. If behavior covered by `spec.md` changed, update `spec.md` in the same change.
+4. If behavior covered by `spec.md` changed, update `spec.md` in the same change.

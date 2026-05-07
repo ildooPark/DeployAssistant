@@ -470,6 +470,9 @@ namespace DeployAssistant.CLI
             table.AddRow(
                 "[bold]help[/] [dim]/ --help[/]",
                 "Show this help text.");
+            table.AddRow(
+                "[bold]--yes[/]",
+                "Auto-confirm all prompts (non-interactive runs).");
 
             AnsiConsole.Write(table);
         }
