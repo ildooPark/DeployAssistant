@@ -1,8 +1,6 @@
-#pragma warning disable CS0618
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.Services;
-using DeployAssistant.ViewModel.Internal;
 using DeployAssistant.ViewModel.Utils;
 using Microsoft.Win32;
 using System;
@@ -119,13 +117,10 @@ namespace DeployAssistant.ViewModel
             _dialogService = dialogService;
             _uiDispatcher = uiDispatcher;
             _metaDataManager.ProjLoadedEventHandler += MetaDataManager_ProjLoadedCallBack;
+            TrackUnsubscribe(() => _metaDataManager.ProjLoadedEventHandler -= MetaDataManager_ProjLoadedCallBack);
             _metaDataManager.ManagerStateEventHandler += MetaDataStateChangeCallBack;
+            TrackUnsubscribe(() => _metaDataManager.ManagerStateEventHandler -= MetaDataStateChangeCallBack);
         }
-
-        [Obsolete("Temporary scaffold — replaced by AppServices wiring in Task 4")]
-        public MetaDataViewModel(MetaDataManager metaDataManager)
-            : this(metaDataManager, new NullDialogService(), new SyncFallbackDispatcher())
-        { }
 
         #region Update Version
 
@@ -209,4 +204,3 @@ namespace DeployAssistant.ViewModel
         #endregion
     }
 }
-#pragma warning restore CS0618

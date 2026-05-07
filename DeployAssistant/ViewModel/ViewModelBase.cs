@@ -1,16 +1,19 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
 namespace DeployAssistant.ViewModel
 {
-    public class ViewModelBase : INotifyPropertyChanged
+    public class ViewModelBase : INotifyPropertyChanged, IDisposable
     {
         public event PropertyChangedEventHandler? PropertyChanged;
 
+        private readonly List<Action> _unsubscribers = new();
+        private bool _disposed;
+
         protected virtual void OnPropertyChanged([CallerMemberName] string? property = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(property));
-        }
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(property));
 
         /// <summary>
         /// Sets the backing field to <paramref name="value"/> and raises
@@ -23,6 +26,21 @@ namespace DeployAssistant.ViewModel
             field = value;
             OnPropertyChanged(propertyName);
             return true;
+        }
+
+        /// <summary>
+        /// Registers an unsubscribe action that runs on Dispose. Use when subscribing
+        /// to long-lived events (e.g. MetaDataManager events) from a per-window VM.
+        /// </summary>
+        protected void TrackUnsubscribe(Action unsubscribe) => _unsubscribers.Add(unsubscribe);
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            foreach (var u in _unsubscribers) u();
+            _unsubscribers.Clear();
+            GC.SuppressFinalize(this);
         }
     }
 }

@@ -13,9 +13,11 @@ namespace DeployAssistant.View
         public OverlapFileWindow(List<ChangedFile> overlapFiles, List<ChangedFile> newFiles)
         {
             InitializeComponent();
-            var overlapFileVM = new OverlapFileViewModel(App.MetaDataManager, overlapFiles, newFiles);
+            var services = ((App)Application.Current).Services!;
+            var overlapFileVM = new OverlapFileViewModel(services.MetaDataManager, overlapFiles, newFiles);
             this.DataContext = overlapFileVM;
             overlapFileVM.TaskFinishedEventHandler += TaskFinishedCallBack;
+            Closed += (_, _) => (overlapFileVM as IDisposable)?.Dispose();
         }
 
         private void TaskFinishedCallBack()

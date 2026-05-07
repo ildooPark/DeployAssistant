@@ -1,8 +1,6 @@
-#pragma warning disable CS0618
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.Services;
-using DeployAssistant.ViewModel.Internal;
 using DeployAssistant.ViewModel.Utils;
 using Microsoft.Win32;
 using System;
@@ -113,20 +111,24 @@ namespace DeployAssistant.ViewModel
             _dialogService = dialogService;
             _uiDispatcher = uiDispatcher;
             _metaDataManager.OverlappedFileSortEventHandler += OverlapFileSortCallBack;
+            TrackUnsubscribe(() => _metaDataManager.OverlappedFileSortEventHandler -= OverlapFileSortCallBack);
             _metaDataManager.SrcProjectLoadedEventHandler += SrcProjectDataCallBack;
+            TrackUnsubscribe(() => _metaDataManager.SrcProjectLoadedEventHandler -= SrcProjectDataCallBack);
             _metaDataManager.PreStagedChangesEventHandler += PreStagedChangesCallBack;
+            TrackUnsubscribe(() => _metaDataManager.PreStagedChangesEventHandler -= PreStagedChangesCallBack);
             _metaDataManager.IntegrityCheckCompleteEventHandler += ProjectIntegrityCheckCallBack;
+            TrackUnsubscribe(() => _metaDataManager.IntegrityCheckCompleteEventHandler -= ProjectIntegrityCheckCallBack);
             _metaDataManager.FileChangesEventHandler += MetaDataManager_FileChangeCallBack;
+            TrackUnsubscribe(() => _metaDataManager.FileChangesEventHandler -= MetaDataManager_FileChangeCallBack);
             _metaDataManager.ManagerStateEventHandler += MetaDataManager_IssueEventCallBack;
+            TrackUnsubscribe(() => _metaDataManager.ManagerStateEventHandler -= MetaDataManager_IssueEventCallBack);
             _metaDataManager.ProjLoadedEventHandler += MetaDataManager_ProjLoadedCallBack;
+            TrackUnsubscribe(() => _metaDataManager.ProjLoadedEventHandler -= MetaDataManager_ProjLoadedCallBack);
             _metaDataManager.ProjComparisonCompleteEventHandler += MetaDataManager_ProjComparisonCompleteCallBack;
+            TrackUnsubscribe(() => _metaDataManager.ProjComparisonCompleteEventHandler -= MetaDataManager_ProjComparisonCompleteCallBack);
             _metaDataManager.SimilarityCheckCompleteEventHandler += MetaDataManager_SimilarityCheckCompleteCallBack;
+            TrackUnsubscribe(() => _metaDataManager.SimilarityCheckCompleteEventHandler -= MetaDataManager_SimilarityCheckCompleteCallBack);
         }
-
-        [Obsolete("Temporary scaffold — replaced by AppServices wiring in Task 4")]
-        public FileTrackViewModel(MetaDataManager metaDataManager)
-            : this(metaDataManager, new NullDialogService(), new SyncFallbackDispatcher())
-        { }
 
         private bool CanSetDeployDir(object obj)
         {
@@ -334,4 +336,3 @@ namespace DeployAssistant.ViewModel
         #endregion
     }
 }
-#pragma warning restore CS0618

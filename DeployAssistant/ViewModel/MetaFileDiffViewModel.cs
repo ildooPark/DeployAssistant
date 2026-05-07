@@ -1,8 +1,6 @@
-#pragma warning disable CS0618
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.Services;
-using DeployAssistant.ViewModel.Internal;
 using DeployAssistant.ViewModel.Utils;
 using Microsoft.Win32;
 using System;
@@ -122,11 +120,6 @@ namespace DeployAssistant.ViewModel
             _dialogService = dialogService;
             _uiDispatcher = uiDispatcher;
         }
-
-        [Obsolete("Temporary scaffold — replaced by AppServices wiring in Task 4")]
-        public MetaFileDiffViewModel(MetaDataManager metaDataManager)
-            : this(metaDataManager, new NullDialogService(), new SyncFallbackDispatcher())
-        { }
 
         // ── Public drag-drop entry point ──────────────────────────────────
 
@@ -275,4 +268,3 @@ namespace DeployAssistant.ViewModel
         }
     }
 }
-#pragma warning restore CS0618

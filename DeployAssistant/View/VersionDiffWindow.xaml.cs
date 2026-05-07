@@ -15,8 +15,10 @@ namespace DeployAssistant.View
         {
             InitializeComponent();
             Title = title;
-            var versionDiffVM = new VersionDiffViewModel(App.MetaDataManager, srcProject, dstProject, diff);
+            var services = ((App)Application.Current).Services!;
+            var versionDiffVM = new VersionDiffViewModel(services.MetaDataManager, srcProject, dstProject, diff);
             this.DataContext = versionDiffVM;
+            Closed += (_, _) => (versionDiffVM as IDisposable)?.Dispose();
         }
 
         private void FileFilterKeyword_TextChanged(object sender, TextChangedEventArgs e)
