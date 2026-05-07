@@ -1,5 +1,4 @@
 ﻿using DeployAssistant.DataComponent;
-using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
 using DeployAssistant.Services;
 using DeployAssistant.Utils;
@@ -16,7 +15,7 @@ namespace DeployAssistant.DataComponent
         Integration = 1 << 1, 
         Deploy = 1 << 2
     }
-    public class SettingManager : IManager
+    public class SettingManager
     {
         public event Action<MetaDataState>? ManagerStateEventHandler;
         public event Action<string>? SetPrevProjectEventHandler;

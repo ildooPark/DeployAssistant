@@ -8,7 +8,7 @@ using System.Text;
 
 namespace DeployAssistant.DataComponent
 {
-    public class FileManager : IManager
+    public class FileManager
     {
         #region Class Variables 
         private Dictionary<string, ProjectFile> _backupFilesDict;
@@ -61,9 +61,6 @@ namespace DeployAssistant.DataComponent
             _asyncControl = new SemaphoreSlim(12);
         }
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-        public void Awake()
-        {
-        }
         #region Calls For File Differences
         public async void MainProjectIntegrityCheck()
         {

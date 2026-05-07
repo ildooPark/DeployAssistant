@@ -6,7 +6,7 @@ using System.Text;
 
 namespace DeployAssistant.DataComponent
 {
-    public class UpdateManager : IManager
+    public class UpdateManager
     {
         private ProjectMetaData? _projectMetaData;
         private ProjectData? _projectMain;
@@ -19,23 +19,12 @@ namespace DeployAssistant.DataComponent
         public event Action<object>? ProjectUpdateEventHandler;
         public event Action<MetaDataState>? ManagerStateEventHandler;
 
-        /// <summary>
-        /// Optional callback to ask the user a yes/no question.
-        /// Parameters: (message, title). Returns true for "Yes", false for "No".
-        /// When null, defaults to false (do not retry on failure).
-        /// </summary>
-        public Func<string, string, bool>? ConfirmationCallback { get; set; }
-
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         public UpdateManager() 
         {
             _fileHandlerTool = new FileHandlerTool();
         }
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-        public void Awake()
-        {
-        }
-        
         /// <summary>
         /// Requires Updater Name, Log, and Current Project Path
         /// </summary>
@@ -61,17 +50,9 @@ namespace DeployAssistant.DataComponent
                 updateSuccess = _fileHandlerTool.TryApplyFileChanges(_currentProjectFileChanges);
                 if (!updateSuccess)
                 {
-                    bool retry = ConfirmationCallback?.Invoke("Update Failed, Would you like to Retry?", "Update Project") ?? false;
-                    if (retry)
-                    {
-                        continue; 
-                    }
-                    else
-                    {
-                        Trace.TraceWarning("Update Failed, Please Run Version Integrity Test");
-                        ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                        return;
-                    }
+                    Trace.TraceWarning("Update Failed, Please Run Version Integrity Test");
+                    ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
+                    return;
                 }
             }
             ++_projectMetaData.LocalUpdateCount;
@@ -109,17 +90,9 @@ namespace DeployAssistant.DataComponent
                 updateSuccess = _fileHandlerTool.TryApplyFileChanges(_currentProjectFileChanges);
                 if (!updateSuccess)
                 {
-                    bool retry = ConfirmationCallback?.Invoke("Integration Failed, Would you like to Retry?", "Update Project") ?? false;
-                    if (retry)
-                    {
-                        continue;
-                    }
-                    else
-                    {
-                        Trace.TraceWarning("Integration Failed, Please Run Version Integrity Test");
-                        ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                        return;
-                    }
+                    Trace.TraceWarning("Integration Failed, Please Run Version Integrity Test");
+                    ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
+                    return;
                 }
             }
             ProjectData integratingProjData = new ProjectData(_srcProjectData);

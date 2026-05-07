@@ -24,7 +24,7 @@ namespace DeployAssistant.DataComponent
         Initializing,
         Idle
     }
-    public class MetaDataManager : IManager
+    public class MetaDataManager
     {
         public string? CurrentProjectPath {  get; set; }
 
@@ -153,8 +153,6 @@ namespace DeployAssistant.DataComponent
             _settingManager.SetPrevProjectEventHandler += SettingManager_SetLastDstProjectCallBack;
             _settingManager.UpdateIgnoreListEventHandler += SettingManager_UpdateIgnoreListCallBack;
 
-            _backupManager.Awake();
-            _updateManager.Awake();          // B1: was duplicated, now once
             _settingManager.DialogService = _dialogService;
             _settingManager.Awake();
         }

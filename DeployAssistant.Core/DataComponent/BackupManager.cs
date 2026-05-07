@@ -7,7 +7,7 @@ using System.IO;
 
 namespace DeployAssistant.DataComponent
 {
-    public class BackupManager : IManager
+    public class BackupManager
     {
         public ProjectMetaData? ProjectMetaData { get; set; }
         public Dictionary<string, ProjectFile>? BackupFiles => ProjectMetaData?.BackupFiles;
@@ -33,7 +33,6 @@ namespace DeployAssistant.DataComponent
         {
             _fileHandlerTool = new FileHandlerTool();
         }
-        public void Awake(){}
         private void BackupProject(ProjectData projectData)
         {
             if (BackupProjectDataList == null || ProjectMetaData == null)
