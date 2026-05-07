@@ -1,21 +1,15 @@
-﻿using DeployAssistant.DataComponent;
-
-namespace DeployAssistant.Interfaces
+﻿namespace DeployAssistant.Interfaces
 {
     public enum ProjectDataType
     {
         File,
         Directory
     }
-    public interface IProjectData
-    {
-        ProjectDataType DataType { get; }
-        public DataState DataState { get; set; }
-        public DateTime UpdatedTime { get; set; }
-        public string DataName { get; }
-        public string DataRelPath { get; }
-        public string DataSrcPath { get; set; }
-        public string DataAbsPath { get; }
-        public string DataHash { get; set; }
-    }
+
+    /// <summary>
+    /// Compatibility umbrella combining identity and content. Existing call sites
+    /// that take <see cref="IProjectData"/> continue to work; new code should accept
+    /// <see cref="IProjectDataIdentity"/> when only identity is needed (e.g. ignore lists).
+    /// </summary>
+    public interface IProjectData : IProjectDataIdentity, IProjectDataContent { }
 }

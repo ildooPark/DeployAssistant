@@ -19,6 +19,8 @@
     <!-- Interfaces -->
     <Compile Include="../DeployAssistant.Core/Interfaces/IManager.cs" Link="Interfaces/IManager.cs" />
     <Compile Include="../DeployAssistant.Core/Interfaces/IProjectData.cs" Link="Interfaces/IProjectData.cs" />
+    <Compile Include="../DeployAssistant.Core/Interfaces/IProjectDataIdentity.cs" Link="Interfaces/IProjectDataIdentity.cs" />
+    <Compile Include="../DeployAssistant.Core/Interfaces/IProjectDataContent.cs" Link="Interfaces/IProjectDataContent.cs" />
     <!-- Model -->
     <Compile Include="../DeployAssistant.Core/Model/ChangedFile.cs" Link="Model/ChangedFile.cs" />
     <Compile Include="../DeployAssistant.Core/Model/DeployData.cs" Link="Model/DeployData.cs" />

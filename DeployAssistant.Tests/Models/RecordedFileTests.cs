@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // ProjectFile is [Obsolete] — tests deliberately exercise the V1 type
 using DeployAssistant.DataComponent;
 using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
@@ -19,20 +20,25 @@ namespace DeployAssistant.Tests.Models
         }
 
         [Fact]
-        public void RecordedFile_AsIProjectData_HasEmptyContentFields()
+        public void RecordedFile_ImplementsIdentityOnly()
         {
-            // Today's behavior: RecordedFile satisfies IProjectData but the content
-            // half (Hash/RelPath/AbsPath/SrcPath/State) is meaningless. Task 2 (B3)
-            // splits IProjectData so RecordedFile only implements the identity half;
-            // this test pins down that the content fields default to empty strings
-            // / DataState.None, so the split produces no behavioral change.
-            IProjectData projData = new RecordedFile("x", ProjectDataType.File, IgnoreType.All);
+            var rf = new RecordedFile("z", ProjectDataType.Directory, IgnoreType.Integration);
 
-            Assert.Equal(string.Empty, projData.DataHash);
-            Assert.Equal(string.Empty, projData.DataRelPath);
-            Assert.Equal(string.Empty, projData.DataSrcPath);
-            Assert.Equal(string.Empty, projData.DataAbsPath);
-            Assert.Equal(DataState.None, projData.DataState);
+            Assert.IsAssignableFrom<IProjectDataIdentity>(rf);
+            Assert.False(rf is IProjectDataContent,
+                "RecordedFile must NOT implement IProjectDataContent — it has no meaningful hash/path");
+        }
+
+        [Fact]
+        public void ProjectFile_ImplementsBothIdentityAndContent()
+        {
+            var pf = new ProjectFile(
+                DataSize: 1, BuildVersion: "1.0", DataName: "a.dll",
+                DataSrcPath: @"C:\X", DataRelPath: "a.dll");
+
+            Assert.IsAssignableFrom<IProjectDataIdentity>(pf);
+            Assert.IsAssignableFrom<IProjectDataContent>(pf);
         }
     }
 }
+#pragma warning restore CS0618

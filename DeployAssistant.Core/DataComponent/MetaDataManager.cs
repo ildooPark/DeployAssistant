@@ -156,8 +156,7 @@ namespace DeployAssistant.DataComponent
             _settingManager.UpdateIgnoreListEventHandler += SettingManager_UpdateIgnoreListCallBack;
 
             _backupManager.Awake();
-            _updateManager.Awake();
-            _updateManager.Awake();
+            _updateManager.Awake();          // B1: was duplicated, now once
             _settingManager.ConfirmationCallback = ConfirmationCallback;
             _settingManager.Awake();
         }

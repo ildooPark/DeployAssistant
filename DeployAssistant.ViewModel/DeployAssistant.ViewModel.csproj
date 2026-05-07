@@ -9,7 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DeployAssistant.Core\DeployAssistant.Core.csproj" />
+    <ProjectReference Include="..\DeployAssistant.Core\DeployAssistant.Core.csproj">
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
   </ItemGroup>
 
 </Project>
