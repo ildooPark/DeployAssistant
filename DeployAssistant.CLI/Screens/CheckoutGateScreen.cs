@@ -163,7 +163,7 @@ internal sealed class CheckoutGateScreen : Screen
                     AnsiConsole.MarkupLine($"   {marker}{row}");
                 }
                 AnsiConsole.WriteLine();
-                AnsiConsole.MarkupLine(TextStyle.Dim("  ↑↓ move · d/u half-page · d discard & checkout · esc cancel"));
+                AnsiConsole.MarkupLine(TextStyle.Dim("  ↑↓ move · u half-page up · d discard & checkout · esc cancel"));
                 return;
 
             case Phase.CheckingOut:
