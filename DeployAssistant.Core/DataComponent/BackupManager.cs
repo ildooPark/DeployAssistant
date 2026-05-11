@@ -36,9 +36,9 @@ namespace DeployAssistant.DataComponent
         private void BackupProject(ProjectData projectData)
         {
             if (BackupProjectDataList == null || ProjectMetaData == null)
-            { 
-                Console.WriteLine("Failed to Load ProjectMetaData: BackupProjectList is Null"); 
-                return; 
+            {
+                Trace.TraceWarning("Failed to Load ProjectMetaData: BackupProjectList is Null");
+                return;
             }
             bool hasBackup = BackupProjectDataList.Contains(projectData);
             if (!hasBackup)

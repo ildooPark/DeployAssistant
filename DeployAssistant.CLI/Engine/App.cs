@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Spectre.Console;
 
 namespace DeployAssistant.CLI.Engine
@@ -10,6 +11,26 @@ namespace DeployAssistant.CLI.Engine
 
         public int Run(Screen root)
         {
+            // Fail fast if there is no real console attached — the TUI is meaningless
+            // when stdout/stdin are redirected (e.g. captured output, piped, headless run).
+            if (Console.IsOutputRedirected || Console.IsInputRedirected)
+            {
+                Console.Error.WriteLine("deployassistant: interactive TUI requires a real terminal.");
+                Console.Error.WriteLine("Run the .exe directly in a console window; redirection/piping is not supported.");
+                return 1;
+            }
+
+            // Probe Console.WindowHeight once up front so we surface a clean error rather than
+            // letting it throw deep inside the render loop (System.IO.IOException at GetBufferInfo
+            // when launched without an attached console handle).
+            try { _ = Console.WindowHeight; }
+            catch (IOException)
+            {
+                Console.Error.WriteLine("deployassistant: unable to read console dimensions (no console window?).");
+                Console.Error.WriteLine("Run the .exe directly in a console window.");
+                return 1;
+            }
+
             _stack.Push(root);
             Screen? lastTop = null;
 
@@ -28,7 +49,10 @@ namespace DeployAssistant.CLI.Engine
 
                     AnsiConsole.Clear();
 
-                    if (Console.WindowHeight < 10)
+                    int windowHeight;
+                    try { windowHeight = Console.WindowHeight; }
+                    catch (IOException) { windowHeight = 0; }
+                    if (windowHeight < 10)
                     {
                         AnsiConsole.MarkupLine(TextStyle.Dim("Terminal too small — please resize."));
                         var key = Console.ReadKey(intercept: true);
