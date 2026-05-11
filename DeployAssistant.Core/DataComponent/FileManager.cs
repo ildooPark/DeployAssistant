@@ -1,4 +1,5 @@
-﻿using DeployAssistant.Interfaces;
+﻿using DeployAssistant.Filtering;
+using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
 using DeployAssistant.Utils;
 using System.Collections.Concurrent;
@@ -49,7 +50,7 @@ namespace DeployAssistant.DataComponent
         private HashTool _hashTool; 
         private ProjectData? _dstProjectData;
         private ProjectData? _srcProjectData;
-        private ProjectIgnoreData? _projIgnoreData;
+        private ProjectContext? _projectContext;
         #endregion
 
         #region Manager Events 
@@ -86,7 +87,7 @@ namespace DeployAssistant.DataComponent
         public async void MainProjectIntegrityCheck()
         {
             ManagerStateEventHandler?.Invoke(MetaDataState.IntegrityChecking);
-            if (_dstProjectData == null || _projIgnoreData == null)
+            if (_dstProjectData == null || _projectContext == null)
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                 Trace.TraceWarning("Main Project is Missing");
@@ -96,7 +97,7 @@ namespace DeployAssistant.DataComponent
 
             try
             {
-                Stopwatch sw = new Stopwatch(); 
+                Stopwatch sw = new Stopwatch();
                 sw.Start();
                 StringBuilder fileIntegrityLog = new StringBuilder();
                 List<ChangedFile> fileChanges = new List<ChangedFile>();
@@ -109,18 +110,12 @@ namespace DeployAssistant.DataComponent
                 List<string> directoryRelFiles = [];
                 List<string> directoryRelDirs = [];
 
-                var ignoringFilesAndDirsTask = Task.Run(() => 
-                    _projIgnoreData.GetIgnoreFilesAndDirPaths(_dstProjectData.ProjectPath, IgnoreType.IntegrityCheck)); 
+                var scanner = _projectContext.Scanner;
+                var filesTask = Task.Run(() => scanner.EnumerateFiles(_dstProjectData.ProjectPath, IgnoreType.IntegrityCheck).ToList());
+                var dirsTask = Task.Run(() => scanner.EnumerateDirectories(_dstProjectData.ProjectPath, IgnoreType.IntegrityCheck).ToList());
 
-                var rawFilesTask = Task.Run(() => Directory.GetFiles(_dstProjectData.ProjectPath, "*", SearchOption.AllDirectories));
-                var rawDirsTask = Task.Run(() => Directory.GetDirectories(_dstProjectData.ProjectPath, "*", SearchOption.AllDirectories));
-
-                string[]? rawFiles = await rawFilesTask; rawFiles ??= [];
-                string[]? rawDirs = await rawDirsTask; rawDirs ??= [];
-                (List<string> excludingFiles, List<string> excludingDirs) = await ignoringFilesAndDirsTask;
-
-                IEnumerable<string> directoryFiles = rawFiles.ToList().Except(excludingFiles);
-                IEnumerable<string> directoryDirs = rawDirs.ToList().Except(excludingDirs); 
+                IEnumerable<string> directoryFiles = await filesTask;
+                IEnumerable<string> directoryDirs = await dirsTask;
                 fileIntegrityLog.AppendLine(sw.Elapsed.ToString());
 
                 foreach (string absPathFile in directoryFiles)
@@ -337,20 +332,18 @@ namespace DeployAssistant.DataComponent
                 if (rawFiles == null) backupFiles = new string[0];
                 if (rawDirs == null) backupDirs = new string[0];
 
-                // Apply _projIgnoreData (IntegrityCheck scope) to exclude ignored paths before
-                // computing the diff — mirrors the pattern in MainProjectIntegrityCheck:112-123.
-                List<string> ignoreExcludedFiles = new List<string>();
-                List<string> ignoreExcludedDirs = new List<string>();
-                if (_projIgnoreData != null)
+                // Apply IIgnoreFilter (IntegrityCheck scope) via the predicate before computing
+                // the diff — mirrors the pattern in MainProjectIntegrityCheck.
+                IEnumerable<string> directoryFiles = rawFiles.ToList().Except(backupFiles.ToList()).Except(exportFiles.ToList());
+                IEnumerable<string> directoryDirs = rawDirs.ToList().Except(backupDirs.ToList()).Except(exportDirs.ToList());
+                if (_projectContext != null)
                 {
-                    (ignoreExcludedFiles, ignoreExcludedDirs) = _projIgnoreData.GetIgnoreFilesAndDirPaths(
-                        targetProject.ProjectPath, IgnoreType.IntegrityCheck);
+                    var filter = _projectContext.IgnoreFilter;
+                    directoryFiles = directoryFiles
+                        .Where(f => !filter.Matches(PathCompat.GetRelativePath(targetProject.ProjectPath, f), ProjectDataType.File, IgnoreType.IntegrityCheck));
+                    directoryDirs = directoryDirs
+                        .Where(d => !filter.Matches(PathCompat.GetRelativePath(targetProject.ProjectPath, d), ProjectDataType.Directory, IgnoreType.IntegrityCheck));
                 }
-
-                IEnumerable<string> directoryFiles = rawFiles.ToList().Except(backupFiles.ToList()); directoryFiles = directoryFiles.Except(exportFiles.ToList());
-                IEnumerable<string> directoryDirs = rawDirs.ToList().Except(backupDirs.ToList()); directoryDirs = directoryDirs.Except(exportDirs.ToList());
-                directoryFiles = directoryFiles.Except(ignoreExcludedFiles);
-                directoryDirs = directoryDirs.Except(ignoreExcludedDirs);
 
                 foreach (string absPathFile in directoryFiles)
                 {
@@ -530,7 +523,7 @@ namespace DeployAssistant.DataComponent
             out int significantDiff,
             out int rawDiff)
         {
-            if (_projIgnoreData == null)
+            if (_projectContext == null)
             {
                 significantDiff = -1;
                 rawDiff = -1;
@@ -599,7 +592,12 @@ namespace DeployAssistant.DataComponent
                 }
                 rawDiff = fileChanges.Count;
                 List<ChangedFile> filteredChangedList = new List<ChangedFile>(fileChanges);
-                _projIgnoreData.FilterChangedFileList(filteredChangedList);
+                var filter = _projectContext.IgnoreFilter;
+                filteredChangedList.RemoveAll(c =>
+                {
+                    ProjectFile? pf = (c.SrcFile == null || c.SrcFile.DataName == "") ? c.DstFile : c.SrcFile;
+                    return pf != null && filter.Matches(pf.DataRelPath, pf.DataType, IgnoreType.Integration);
+                });
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                 significantDiff = filteredChangedList.Count;
                 return filteredChangedList;
@@ -781,19 +779,29 @@ namespace DeployAssistant.DataComponent
 
             try
             {
-                // Apply IgnoreType.Deploy filter before pre-staging so that *.deploy, *.VersionLog,
-                // Export_XLSX/ etc. that live in the source folder are never queued.
-                List<string> deployExcludedFiles = new List<string>();
-                List<string> deployExcludedDirs = new List<string>();
-                if (_projIgnoreData != null)
+                // Apply IgnoreType.Deploy filter via the predicate-based IIgnoreFilter
+                // (works even when no ProjectContext has been loaded yet — falls through
+                // to the unfiltered paths).
+                string[] filteredAllFiles, filteredTopFiles, filteredDirs;
+                if (_projectContext != null)
                 {
-                    (deployExcludedFiles, deployExcludedDirs) = _projIgnoreData.GetIgnoreFilesAndDirPaths(
-                        srcDirPath, IgnoreType.Deploy);
+                    var filter = _projectContext.IgnoreFilter;
+                    filteredAllFiles = filesAllDirectories
+                        .Where(f => !filter.Matches(PathCompat.GetRelativePath(srcDirPath, f), ProjectDataType.File, IgnoreType.Deploy))
+                        .ToArray();
+                    filteredTopFiles = filesTopDirectories
+                        .Where(f => !filter.Matches(PathCompat.GetRelativePath(srcDirPath, f), ProjectDataType.File, IgnoreType.Deploy))
+                        .ToArray();
+                    filteredDirs = dirsAllDirectories
+                        .Where(d => !filter.Matches(PathCompat.GetRelativePath(srcDirPath, d), ProjectDataType.Directory, IgnoreType.Deploy))
+                        .ToArray();
                 }
-
-                var filteredAllFiles = filesAllDirectories.Except(deployExcludedFiles).ToArray();
-                var filteredTopFiles = filesTopDirectories.Except(deployExcludedFiles).ToArray();
-                var filteredDirs = dirsAllDirectories.Except(deployExcludedDirs).ToArray();
+                else
+                {
+                    filteredAllFiles = filesAllDirectories;
+                    filteredTopFiles = filesTopDirectories;
+                    filteredDirs = dirsAllDirectories;
+                }
 
                 var filesSubDirectories = filteredAllFiles.Except(filteredTopFiles);
                 RegisterFilesUnderSubDirectory(srcDirPath, filesSubDirectories.ToArray(), filteredDirs);
@@ -869,18 +877,28 @@ namespace DeployAssistant.DataComponent
                     return;
                 }
 
-                // Apply IgnoreType.Deploy filter before pre-staging (mirrors RegisterAllSrcFiles path).
-                List<string> deployExcludedFiles2 = new List<string>();
-                List<string> deployExcludedDirs2 = new List<string>();
-                if (_projIgnoreData != null)
+                // Apply IgnoreType.Deploy filter via the predicate-based IIgnoreFilter
+                // (mirrors RegisterAllSrcFiles path).
+                string[] filteredAllFiles2, filteredTopFiles2, filteredDirs2;
+                if (_projectContext != null)
                 {
-                    (deployExcludedFiles2, deployExcludedDirs2) = _projIgnoreData.GetIgnoreFilesAndDirPaths(
-                        srcDirPath, IgnoreType.Deploy);
+                    var filter = _projectContext.IgnoreFilter;
+                    filteredAllFiles2 = filesAllDirectories
+                        .Where(f => !filter.Matches(PathCompat.GetRelativePath(srcDirPath, f), ProjectDataType.File, IgnoreType.Deploy))
+                        .ToArray();
+                    filteredTopFiles2 = filesTopDirectories
+                        .Where(f => !filter.Matches(PathCompat.GetRelativePath(srcDirPath, f), ProjectDataType.File, IgnoreType.Deploy))
+                        .ToArray();
+                    filteredDirs2 = dirsAllDirectories
+                        .Where(d => !filter.Matches(PathCompat.GetRelativePath(srcDirPath, d), ProjectDataType.Directory, IgnoreType.Deploy))
+                        .ToArray();
                 }
-
-                var filteredAllFiles2 = filesAllDirectories.Except(deployExcludedFiles2).ToArray();
-                var filteredTopFiles2 = filesTopDirectories.Except(deployExcludedFiles2).ToArray();
-                var filteredDirs2 = dirsAllDirectories.Except(deployExcludedDirs2).ToArray();
+                else
+                {
+                    filteredAllFiles2 = filesAllDirectories;
+                    filteredTopFiles2 = filesTopDirectories;
+                    filteredDirs2 = dirsAllDirectories;
+                }
 
                 var filesSubDirectories = filteredAllFiles2.Except(filteredTopFiles2);
                 foreach (string subDirFileAbsPath in filesSubDirectories)
@@ -1294,10 +1312,15 @@ namespace DeployAssistant.DataComponent
             if (projectMetaData == null) return;
             _backupFilesDict = projectMetaData.BackupFiles;
         }
-        public void MetaDataManager_UpdateIgnoreListCallBack(object projIgnoreDataObj)
+        /// <summary>
+        /// Single project-state callback replacing the prior UpdateIgnoreList chain.
+        /// FileManager queries <see cref="ProjectContext.IgnoreFilter"/> /
+        /// <see cref="ProjectContext.Scanner"/> for all .ignore decisions.
+        /// </summary>
+        public void MetaDataManager_ProjectContextLoadedCallBack(object ctxObj)
         {
-            if (projIgnoreDataObj is not ProjectIgnoreData projectIgnoreData) return;
-            _projIgnoreData = projectIgnoreData;
+            if (ctxObj is not ProjectContext ctx) return;
+            _projectContext = ctx;
         }
         #endregion
 

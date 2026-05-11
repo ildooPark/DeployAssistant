@@ -1,4 +1,5 @@
-﻿using DeployAssistant.Interfaces;
+﻿using DeployAssistant.Filtering;
+using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
 using DeployAssistant.Services;
 using DeployAssistant.Utils;
@@ -46,7 +47,13 @@ namespace DeployAssistant.DataComponent
         public event Action<int, int>? IntegrityProgressEventHandler;
         public event Action<ProjectData, ProjectData, List<ChangedFile>>? ProjComparisonCompleteEventHandler;
         public event Action<MetaDataState> ManagerStateEventHandler;
-        public event Action<ProjectIgnoreData> UpdateIgnoreListEventHandler;
+        /// <summary>
+        /// Fires once after both <see cref="ProjectMetaData"/> and <see cref="ProjectIgnoreData"/>
+        /// are loaded (or constructed during init), carrying a composed
+        /// <see cref="ProjectContext"/>.  Replaces the prior two-event
+        /// MetaDataLoaded + UpdateIgnoreList coordination.
+        /// </summary>
+        public event Action<ProjectContext>? ProjectContextLoadedEventHandler;
         public event Action<ProjectData, List<ProjectSimilarity>>? SimilarityCheckCompleteEventHandler;
         private MetaDataState _currentState; 
         public MetaDataState CurrentState
@@ -136,7 +143,7 @@ namespace DeployAssistant.DataComponent
 
             SrcProjectLoadedEventHandler += _updateManager.MetaDataManager_SrcProjectLoadedCallBack;
             StagedChangesEventHandler += _updateManager.MetaDataManager_StagedChangesCallBack;
-            UpdateIgnoreListEventHandler += _fileManager.MetaDataManager_UpdateIgnoreListCallBack;
+            ProjectContextLoadedEventHandler += _fileManager.MetaDataManager_ProjectContextLoadedCallBack;
 
             _backupManager.ProjectRevertEventHandler += ProjectChangeCallBack;
             _backupManager.ManagerStateEventHandler += ManagerStateCallBack;
@@ -158,7 +165,7 @@ namespace DeployAssistant.DataComponent
             _exportManager.ExportCompleteEventHandler += ExportManager_ExportCompleteCallBack;
 
             _settingManager.SetPrevProjectEventHandler += SettingManager_SetLastDstProjectCallBack;
-            _settingManager.UpdateIgnoreListEventHandler += SettingManager_UpdateIgnoreListCallBack;
+            _settingManager.IgnoreDataLoadedEventHandler += SettingManager_IgnoreDataLoadedCallBack;
 
             _settingManager.DialogService = _dialogService;
             _settingManager.Awake();
@@ -211,20 +218,16 @@ namespace DeployAssistant.DataComponent
                 StringBuilder changeLog = new StringBuilder();
                 ProjectMetaData newProjectRepo = new ProjectMetaData(Path.GetFileName(projectPath), projectPath);
                 ProjectIgnoreData newIgnoreData = new ProjectIgnoreData(projectPath);
-                newIgnoreData.ConfigureDefaultIgnore(newProjectRepo.ProjectName); 
+                newIgnoreData.ConfigureDefaultIgnore(newProjectRepo.ProjectName);
+                ProjectContext initCtx = ProjectContext.Create(newProjectRepo, newIgnoreData);
 
-                Stopwatch stopwatch = new Stopwatch(); 
+                Stopwatch stopwatch = new Stopwatch();
                 stopwatch.Start();
-                var ignoringFilesAndDirsTask = Task.Run(() =>
-                    newIgnoreData.GetIgnoreFilesAndDirPaths(projectPath, IgnoreType.Initialization));
-                var getFilesTask = Task.Run(() => Directory.GetFiles(projectPath, "*", SearchOption.AllDirectories));
-                var getDirsTask = Task.Run(() => Directory.GetDirectories(projectPath, "*", SearchOption.AllDirectories));
+                var getFilesTask = Task.Run(() => initCtx.Scanner.EnumerateFiles(projectPath, IgnoreType.Initialization).ToArray());
+                var getDirsTask = Task.Run(() => initCtx.Scanner.EnumerateDirectories(projectPath, IgnoreType.Initialization).ToArray());
 
-                string[]? newProjectFiles = await getFilesTask; 
+                string[]? newProjectFiles = await getFilesTask;
                 string[]? newProjectDirs = await getDirsTask;
-                (List<string> excludingFiles, List<string> excludingDirs) = await ignoringFilesAndDirsTask;
-                newProjectFiles = newProjectFiles.Except(excludingFiles).ToArray();
-                newProjectDirs = newProjectDirs.Except(excludingDirs).ToArray();
                 stopwatch.Stop();
                 Console.WriteLine(stopwatch.Elapsed.ToString());
 
@@ -304,7 +307,7 @@ namespace DeployAssistant.DataComponent
                 TryAppendProjParentDirAsProjectFile(MainProjectData, projectPath);
                 TryGenerateSupplementDirectories(projectPath, newProjectData.ProjectName);
                 _settingManager.SetRecentDstDirectory(projectPath);
-                UpdateIgnoreListEventHandler?.Invoke(newIgnoreData);
+                ProjectContextLoadedEventHandler?.Invoke(initCtx);
 
                 CurrentState = MetaDataState.Idle;
             }
@@ -689,10 +692,9 @@ namespace DeployAssistant.DataComponent
             }
         }
 
-        private void SettingManager_UpdateIgnoreListCallBack(object projIgnoreDataObj)
+        private void SettingManager_IgnoreDataLoadedCallBack(ProjectMetaData metaData, ProjectIgnoreData ignoreData)
         {
-            if (projIgnoreDataObj is not ProjectIgnoreData projIgnoreData) return;
-            UpdateIgnoreListEventHandler?.Invoke(projIgnoreData);
+            ProjectContextLoadedEventHandler?.Invoke(ProjectContext.Create(metaData, ignoreData));
         }
         #endregion
 
