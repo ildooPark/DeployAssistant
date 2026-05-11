@@ -5,43 +5,67 @@
 
 .DESCRIPTION
   Publishes the WPF GUI (self-contained single-file) and the .NET Framework
-  CLI, stages them into a versioned zip, drops it on Y:\ along with an
-  extracted copy, and prints the paths so the operator can paste them into
-  the Notion release note.
+  CLI as two separate zips, drops them on the Y: drive in a versioned
+  subfolder under either:
 
-  Run from the repo root or anywhere; the script resolves the repo root
-  relative to its own location.
+    개발 (dev, default)  — for testing, no announcement
+    배포 (production)    — only with -Official, after the dev drop is verified
+
+  Layout produced on Y::
+
+    Y:\...\DeployAssistant\<개발|배포>\gui\v<X.Y.Z>_<date>\
+        DeployAssistant-GUI_v<X.Y.Z>_<date>_<sha>.zip
+        DeployAssistant\GUI\DeployAssistant.exe     (extracted)
+        README.txt
+
+    Y:\...\DeployAssistant\<개발|배포>\cli\v<X.Y.Z>_<date>\
+        DeployAssistant-CLI_v<X.Y.Z>_<date>_<sha>.zip
+        DeployAssistant\CLI\deployassistant.exe + DLLs   (extracted)
+        README.txt
 
 .PARAMETER Version
   Semver string without the 'v' prefix, e.g. "1.0.0".
+
+.PARAMETER Official
+  Promote to the 배포 (production) channel. Without this switch, the drop
+  lands in 개발 (dev) and is not considered an announced release.
+
+.PARAMETER Component
+  Which component(s) to publish. "Both" (default) ships GUI + CLI.
+  "Gui" or "Cli" ship just one — useful when only one side changed.
 
 .PARAMETER DryRun
   Stage and zip locally, but skip the Y: drive copy.
 
 .PARAMETER NoExtract
-  Skip extracting the zip alongside it on Y: drive (zip-only drop).
+  Skip extracting each zip alongside it on Y: drive (zip-only drop).
 
 .PARAMETER IncludeFrameworkDependentGui
-  Also stage the framework-dependent GUI flavor (smaller download, requires
-  .NET 8 Desktop Runtime on the target machine). Default is self-contained
-  single-file only.
-
-.PARAMETER Destination
-  Override the Y: drive location. Default is the team share.
+  Also stage the framework-dependent GUI flavor under
+  DeployAssistant\GUI\framework-dependent\. Default is self-contained
+  single-file only (no .NET runtime required on target).
 
 .PARAMETER SkipBuild
-  Skip the dotnet build sanity check (assumes the caller already ran
-  `dotnet build -c Release` and confirmed clean output). Still runs the
-  per-project `dotnet publish` calls.
+  Skip the `dotnet build` sanity check (still runs the per-project
+  publishes). Use only if a clean Release build was just confirmed in
+  this shell.
+
+.PARAMETER Destination
+  Override the Y: drive parent. Default is the team share. The
+  channel subfolder (개발 or 배포) is appended automatically based on
+  -Official.
 
 .EXAMPLE
+  # Dev drop for testing
   ./scripts/release.ps1 -Version 1.0.0
 
 .EXAMPLE
-  ./scripts/release.ps1 -Version 1.0.1 -DryRun
+  # Official production release (after dev drop was verified)
+  ./scripts/release.ps1 -Version 1.0.0 -Official
 
 .EXAMPLE
-  ./scripts/release.ps1 -Version 1.1.0 -IncludeFrameworkDependentGui
+  # CLI-only patch release
+  ./scripts/release.ps1 -Version 1.0.1 -Component Cli -Official
 
 .NOTES
   Routine documented at: docs/release-process.md
@@ -54,6 +78,11 @@ param(
     [ValidatePattern('^\d+\.\d+\.\d+$')]
     [string]$Version,
 
+    [switch]$Official,
+
+    [ValidateSet('Both', 'Gui', 'Cli')]
+    [string]$Component = 'Both',
+
     [switch]$DryRun,
     [switch]$NoExtract,
     [switch]$IncludeFrameworkDependentGui,
@@ -63,7 +92,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+$repoRoot    = (Resolve-Path "$PSScriptRoot\..").Path
 $publishRoot = Join-Path $repoRoot 'publish'
 
 # ---------------------------------------------------------------- preflight
@@ -78,23 +107,28 @@ if (-not $gitSha) { throw "Could not determine git short SHA. Is this a git repo
 $date       = Get-Date -Format 'yyyyMMdd'
 $versionTag = "v$Version"
 $folderName = "${versionTag}_${date}"
-$zipName    = "DeployAssistant_${versionTag}_${date}_${gitSha}.zip"
 
-# Bail out early if the target version already exists on Y:.  Versions are
-# immutable — bump the patch and retry, or move the existing folder aside.
-if (-not $DryRun -and (Test-Path $Destination)) {
-    $versionDir = Join-Path $Destination $folderName
-    if (Test-Path $versionDir) {
-        throw @"
-Version folder already exists: $versionDir
+# Channel — 개발 (dev) by default; 배포 (production) only with -Official
+$channel = if ($Official) { '배포' } else { '개발' }
 
-Versions are immutable. Bump the patch version (or move the existing folder
-out of the way) and retry.
-"@
+$wantGui = ($Component -in 'Both', 'Gui')
+$wantCli = ($Component -in 'Both', 'Cli')
+
+$guiDest = Join-Path $Destination (Join-Path $channel 'gui')
+$cliDest = Join-Path $Destination (Join-Path $channel 'cli')
+
+# Bail out early if any target version folder already exists.
+# Versions are immutable — bump the patch and retry.
+if (-not $DryRun) {
+    if ($wantGui -and (Test-Path (Join-Path $guiDest $folderName))) {
+        throw "GUI version folder already exists: $(Join-Path $guiDest $folderName)`n`nVersions are immutable. Bump the patch version and retry."
+    }
+    if ($wantCli -and (Test-Path (Join-Path $cliDest $folderName))) {
+        throw "CLI version folder already exists: $(Join-Path $cliDest $folderName)`n`nVersions are immutable. Bump the patch version and retry."
     }
 }
 
-# Kill any local processes that would hold a file lock on the publish output
+# Kill any local processes that hold a file lock on the publish output
 Get-Process -Name "DeployAssistant","deployassistant" -ErrorAction SilentlyContinue |
     Stop-Process -Force -ErrorAction SilentlyContinue
 
@@ -106,111 +140,157 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { throw "dotnet build failed." }
 }
 
-# Reset publish output directories so stale artifacts can't leak in
-$pubGuiSc  = Join-Path $publishRoot 'DeployAssistant-sc'
-$pubGuiFd  = Join-Path $publishRoot 'DeployAssistant-fd'
-$pubCli    = Join-Path $publishRoot 'DeployAssistant.CLI'
+$pubGuiSc = Join-Path $publishRoot 'DeployAssistant-sc'
+$pubGuiFd = Join-Path $publishRoot 'DeployAssistant-fd'
+$pubCli   = Join-Path $publishRoot 'DeployAssistant.CLI'
 
-foreach ($p in @($pubGuiSc, $pubGuiFd, $pubCli)) {
-    if (Test-Path $p) { Remove-Item $p -Recurse -Force }
-}
+if ($wantGui) {
+    foreach ($p in @($pubGuiSc, $pubGuiFd)) { if (Test-Path $p) { Remove-Item $p -Recurse -Force } }
 
-Write-Host "Publishing WPF GUI (self-contained, single-file, win-x64)..." -ForegroundColor Cyan
-& dotnet publish (Join-Path $repoRoot 'DeployAssistant\DeployAssistant.csproj') `
-    -c Release -r win-x64 --self-contained true `
-    -p:PublishSingleFile=true `
-    -o $pubGuiSc
-if ($LASTEXITCODE -ne 0) { throw "GUI self-contained publish failed." }
-
-if ($IncludeFrameworkDependentGui) {
-    Write-Host "Publishing WPF GUI (framework-dependent, win-x64)..." -ForegroundColor Cyan
+    Write-Host "Publishing WPF GUI (self-contained, single-file, win-x64)..." -ForegroundColor Cyan
     & dotnet publish (Join-Path $repoRoot 'DeployAssistant\DeployAssistant.csproj') `
-        -c Release -r win-x64 --self-contained false `
-        -p:PublishSingleFile=false `
-        -o $pubGuiFd
-    if ($LASTEXITCODE -ne 0) { throw "GUI framework-dependent publish failed." }
+        -c Release -r win-x64 --self-contained true `
+        -p:PublishSingleFile=true `
+        -o $pubGuiSc
+    if ($LASTEXITCODE -ne 0) { throw "GUI self-contained publish failed." }
+
+    if ($IncludeFrameworkDependentGui) {
+        Write-Host "Publishing WPF GUI (framework-dependent, win-x64)..." -ForegroundColor Cyan
+        & dotnet publish (Join-Path $repoRoot 'DeployAssistant\DeployAssistant.csproj') `
+            -c Release -r win-x64 --self-contained false `
+            -p:PublishSingleFile=false `
+            -o $pubGuiFd
+        if ($LASTEXITCODE -ne 0) { throw "GUI framework-dependent publish failed." }
+    }
 }
 
-Write-Host "Publishing CLI (net472 framework-dependent)..." -ForegroundColor Cyan
-& dotnet publish (Join-Path $repoRoot 'DeployAssistant.CLI\DeployAssistant.CLI.csproj') `
-    -c Release `
-    -o $pubCli
-if ($LASTEXITCODE -ne 0) { throw "CLI publish failed." }
+if ($wantCli) {
+    if (Test-Path $pubCli) { Remove-Item $pubCli -Recurse -Force }
 
-# ---------------------------------------------------------------- stage
-
-$stagingRoot = Join-Path $env:TEMP "da_release_$([guid]::NewGuid().ToString('N').Substring(0,8))"
-$stagingDir  = Join-Path $stagingRoot 'DeployAssistant'
-New-Item -ItemType Directory -Path (Join-Path $stagingDir 'GUI') -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $stagingDir 'CLI') -Force | Out-Null
-
-# GUI: pick the single-file self-contained exe (and the framework-dependent
-# folder if requested).  .pdb files excluded from the user-facing drop.
-$guiScExe = Join-Path $pubGuiSc 'DeployAssistant.exe'
-if (-not (Test-Path $guiScExe)) {
-    throw "Expected self-contained GUI exe not found at: $guiScExe"
-}
-Copy-Item $guiScExe -Destination (Join-Path $stagingDir 'GUI') -Force
-
-if ($IncludeFrameworkDependentGui) {
-    $guiFdDest = Join-Path $stagingDir 'GUI\framework-dependent'
-    New-Item -ItemType Directory -Path $guiFdDest -Force | Out-Null
-    Get-ChildItem $pubGuiFd -File -Exclude '*.pdb' | Copy-Item -Destination $guiFdDest -Force
+    Write-Host "Publishing CLI (net472 framework-dependent)..." -ForegroundColor Cyan
+    & dotnet publish (Join-Path $repoRoot 'DeployAssistant.CLI\DeployAssistant.CLI.csproj') `
+        -c Release `
+        -o $pubCli
+    if ($LASTEXITCODE -ne 0) { throw "CLI publish failed." }
 }
 
-# CLI: full publish folder minus .pdb files
-Get-ChildItem $pubCli -File -Exclude '*.pdb' | Copy-Item -Destination (Join-Path $stagingDir 'CLI') -Force
+# ---------------------------------------------------------------- stage + zip helpers
 
-# README for end users
-$readme = @"
-DeployAssistant $versionTag  ($date, commit $gitSha)
+function New-ReleaseZip {
+    param(
+        [Parameter(Mandatory)] [string]$Kind,             # 'GUI' or 'CLI'
+        [Parameter(Mandatory)] [string]$StagingFilesDir,  # directory whose contents fill DeployAssistant\<Kind>\
+        [Parameter(Mandatory)] [string]$ZipFileName
+    )
 
-GUI (recommended for most users)
---------------------------------
-Double-click  GUI\DeployAssistant.exe
+    $stagingRoot = Join-Path $env:TEMP "da_release_$([guid]::NewGuid().ToString('N').Substring(0,8))"
+    $payloadDir  = Join-Path $stagingRoot 'DeployAssistant'
+    $kindDir     = Join-Path $payloadDir $Kind
+    New-Item -ItemType Directory -Path $kindDir -Force | Out-Null
+
+    # Copy non-pdb files (preserve subdirectory structure if any)
+    Get-ChildItem $StagingFilesDir -Recurse -File -Exclude '*.pdb' | ForEach-Object {
+        $rel = $_.FullName.Substring($StagingFilesDir.Length).TrimStart('\','/')
+        $target = Join-Path $kindDir $rel
+        $targetDir = Split-Path $target -Parent
+        if ($targetDir -and -not (Test-Path $targetDir)) {
+            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+        }
+        Copy-Item $_.FullName -Destination $target -Force
+    }
+
+    # README
+    $kindLower = $Kind.ToLower()
+    $readme = if ($Kind -eq 'GUI') {
+@"
+DeployAssistant GUI $versionTag  ($date, commit $gitSha)
+
+Double-click  GUI\DeployAssistant.exe  to launch.
 
 Self-contained: no .NET runtime install required.
 
+Documentation
+-------------
+Notion: https://www.notion.so/clevision/Deploy-Assistant-DA-Manual-6c6358be215d470580f7351d25e0ba01
+GitHub: https://github.com/ildooPark/DeployAssistant
+"@
+    } else {
+@"
+DeployAssistant CLI $versionTag  ($date, commit $gitSha)
 
-CLI (for scripting / non-interactive use)
------------------------------------------
 From PowerShell or cmd:
     CLI\deployassistant.exe --help
 
-Requires .NET Framework 4.7.2 (already installed on Windows 10 1803+ and Windows 11).
+Requires .NET Framework 4.7.2 (default on Windows 10 1803+ and Windows 11).
 
+Pass --yes to auto-confirm all prompts for non-interactive / scripted use.
 
 Documentation
 -------------
+Notion: https://www.notion.so/clevision/35d398fd58f2811aa2affb10dc6edd6f
 GitHub: https://github.com/ildooPark/DeployAssistant
-Release notes: see the Notion release-notes page for this version.
 "@
-$readme | Out-File -FilePath (Join-Path $stagingDir 'README.txt') -Encoding utf8
+    }
+    $readme | Out-File -FilePath (Join-Path $payloadDir 'README.txt') -Encoding utf8
 
-# ---------------------------------------------------------------- zip
+    # Zip it
+    $zipPath = Join-Path $env:TEMP $ZipFileName
+    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+    Compress-Archive -Path "$payloadDir" -DestinationPath $zipPath -CompressionLevel Optimal
 
-$zipPath = Join-Path $env:TEMP $zipName
-if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-Compress-Archive -Path "$stagingDir" -DestinationPath $zipPath -CompressionLevel Optimal
+    [PSCustomObject]@{
+        Kind        = $Kind
+        ZipPath     = $zipPath
+        StagingRoot = $stagingRoot
+        PayloadDir  = $payloadDir
+    }
+}
 
-$zipInfo = Get-Item $zipPath
+$builtZips = @()
+
+if ($wantGui) {
+    # The single-file GUI publish puts DeployAssistant.exe directly in $pubGuiSc.
+    # If framework-dependent flavor was requested, include it as a subfolder.
+    $guiStage = Join-Path $env:TEMP "da_gui_stage_$([guid]::NewGuid().ToString('N').Substring(0,8))"
+    New-Item -ItemType Directory -Path $guiStage -Force | Out-Null
+    $guiScExe = Join-Path $pubGuiSc 'DeployAssistant.exe'
+    if (-not (Test-Path $guiScExe)) { throw "Expected self-contained GUI exe not found at: $guiScExe" }
+    Copy-Item $guiScExe -Destination $guiStage -Force
+
+    if ($IncludeFrameworkDependentGui) {
+        $guiFdSub = Join-Path $guiStage 'framework-dependent'
+        New-Item -ItemType Directory -Path $guiFdSub -Force | Out-Null
+        Get-ChildItem $pubGuiFd -File -Exclude '*.pdb' | Copy-Item -Destination $guiFdSub -Force
+    }
+
+    $builtZips += New-ReleaseZip -Kind 'GUI' -StagingFilesDir $guiStage `
+        -ZipFileName "DeployAssistant-GUI_${versionTag}_${date}_${gitSha}.zip"
+    Remove-Item $guiStage -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+if ($wantCli) {
+    $builtZips += New-ReleaseZip -Kind 'CLI' -StagingFilesDir $pubCli `
+        -ZipFileName "DeployAssistant-CLI_${versionTag}_${date}_${gitSha}.zip"
+}
+
 Write-Host ""
-Write-Host "Packaged: $zipPath" -ForegroundColor Green
-Write-Host ("Size:     {0:N0} bytes" -f $zipInfo.Length)
+Write-Host "Channel:  $channel ($(if ($Official) { 'production' } else { 'dev' }))" -ForegroundColor $(if ($Official) { 'Yellow' } else { 'Gray' })
 Write-Host "Version:  $versionTag"
 Write-Host "Sha:      $gitSha"
 Write-Host ""
-Write-Host "--- Staged layout ---" -ForegroundColor Cyan
-Get-ChildItem $stagingDir -Recurse | Where-Object { -not $_.PSIsContainer } |
-    Select-Object @{n='Name';e={ $_.FullName.Substring($stagingDir.Length + 1) }}, Length |
-    Format-Table
+foreach ($z in $builtZips) {
+    $size = (Get-Item $z.ZipPath).Length
+    Write-Host ("Packaged: {0}  ({1:N0} bytes)" -f $z.ZipPath, $size) -ForegroundColor Green
+}
 
 # ---------------------------------------------------------------- upload
 
 if ($DryRun) {
     Write-Host ""
-    Write-Host "[DryRun] Skipped Y: drive copy. Zip is at $zipPath." -ForegroundColor Yellow
-    Remove-Item $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "[DryRun] Skipped Y: drive copy. Zips remain in `$env:TEMP." -ForegroundColor Yellow
+    foreach ($z in $builtZips) {
+        Remove-Item $z.StagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
     return
 }
 
@@ -218,29 +298,41 @@ if (-not (Test-Path $Destination)) {
     throw "Destination not reachable: $Destination. Connect to the network share and retry, or use -DryRun."
 }
 
-$versionDir = Join-Path $Destination $folderName
-New-Item -ItemType Directory -Path $versionDir -Force | Out-Null
+foreach ($z in $builtZips) {
+    $kindDest = if ($z.Kind -eq 'GUI') { $guiDest } else { $cliDest }
+    $versionDir = Join-Path $kindDest $folderName
+    New-Item -ItemType Directory -Path $versionDir -Force | Out-Null
 
-Copy-Item $zipPath -Destination $versionDir -Force
-Write-Host "Uploaded: $versionDir\$zipName" -ForegroundColor Green
+    $zipName = Split-Path $z.ZipPath -Leaf
+    Copy-Item $z.ZipPath -Destination $versionDir -Force
+    Write-Host "Uploaded: $versionDir\$zipName" -ForegroundColor Green
 
-if (-not $NoExtract) {
-    # Extract directly into the version folder so the layout is:
-    #   v1.0.0_20260511\DeployAssistant\GUI\DeployAssistant.exe
-    Expand-Archive -Path (Join-Path $versionDir $zipName) -DestinationPath $versionDir -Force
-    Write-Host "Extracted: $versionDir\DeployAssistant\" -ForegroundColor Green
+    if (-not $NoExtract) {
+        Expand-Archive -Path (Join-Path $versionDir $zipName) -DestinationPath $versionDir -Force
+        Write-Host "Extracted: $versionDir\DeployAssistant\" -ForegroundColor Green
+    }
+
+    Remove-Item $z.StagingRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host ""
-Write-Host "--- Y:\DeployAssistant top-level layout ---" -ForegroundColor Cyan
-Get-ChildItem $Destination | Sort-Object Name | Format-Table Name, LastWriteTime
-
-# Cleanup local staging (keep the temp zip until the user confirms upload)
-Remove-Item $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+Write-Host "--- $channel\ top-level layout ---" -ForegroundColor Cyan
+$channelDir = Join-Path $Destination $channel
+if (Test-Path $channelDir) {
+    Get-ChildItem $channelDir -Recurse -Depth 1 | Sort-Object FullName | Format-Table FullName, LastWriteTime
+}
 
 Write-Host ""
 Write-Host "Done. Next steps:" -ForegroundColor Green
-Write-Host "  1. Smoke-test the CLI on the share:"
-Write-Host "       & `"$versionDir\DeployAssistant\CLI\deployassistant.exe`" --help"
-Write-Host "  2. Open the Notion release-notes page and append a new section."
-Write-Host "     Template: .claude/skills/release-deployassistant/SKILL.md"
+if ($wantCli) {
+    $cliVer = Join-Path $cliDest $folderName
+    Write-Host "  Smoke-test the CLI:"
+    Write-Host "    & `"$cliVer\DeployAssistant\CLI\deployassistant.exe`" --help"
+}
+Write-Host "  Update Notion release notes:"
+if ($wantGui) { Write-Host "    GUI:  https://www.notion.so/clevision/Deploy-Assistant-DA-Manual-6c6358be215d470580f7351d25e0ba01" }
+if ($wantCli) { Write-Host "    CLI:  https://www.notion.so/clevision/35d398fd58f2811aa2affb10dc6edd6f" }
+Write-Host "  Template (per-version toggle under existing '### 🆙 Updates' section):"
+Write-Host "    ### $versionTag — $(Get-Date -Format 'yyyy-MM-dd') {toggle=`"true`"}"
+Write-Host "        - <highlight 1>"
+Write-Host "        - <highlight 2>"
