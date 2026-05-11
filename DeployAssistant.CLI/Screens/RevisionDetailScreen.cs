@@ -105,7 +105,7 @@ internal sealed class RevisionDetailScreen : Screen
         }
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(TextStyle.Dim("  c checkout · ↑↓ scroll · esc back"));
+        AnsiConsole.MarkupLine(TextStyle.Dim("  ↑↓ move · d/u half-page · c checkout · esc back"));
 
         if (_lastError != null)
         {

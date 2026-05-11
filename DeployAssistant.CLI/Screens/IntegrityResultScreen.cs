@@ -76,16 +76,8 @@ internal sealed class IntegrityResultScreen : Screen
             bool success = _mgr.RequestRevertChange(selected);
             if (success)
             {
-                int prevIndex = _list.SelectedIndex;
-                _files.RemoveAt(prevIndex);
-                int newCount = _files.Count;
-                int newIndex = Math.Min(prevIndex, newCount - 1);
-                _list = new SelectableList(newCount, ViewportHeight);
-                if (newIndex > 0)
-                {
-                    // Advance selection to match previous position clamped to valid range.
-                    for (int i = 0; i < newIndex; i++) _list.Handle(new ConsoleKeyInfo('\0', ConsoleKey.DownArrow, false, false, false));
-                }
+                _files.RemoveAt(_list.SelectedIndex);
+                _list.SetItemCount(_files.Count);
                 _lastError = null;
             }
             else
