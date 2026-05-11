@@ -51,13 +51,26 @@ internal sealed class RevisionListScreen : Screen
             AnsiConsole.MarkupLine(line);
         }
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(TextStyle.Dim("↑↓ move · d/u half-page · esc back"));
+        AnsiConsole.MarkupLine(TextStyle.Dim("↑↓ move · d/u half-page · enter inspect · esc back"));
     }
 
     public override ScreenAction Handle(ConsoleKeyInfo key)
     {
         if (key.Key == ConsoleKey.Escape) return ScreenAction.PopAction;
+        if (key.Key == ConsoleKey.Enter)
+        {
+            if (_rows.Count > 0)
+                return new ScreenAction.Push(new RevisionDetailScreen(_mgr, _rows[_list.SelectedIndex]));
+            return ScreenAction.StayAction;
+        }
         _list.Handle(key);
         return ScreenAction.StayAction;
+    }
+
+    public override ScreenAction? AutoAdvance()
+    {
+        if (_mgr.ConsumeLastCheckedOut() != null)
+            return ScreenAction.PopAction;
+        return null;
     }
 }

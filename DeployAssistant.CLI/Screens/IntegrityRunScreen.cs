@@ -70,7 +70,7 @@ internal sealed class IntegrityRunScreen : Screen
     }
 
     public override ScreenAction? AutoAdvance() =>
-        new ScreenAction.Replace(new IntegrityResultScreen(_result));
+        new ScreenAction.Replace(new IntegrityResultScreen(_mgr, _result));
 
     public override ScreenAction Handle(ConsoleKeyInfo key) => ScreenAction.StayAction;
 }
