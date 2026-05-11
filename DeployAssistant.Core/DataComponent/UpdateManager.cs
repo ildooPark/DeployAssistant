@@ -30,20 +30,20 @@ namespace DeployAssistant.DataComponent
         /// </summary>
         /// <param name="updaterName"></param>
         /// <param name="updateLog"></param>
-        public void UpdateProjectMain(string updaterName, string updateLog, string currentProjectPath)
+        public bool UpdateProjectMain(string updaterName, string updateLog, string currentProjectPath)
         {
-            if (_projectMetaData == null) { Trace.TraceWarning("Project MetaData on Update Manager is Missing"); return; }
-            if (_projectMain == null) { Trace.TraceWarning("Project Data on Update Manager is Missing"); return; }
-            if (_currentProjectFileChanges == null || _currentProjectFileChanges.Count == 0) { Trace.TraceWarning("File Changes does not exist"); return; }
-            if (currentProjectPath != _projectMetaData.ProjectPath) { Trace.TraceWarning("Project Meta Data Path and Updated Path must match"); return; }
-            
+            if (_projectMetaData == null) { Trace.TraceWarning("Project MetaData on Update Manager is Missing"); return false; }
+            if (_projectMain == null) { Trace.TraceWarning("Project Data on Update Manager is Missing"); return false; }
+            if (_currentProjectFileChanges == null || _currentProjectFileChanges.Count == 0) { Trace.TraceWarning("File Changes does not exist"); return false; }
+            if (currentProjectPath != _projectMetaData.ProjectPath) { Trace.TraceWarning("Project Meta Data Path and Updated Path must match"); return false; }
+
             ManagerStateEventHandler?.Invoke(MetaDataState.Updating);
-            
+
             string newVersionName = GetProjectVersionName(_projectMain, _projectMetaData.LocalUpdateCount);
             string conductedPC = Environment.MachineName;
             ProjectData updatedProjectData = new ProjectData(_projectMain);
-            RegisterFileChanges(updatedProjectData, currentProjectPath, _currentProjectFileChanges, newVersionName, out StringBuilder ? changeLog);
-            
+            RegisterFileChanges(updatedProjectData, currentProjectPath, _currentProjectFileChanges, newVersionName, out StringBuilder? changeLog);
+
             bool updateSuccess = false;
             while (!updateSuccess)
             {
@@ -52,7 +52,7 @@ namespace DeployAssistant.DataComponent
                 {
                     Trace.TraceWarning("Update Failed, Please Run Version Integrity Test");
                     ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                    return;
+                    return false;
                 }
             }
             ++_projectMetaData.LocalUpdateCount;
@@ -68,6 +68,7 @@ namespace DeployAssistant.DataComponent
             updatedProjectData.RevisionNumber = _projectMetaData.LocalUpdateCount;
             ProjectUpdateEventHandler?.Invoke(updatedProjectData);
             ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
+            return true;
         }
 
         public void MergeProjectMain(string updaterName, string updateLog, string currentProjectPath)
