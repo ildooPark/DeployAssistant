@@ -104,8 +104,18 @@ namespace DeployAssistant.DataComponent
                 fileIntegrityLog.AppendLine($"Conducting Version Integrity Check on {_dstProjectData.UpdatedVersion}");
 
                 Dictionary<string, ProjectFile> projectFilesDict = _dstProjectData.ProjectFiles;
-                List<string> recordedFiles = _dstProjectData.ProjectRelFilePathsList;
-                List<string> recordedDirs = _dstProjectData.ProjectRelDirsList;
+
+                // Filter the SNAPSHOT side too — .ignore'd files must be completely
+                // invisible to integrity check (git-style untrack semantics).
+                // Without this, snapshot entries matching .ignore would surface as
+                // "Deleted" because they're absent from the (filtered) disk scan.
+                var filter = _projectContext.IgnoreFilter;
+                List<string> recordedFiles = _dstProjectData.ProjectRelFilePathsList
+                    .Where(p => !filter.Matches(p, ProjectDataType.File, IgnoreType.IntegrityCheck))
+                    .ToList();
+                List<string> recordedDirs = _dstProjectData.ProjectRelDirsList
+                    .Where(p => !filter.Matches(p, ProjectDataType.Directory, IgnoreType.IntegrityCheck))
+                    .ToList();
 
                 List<string> directoryRelFiles = [];
                 List<string> directoryRelDirs = [];
@@ -310,8 +320,22 @@ namespace DeployAssistant.DataComponent
                 Dictionary<string, ProjectFile> projectFilesDict = targetProject.ProjectFiles;
                 string backupPath = $"{targetProject.ProjectPath}\\Backup_{targetProject.ProjectName}";
                 string exportPath = $"{targetProject.ProjectPath}\\Export_{targetProject.ProjectName}";
+
+                // Filter the SNAPSHOT side through .ignore (IntegrityCheck scope) —
+                // git-style untrack: ignored entries are completely invisible to the
+                // diff, never become restore-from-backup candidates.
                 List<string> recordedFiles = targetProject.ProjectRelFilePathsList;
                 List<string> recordedDirs = targetProject.ProjectRelDirsList;
+                if (_projectContext != null)
+                {
+                    var snapshotFilter = _projectContext.IgnoreFilter;
+                    recordedFiles = recordedFiles
+                        .Where(p => !snapshotFilter.Matches(p, ProjectDataType.File, IgnoreType.IntegrityCheck))
+                        .ToList();
+                    recordedDirs = recordedDirs
+                        .Where(p => !snapshotFilter.Matches(p, ProjectDataType.Directory, IgnoreType.IntegrityCheck))
+                        .ToList();
+                }
 
                 List<string> directoryRelFiles = new List<string>();
                 List<string> directoryRelDirs = new List<string>();
@@ -438,23 +462,37 @@ namespace DeployAssistant.DataComponent
             try
             {
                 List<ChangedFile> fileChanges = [];
-                
+
                 List<string> recordedFiles = [];
                 List<string> directoryFiles = [];
 
                 Dictionary<string, ProjectFile> srcDict = srcData.ProjectFiles;
                 Dictionary<string, ProjectFile> dstDict = dstData.ProjectFiles;
 
-                // Files which is not on the Dst 
-                IEnumerable<string> filesToAdd = srcData.ProjectRelFilePathsList.Except(dstData.ProjectRelFilePathsList);
+                // .ignore'd files are completely invisible to the revert diff — they
+                // get skipped on both sides so revert never tries to restore them
+                // from backup or delete them from disk (git-style untrack semantics).
+                // Scope IgnoreType.All here means "any active .ignore entry applies",
+                // matching the user's mental model that .ignore takes a file out of
+                // DA's universe regardless of which per-operation scope flag it has.
+                Func<string, ProjectDataType, bool> isIgnored = (rel, dt) =>
+                    _projectContext != null && _projectContext.IgnoreFilter.Matches(rel, dt, IgnoreType.All);
+
+                var srcFilePaths = srcData.ProjectRelFilePathsList.Where(p => !isIgnored(p, ProjectDataType.File)).ToList();
+                var dstFilePaths = dstData.ProjectRelFilePathsList.Where(p => !isIgnored(p, ProjectDataType.File)).ToList();
+                var srcDirPaths  = srcData.ProjectRelDirsList.Where(p => !isIgnored(p, ProjectDataType.Directory)).ToList();
+                var dstDirPaths  = dstData.ProjectRelDirsList.Where(p => !isIgnored(p, ProjectDataType.Directory)).ToList();
+
+                // Files which is not on the Dst
+                IEnumerable<string> filesToAdd = srcFilePaths.Except(dstFilePaths);
                 // Files which is not on the Src
-                IEnumerable<string> filesToDelete = dstData.ProjectRelFilePathsList.Except(srcData.ProjectRelFilePathsList);
+                IEnumerable<string> filesToDelete = dstFilePaths.Except(srcFilePaths);
                 // Directories which is not on the Src
-                IEnumerable<string> dirsToAdd = srcData.ProjectRelDirsList.Except(dstData.ProjectRelDirsList);
+                IEnumerable<string> dirsToAdd = srcDirPaths.Except(dstDirPaths);
                 // Directories which is not on the Dst
-                IEnumerable<string> dirsToDelete = dstData.ProjectRelDirsList.Except(srcData.ProjectRelDirsList);
+                IEnumerable<string> dirsToDelete = dstDirPaths.Except(srcDirPaths);
                 // Files to Overwrite
-                IEnumerable<string> intersectFiles = srcData.ProjectRelFilePathsList.Intersect(dstData.ProjectRelFilePathsList);
+                IEnumerable<string> intersectFiles = srcFilePaths.Intersect(dstFilePaths);
 
                 //1. Directories 
                 foreach (string dirRelPath in dirsToAdd)

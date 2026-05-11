@@ -96,6 +96,102 @@ namespace DeployAssistant.Tests.Integration
                 ProjectFiles: dict);
         }
 
+        // ------------------------------------------------------------------ Git-style invisibility (Fix 5)
+        //
+        // Reported by user with a real .ignore file that included an "OMM"
+        // directory entry with IgnoreType.All.  Their snapshot still had OMM/*
+        // tracked from before .ignore was added.  Integrity check + revert
+        // both surfaced OMM/* as "Deleted" or as restore candidates, because
+        // those operations filter only the disk side of the diff — the
+        // snapshot side still contains OMM and shows up via the set-difference.
+        //
+        // Fix: filter the snapshot side too, so .ignore'd entries are
+        // completely invisible to integrity check / revert / commit / diff
+        // (matches .gitignore semantics — once ignored, the file is outside
+        // DA's bookkeeping universe).
+
+        /// <summary>
+        /// ProjectIntegrityCheck (clean-restore) must not try to RESTORE
+        /// .ignore'd snapshot entries that are absent from the disk scan.
+        /// Without the fix, the missing OMM/* file is computed as "needs
+        /// restore from backup" and the whole call returns null when no
+        /// backup is found.  With the fix, OMM is filtered from the snapshot
+        /// side too and never enters the change set.
+        /// </summary>
+        [Fact]
+        public void Fix5_ProjectIntegrityCheck_IgnoredSnapshotEntry_NotIncludedInChanges()
+        {
+            string projDir = Path.Combine(_tempRoot, "Fix5_CleanRestore");
+            Directory.CreateDirectory(projDir);
+            // Disk is empty — nothing to scan.
+
+            var targetSnapshot = MakeProjectData(projDir,
+                MakeDir(@"OMM", projDir),
+                MakeFile(@"OMM\foo.dll", projDir));
+
+            var fileManager = new FileManager();
+            var metaData = new ProjectMetaData("Fix5_CleanRestore", projDir);
+            fileManager.MetaDataManager_MetaDataLoadedCallBack(metaData);
+
+            var ignoreData = new ProjectIgnoreData("Fix5_CleanRestore");
+            ignoreData.ConfigureDefaultIgnore("Fix5_CleanRestore");
+            ignoreData.IgnoreFileList.Add(new RecordedFile("OMM", ProjectDataType.Directory, IgnoreType.All));
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(ProjectContext.Create(metaData, ignoreData));
+
+            var changes = fileManager.ProjectIntegrityCheck(targetSnapshot);
+
+            // Before fix: missing backup for OMM/foo.dll => returns null.
+            // After fix:  OMM filtered from snapshot => no restore attempted => non-null.
+            Assert.NotNull(changes);
+
+            // No change in the result should reference OMM at all.
+            bool anyOmmChange = changes!.Any(c =>
+                (c.SrcFile?.DataRelPath ?? "").StartsWith("OMM", StringComparison.OrdinalIgnoreCase) ||
+                (c.DstFile?.DataRelPath ?? "").StartsWith("OMM", StringComparison.OrdinalIgnoreCase));
+            Assert.False(anyOmmChange, "OMM entries must be completely absent from the change set");
+        }
+
+        /// <summary>
+        /// FindVersionDifferences (revert path) must skip .ignore'd files on
+        /// either side of the diff.  Without the fix, reverting to a previous
+        /// version that had OMM tracked would re-restore OMM to disk and to
+        /// the snapshot — contrary to the .gitignore intent (once ignored,
+        /// stay out of DA's worldview).
+        /// </summary>
+        [Fact]
+        public void Fix5_FindVersionDifferences_RevertPath_IgnoredFiles_AreSkipped()
+        {
+            string projPath = @"C:\Fix5RevertDst";
+            string srcPath  = @"C:\Fix5RevertSrc";
+
+            var srcData = MakeProjectData(srcPath,
+                MakeDir(@"OMM", srcPath),
+                MakeFile(@"OMM\foo.dll", srcPath),
+                MakeFile(@"app.dll", srcPath));
+            var dstData = MakeProjectData(projPath,
+                MakeFile(@"app.dll", projPath));
+
+            var fileManager = new FileManager();
+            var metaData = new ProjectMetaData("Fix5_Revert", projPath);
+            fileManager.MetaDataManager_MetaDataLoadedCallBack(metaData);
+
+            var ignoreData = new ProjectIgnoreData("Fix5_Revert");
+            ignoreData.IgnoreFileList.Add(new RecordedFile("OMM", ProjectDataType.Directory, IgnoreType.All));
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(ProjectContext.Create(metaData, ignoreData));
+
+            var changes = fileManager.FindVersionDifferences(srcData, dstData, isProjectRevert: true);
+
+            // Before fix: srcData has OMM/foo.dll but _backupFilesDict is empty
+            //             => filesToAdd path returns null
+            // After fix:  OMM filtered from both sides => no restore attempted => non-null
+            Assert.NotNull(changes);
+
+            bool anyOmmChange = changes!.Any(c =>
+                (c.SrcFile?.DataRelPath ?? "").StartsWith("OMM", StringComparison.OrdinalIgnoreCase) ||
+                (c.DstFile?.DataRelPath ?? "").StartsWith("OMM", StringComparison.OrdinalIgnoreCase));
+            Assert.False(anyOmmChange, "Revert diff must not reference .ignore'd OMM paths");
+        }
+
         // ------------------------------------------------------------------ Fix 1
 
         /// <summary>
