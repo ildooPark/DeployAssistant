@@ -337,8 +337,20 @@ namespace DeployAssistant.DataComponent
                 if (rawFiles == null) backupFiles = new string[0];
                 if (rawDirs == null) backupDirs = new string[0];
 
+                // Apply _projIgnoreData (IntegrityCheck scope) to exclude ignored paths before
+                // computing the diff — mirrors the pattern in MainProjectIntegrityCheck:112-123.
+                List<string> ignoreExcludedFiles = new List<string>();
+                List<string> ignoreExcludedDirs = new List<string>();
+                if (_projIgnoreData != null)
+                {
+                    (ignoreExcludedFiles, ignoreExcludedDirs) = _projIgnoreData.GetIgnoreFilesAndDirPaths(
+                        targetProject.ProjectPath, IgnoreType.IntegrityCheck);
+                }
+
                 IEnumerable<string> directoryFiles = rawFiles.ToList().Except(backupFiles.ToList()); directoryFiles = directoryFiles.Except(exportFiles.ToList());
                 IEnumerable<string> directoryDirs = rawDirs.ToList().Except(backupDirs.ToList()); directoryDirs = directoryDirs.Except(exportDirs.ToList());
+                directoryFiles = directoryFiles.Except(ignoreExcludedFiles);
+                directoryDirs = directoryDirs.Except(ignoreExcludedDirs);
 
                 foreach (string absPathFile in directoryFiles)
                 {
@@ -584,7 +596,7 @@ namespace DeployAssistant.DataComponent
                 _projIgnoreData.FilterChangedFileList(filteredChangedList);
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                 significantDiff = filteredChangedList.Count;
-                return fileChanges;
+                return filteredChangedList;
             }
             catch (Exception ex)
             {
@@ -762,9 +774,23 @@ namespace DeployAssistant.DataComponent
 
             try
             {
-                var filesSubDirectories = filesAllDirectories.Except(filesTopDirectories);
-                RegisterFilesUnderSubDirectory(srcDirPath, filesSubDirectories.ToArray(), dirsAllDirectories);
-                HandleAbnormalFiles(srcDirPath, filesTopDirectories.ToArray());
+                // Apply IgnoreType.Deploy filter before pre-staging so that *.deploy, *.VersionLog,
+                // Export_XLSX/ etc. that live in the source folder are never queued.
+                List<string> deployExcludedFiles = new List<string>();
+                List<string> deployExcludedDirs = new List<string>();
+                if (_projIgnoreData != null)
+                {
+                    (deployExcludedFiles, deployExcludedDirs) = _projIgnoreData.GetIgnoreFilesAndDirPaths(
+                        srcDirPath, IgnoreType.Deploy);
+                }
+
+                var filteredAllFiles = filesAllDirectories.Except(deployExcludedFiles).ToArray();
+                var filteredTopFiles = filesTopDirectories.Except(deployExcludedFiles).ToArray();
+                var filteredDirs = dirsAllDirectories.Except(deployExcludedDirs).ToArray();
+
+                var filesSubDirectories = filteredAllFiles.Except(filteredTopFiles);
+                RegisterFilesUnderSubDirectory(srcDirPath, filesSubDirectories.ToArray(), filteredDirs);
+                HandleAbnormalFiles(srcDirPath, filteredTopFiles);
             }
             catch (Exception ex)
             {
@@ -836,7 +862,20 @@ namespace DeployAssistant.DataComponent
                     return;
                 }
 
-                var filesSubDirectories = filesAllDirectories.Except(filesTopDirectories);
+                // Apply IgnoreType.Deploy filter before pre-staging (mirrors RegisterAllSrcFiles path).
+                List<string> deployExcludedFiles2 = new List<string>();
+                List<string> deployExcludedDirs2 = new List<string>();
+                if (_projIgnoreData != null)
+                {
+                    (deployExcludedFiles2, deployExcludedDirs2) = _projIgnoreData.GetIgnoreFilesAndDirPaths(
+                        srcDirPath, IgnoreType.Deploy);
+                }
+
+                var filteredAllFiles2 = filesAllDirectories.Except(deployExcludedFiles2).ToArray();
+                var filteredTopFiles2 = filesTopDirectories.Except(deployExcludedFiles2).ToArray();
+                var filteredDirs2 = dirsAllDirectories.Except(deployExcludedDirs2).ToArray();
+
+                var filesSubDirectories = filteredAllFiles2.Except(filteredTopFiles2);
                 foreach (string subDirFileAbsPath in filesSubDirectories)
                 {
                     ProjectFile newFile = new ProjectFile
@@ -847,10 +886,10 @@ namespace DeployAssistant.DataComponent
                         srcDirPath,
                         PathCompat.GetRelativePath(srcDirPath, subDirFileAbsPath)
                         );
-                    _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile); 
+                    _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
                 }
 
-                foreach (string dirAbsPath in dirsAllDirectories)
+                foreach (string dirAbsPath in filteredDirs2)
                 {
                     if (Path.GetExtension(dirAbsPath) == ".VersionLog") continue;
                     ProjectFile newFile = new ProjectFile
