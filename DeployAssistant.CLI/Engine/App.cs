@@ -94,6 +94,7 @@ namespace DeployAssistant.CLI.Engine
                     return lastTop;
 
                 case ScreenAction.Pop:
+                    current.OnExit();
                     _stack.Pop();
                     return null;
 
@@ -102,11 +103,13 @@ namespace DeployAssistant.CLI.Engine
                     return null;
 
                 case ScreenAction.Replace replace:
+                    current.OnExit();
                     _stack.Pop();
                     _stack.Push(replace.Next);
                     return null;
 
                 case ScreenAction.Exit:
+                    current.OnExit();
                     _stack.Clear();
                     return lastTop;
 

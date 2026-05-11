@@ -2,6 +2,7 @@
 using DeployAssistant.Model;
 using DeployAssistant.Services;
 using DeployAssistant.Utils;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -326,16 +327,44 @@ namespace DeployAssistant.DataComponent
             return true;
         }
 
-        public void RequestRevertProject(ProjectData? targetProject)
+        /// <summary>
+        /// Set when RequestRevertProject succeeds. Read-once flag for the
+        /// RevisionListScreen to detect a recent checkout and pop back to MainScreen.
+        /// Consumers should clear it after reading via ConsumeLastCheckedOut().
+        /// </summary>
+        public ProjectData? LastCheckedOut { get; private set; }
+
+        public ProjectData? ConsumeLastCheckedOut()
+        {
+            var v = LastCheckedOut;
+            LastCheckedOut = null;
+            return v;
+        }
+
+        public bool RequestRevertProject(ProjectData? targetProject)
         {
             if (targetProject == null)
             {
-                Trace.TraceWarning("Invalid Request For Backup: Targeting Project is Null");
-                return;
+                Trace.TraceWarning("RequestRevertProject: targetProject is null");
+                return false;
             }
-
-            List<ChangedFile>? fileDifferences = _fileManager.FindVersionDifferences(targetProject, MainProjectData, true);
-            _backupManager.RevertProject(targetProject, fileDifferences);
+            try
+            {
+                List<ChangedFile>? fileDifferences = _fileManager.FindVersionDifferences(targetProject, MainProjectData, true);
+                if (fileDifferences == null)
+                {
+                    Trace.TraceWarning("RequestRevertProject: FindVersionDifferences returned null");
+                    return false;
+                }
+                _backupManager.RevertProject(targetProject, fileDifferences);
+                LastCheckedOut = targetProject;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError($"RequestRevertProject failed: {ex.Message}");
+                return false;
+            }
         }
 
         public void RequestProjectCleanRestore(ProjectData? targetProject)
@@ -344,9 +373,12 @@ namespace DeployAssistant.DataComponent
             _backupManager.RevertProject(targetProject, fileDifferences);
         }
 
-        public void RequestRevertChange(ProjectFile file)
+        public bool RequestRevertChange(ProjectFile file)
         {
             _fileManager.RevertChange(file);
+            // FileManager.RevertChange re-applies IntegrityChecked on failure paths
+            // (missing backup, missing project file). Cleared flag => success.
+            return (file.DataState & DataState.IntegrityChecked) == 0;
         }
 
         public void RequestStageChanges()
