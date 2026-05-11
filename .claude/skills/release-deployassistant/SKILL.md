@@ -34,11 +34,10 @@ If the user says only "build", that does NOT fire this skill — they want a loc
 
 Before the first action of this skill, confirm with the user:
 
-1. **The version number** (semver MAJOR.MINOR.PATCH). If they didn't say, propose one based on the diff vs the previous version on Y: (`Get-ChildItem Y:\...\DeployAssistant\배포\cli` for the latest official) and ask them to confirm. Don't proceed without an explicit version.
+1. **The version numbers** — GUI and CLI track independently. Ask the user explicitly: "GUI version?" and "CLI version?" Each is optional, but at least one is required. Check the share before proposing — `Get-ChildItem Y:\...\DeployAssistant\배포` for the latest GUI version, `Get-ChildItem Y:\...\DeployAssistant\배포\cli` for the latest CLI version. The two histories diverge (GUI was at 3.6.1, CLI started at 1.0.x — don't assume a single shared version applies to both).
 2. **The channel** — dev (개발, default) or official (배포). If a previous dev drop with the same version already exists, suggest promoting it with `-Official` rather than rebuilding.
-3. **The component scope** — both, GUI only, or CLI only. Default is both. Use `-Component Gui` or `-Component Cli` to ship just one side.
-4. **That the working tree is clean and on `master`** (or about-to-merge).
-5. **Network connectivity to Y: drive**.
+3. **That the working tree is clean and on `master`** (or about-to-merge).
+4. **Network connectivity to Y: drive**.
 
 If any of these fail, stop and report back — don't half-execute.
 
@@ -70,25 +69,34 @@ All must pass. Capture the count (e.g. "285/285") for the release note.
 
 ### 4. Package + upload
 
-**Dev drop (default):**
+**Dev drop (default — both components):**
 
 ```powershell
-./scripts/release.ps1 -Version <X.Y.Z>
+./scripts/release.ps1 -GuiVersion <X.Y.Z> -CliVersion <X.Y.Z>
 ```
 
 **Official release (only after user said "make it official"):**
 
 ```powershell
-./scripts/release.ps1 -Version <X.Y.Z> -Official
+./scripts/release.ps1 -GuiVersion <X.Y.Z> -CliVersion <X.Y.Z> -Official
 ```
 
-The script publishes the GUI self-contained single-file and the CLI net472, packages each into its own zip, and drops both into the appropriate channel folders on Y:. Re-running with the same version + channel fails (versions are immutable) — this is intentional.
+**Single-component release (e.g. CLI-only patch):**
+
+```powershell
+./scripts/release.ps1 -CliVersion 1.1.1 -Official
+```
+
+The script publishes the GUI self-contained single-file and/or the CLI net472, packages each into its own zip, and drops them at:
+- GUI: `Y:\...\DeployAssistant\<channel>\<GuiVersion>\` (e.g. `배포\3.7.0\`)
+- CLI: `Y:\...\DeployAssistant\<channel>\cli\<CliVersion>\` (e.g. `배포\cli\1.1.0\`)
+
+Re-running with the same version + channel fails (versions are immutable) — this is intentional.
 
 Useful flags:
 - `-DryRun` — skip the Y: drive copy (local zip only). Use for the very first run on a fresh checkout to validate the script before touching the share.
-- `-NoExtract` — zip-only on the share, no extracted folder.
-- `-Component Gui` / `-Component Cli` — ship just one side.
-- `-IncludeFrameworkDependentGui` — also stage the framework-dependent GUI flavor.
+- `-Extract` — also extract each zip alongside it on Y:. Default is zip-only (matches the share's existing entries).
+- `-IncludeFrameworkDependentGui` — bundle the framework-dependent GUI flavor inside a `framework-dependent\` subfolder of the GUI zip.
 - `-SkipBuild` — skip the `dotnet build` sanity check (still runs the per-project publishes).
 
 Capture the script's final output (zip paths, drop paths, sha) — you'll paste them into the Notion toggles.
@@ -96,11 +104,12 @@ Capture the script's final output (zip paths, drop paths, sha) — you'll paste 
 ### 5. Smoke-test the drop
 
 ```powershell
-# CLI: same assertion as cli-smoke-test.yml in CI
-& "Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\<channel>\cli\v<X.Y.Z>_<YYYYMMDD>\DeployAssistant\CLI\deployassistant.exe" --help
+# CLI: extract the published zip and check --help
+Expand-Archive "Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\<channel>\cli\<CliVersion>\DeployAssistant-CLI_v<CliVersion>_*.zip" "$env:TEMP\cli-smoke" -Force
+& "$env:TEMP\cli-smoke\deployassistant.exe" --help
 ```
 
-Exit code must be 0 with "DeployAssistant" in the output. If the user can drive a GUI machine, ask them to double-click `DeployAssistant.exe` from `<channel>\gui\v<X.Y.Z>_<YYYYMMDD>\DeployAssistant\GUI\` and confirm it launches.
+Exit code must be 0 with "DeployAssistant" in the output. If the user can drive a GUI machine, ask them to extract the GUI zip from `<channel>\<GuiVersion>\` and double-click `DeployAssistant.exe` to confirm it launches.
 
 ### 6. Append the Notion release-note toggles
 
@@ -128,8 +137,13 @@ Use `notion-update-page` with `command: update_content`. **Do NOT use `replace_c
 	- <user-visible highlight 1 — one line>
 	- <user-visible highlight 2 — one line>
 	- <user-visible highlight 3 — one line>
-	**Build:** `<shortSha>` · **Drop:** `Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\<배포|개발>\<gui|cli>\v<X.Y.Z>_<YYYYMMDD>\`
+	**Build:** `<shortSha>` · **Drop:** `Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\<배포|개발>\<X.Y.Z>\` (GUI) or `Y:\...\<배포|개발>\cli\<X.Y.Z>\` (CLI)
 ```
+
+**Notion gotchas (observed during v3.7.0/v1.1.0 ship):**
+- Italic placeholder text (`*foo*`) inside a page is stored as a structured block, not a flat string — `update_content` may fail to match it via plain text search. Target nearby plain text instead, or use `replace_content` for whole-page rewrites.
+- Bold-around-inline-code (` **`.ignore`** `) renders correctly in Notion's UI but `update_content` echoes it back as `**`.ignore`****` — looks broken on re-fetch and on subsequent edits. Two ways out: avoid the pattern (drop the bold around inline-code spans), or apply a follow-up `update_content` that replaces the mangled string with the clean form.
+- Newly created pages may inherit a child database from the data source's `default_page_template`. If you see a `validation_error` about "would delete N child page(s)/database(s)" on an unrelated update, that's the cause — pass `allow_deleting_content: true` if the inherited content is unwanted (verify what would be deleted first).
 
 - The GUI page lists GUI-facing highlights only.
 - The CLI page lists CLI-facing highlights only.

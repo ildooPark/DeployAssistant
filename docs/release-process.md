@@ -24,9 +24,12 @@ The script never writes to `배포` without the explicit `-Official` switch.
 A release produces, **per component**, in order:
 
 1. **A versioned `.zip`** dropped at:
-   `Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\<channel>\<gui|cli>\v<X.Y.Z>_<YYYYMMDD>\`
-2. **The same files extracted next to the zip** (`DeployAssistant\` subfolder) so the GUI is one double-click away and the CLI is runnable straight from the share without unzipping.
+   - GUI: `Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\<channel>\<GuiVersion>\` — matches the historical `3.4 / 3.5 / 3.6 / 3.6.1` layout (GUI sits directly under the channel folder; no `gui/` subfolder).
+   - CLI: `Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\<channel>\cli\<CliVersion>\` — under the `cli/` subfolder that already exists on the share.
+2. **Extraction is opt-in** via `-Extract`. Default is zip-only, which matches the share's existing entries.
 3. **A short release-note toggle** appended to the appropriate Notion page (see "Notion pages" below).
+
+GUI and CLI versions track independently (e.g. GUI v3.7.0 ships alongside CLI v1.1.0). Pass either, both, or neither flag depending on what's shipping.
 
 The GitHub Actions `release.yml` workflow already publishes source + binary zips to a GitHub Release on every master push; this routine is the **internal-distribution** layer that drops the same payload on the team share and writes the human note.
 
@@ -34,16 +37,16 @@ The GitHub Actions `release.yml` workflow already publishes source + binary zips
 
 ## File manifest (what goes in each zip)
 
-### GUI zip — `DeployAssistant-GUI_v<X.Y.Z>_<YYYYMMDD>_<sha>.zip`
+### GUI zip — `DeployAssistant_v<X.Y.Z>_<YYYYMMDD>_<sha>.zip`
+
+Contents (files land at the zip root — extract one folder deep):
 
 ```
-DeployAssistant\
-├── GUI\
-│   └── DeployAssistant.exe          # self-contained single-file (no runtime install needed)
-│   └── framework-dependent\         # only with -IncludeFrameworkDependentGui
-│       ├── DeployAssistant.exe
-│       └── <DLLs>
-└── README.txt
+DeployAssistant.exe              # self-contained single-file (no runtime install needed)
+framework-dependent\             # only with -IncludeFrameworkDependentGui
+    DeployAssistant.exe
+    <DLLs>
+README.txt
 ```
 
 - **Runtime requirement on the target:** none for the single-file build (bundled .NET 8 Desktop Runtime). The optional framework-dependent flavor needs the .NET 8 Desktop Runtime installed.
@@ -52,13 +55,11 @@ DeployAssistant\
 ### CLI zip — `DeployAssistant-CLI_v<X.Y.Z>_<YYYYMMDD>_<sha>.zip`
 
 ```
-DeployAssistant\
-├── CLI\
-│   ├── deployassistant.exe
-│   ├── DeployAssistant.Core.dll
-│   ├── Spectre.Console.dll
-│   └── <other framework-dependent DLLs>
-└── README.txt
+deployassistant.exe
+DeployAssistant.Core.dll
+Spectre.Console.dll
+<other framework-dependent DLLs>
+README.txt
 ```
 
 - **Runtime requirement on the target:** .NET Framework 4.7.2 (shipped with Windows 10 1803+ and all Windows 11 — zero-config on any current corporate workstation).
@@ -86,8 +87,10 @@ Append directly under the existing `### 🆙 Updates` heading. Match the page's 
 	- <one-line highlight 1>
 	- <one-line highlight 2>
 	- <one-line highlight 3>
-	**Build:** `<shortSha>` · **Drop:** `Y:\...\배포\<gui|cli>\v<X.Y.Z>_<YYYYMMDD>\`
+	**Build:** `<shortSha>` · **Drop:** `Y:\...\배포\<X.Y.Z>\` (GUI) or `Y:\...\배포\cli\<X.Y.Z>\` (CLI)
 ```
+
+**Watch for `**`/inline-code collisions** — `**`.ignore` parity**` (bold with inline code inside) gets rendered as `**`.ignore`**** parity**` by Notion's markdown processor and looks broken. Either drop the bold around inline-code spans or fix the rendering with a follow-up replacement after the first append.
 
 Aim for **3–6 bullets max**. If something needs more explanation, link out to the GitHub PR; don't bloat the toggle. The toggle is collapsed by default — users scan the version list, click only what they care about.
 
@@ -97,7 +100,9 @@ The GUI page lists GUI-facing highlights only; the CLI page lists CLI-facing hig
 
 ## Versioning convention
 
-Semver: `vMAJOR.MINOR.PATCH`.
+GUI and CLI track independent semver — they ship from the same commit and the same `DeployAssistant.Core`, but their release histories diverged before the formal-release routine existed (GUI was at v3.6.1 on the share; CLI was just starting at v1.0.x in `개발\cli\`).
+
+Semver: `MAJOR.MINOR.PATCH`. Folder names on the share use the bare version (e.g. `3.7.0`, `1.1.0`), no `v` prefix.
 
 - **MAJOR** — breaking changes to persisted file formats (`ProjectMetaData.bin`, `DeployAssistant.ignore`, `DeployAssistant.deploy`), CLI flag renames/removals, or .NET target-framework changes.
 - **MINOR** — additive features (new TUI flows, new commands, new manager events, new GUI windows).
@@ -160,26 +165,32 @@ git log --oneline <previous-release-sha>..HEAD
 
 ### 5. Dev drop (개발) — first
 
+GUI and CLI track independent semver. Pass either or both. At least one is required.
+
 ```powershell
-./scripts/release.ps1 -Version <X.Y.Z>
+# Both components together:
+./scripts/release.ps1 -GuiVersion <X.Y.Z> -CliVersion <X.Y.Z>
+
+# Just one side:
+./scripts/release.ps1 -CliVersion <X.Y.Z>
 ```
 
-This builds, packages, and drops into `Y:\...\DeployAssistant\개발\gui\` and `Y:\...\DeployAssistant\개발\cli\`. **No `-Official` flag**. The drop is for validation only — no announcement.
+This builds, packages, and drops into `Y:\...\DeployAssistant\개발\<GuiVersion>\` (GUI sits directly under the channel folder — matches the historical `3.4`, `3.5`, `3.6.1` layout) and `Y:\...\DeployAssistant\개발\cli\<CliVersion>\`. **No `-Official` flag**. The drop is for validation only — no announcement.
 
 Other useful flags:
 - `-DryRun` — skip the Y: copy entirely (local zip only).
-- `-NoExtract` — zip-only on the share, no extracted folder.
-- `-Component Gui` / `-Component Cli` — ship only one side. Default is both.
-- `-IncludeFrameworkDependentGui` — also stage the framework-dependent GUI flavor.
+- `-Extract` — also extract each zip alongside it on Y:. Default is zip-only (matches the historical share entries).
+- `-IncludeFrameworkDependentGui` — bundle the framework-dependent GUI flavor inside a `framework-dependent\` subfolder of the GUI zip.
 - `-SkipBuild` — skip the `dotnet build` sanity check.
 
 ### 6. Smoke-test the dev drop
 
 ```powershell
-# CLI: same assertion as cli-smoke-test.yml in CI
-& "Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\개발\cli\v<X.Y.Z>_<YYYYMMDD>\DeployAssistant\CLI\deployassistant.exe" --help
+# CLI: extract the zip locally and check --help (mirrors cli-smoke-test.yml in CI)
+Expand-Archive "Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\개발\cli\<CliVersion>\DeployAssistant-CLI_v<CliVersion>_*.zip" "$env:TEMP\cli-smoke" -Force
+& "$env:TEMP\cli-smoke\deployassistant.exe" --help
 
-# GUI: double-click DeployAssistant.exe in 개발\gui\v<X.Y.Z>_<YYYYMMDD>\DeployAssistant\GUI\
+# GUI: extract the zip and double-click DeployAssistant.exe
 ```
 
 Exit code 0 from `--help` with "DeployAssistant" in output. GUI launches without missing-runtime errors.
@@ -189,10 +200,10 @@ If anything looks wrong, **stop**. Don't promote a broken drop. Fix in the repo,
 ### 7. Official release (배포) — only when validated
 
 ```powershell
-./scripts/release.ps1 -Version <X.Y.Z> -Official
+./scripts/release.ps1 -GuiVersion <X.Y.Z> -CliVersion <X.Y.Z> -Official
 ```
 
-Same outputs, but written to `배포\gui\` and `배포\cli\`. The 배포 channel is the announced production channel — once a version is there, it's considered shipped.
+Same outputs, but written to `배포\<GuiVersion>\` and `배포\cli\<CliVersion>\`. The 배포 channel is the announced production channel — once a version is there, it's considered shipped.
 
 ### 8. Verify the drop
 
