@@ -524,11 +524,16 @@ namespace DeployAssistant.DataComponent
                 return null;
             }
         }
-        public List<ChangedFile>? FindVersionDifferencesForIntegration(ProjectData srcData, ProjectData dstData, out int significantDiff)
+        public List<ChangedFile>? FindVersionDifferencesForIntegration(
+            ProjectData srcData,
+            ProjectData dstData,
+            out int significantDiff,
+            out int rawDiff)
         {
             if (_projIgnoreData == null)
             {
-                significantDiff = -1; 
+                significantDiff = -1;
+                rawDiff = -1;
                 return null;
             }
             try
@@ -542,7 +547,7 @@ namespace DeployAssistant.DataComponent
                 Dictionary<string, ProjectFile> srcDict = srcData.ProjectFiles;
                 Dictionary<string, ProjectFile> dstDict = dstData.ProjectFiles;
 
-                // Files which is not on the Dst 
+                // Files which is not on the Dst
                 IEnumerable<string> filesOnSrc = srcData.ProjectRelFilePathsList.Except(dstData.ProjectRelFilePathsList);
                 // Files which is not on the Src
                 IEnumerable<string> filesOnDst = dstData.ProjectRelFilePathsList.Except(srcData.ProjectRelFilePathsList);
@@ -592,6 +597,7 @@ namespace DeployAssistant.DataComponent
                         fileChanges.Add(new ChangedFile(srcFile, dstFile, DataState.Modified, true));
                     }
                 }
+                rawDiff = fileChanges.Count;
                 List<ChangedFile> filteredChangedList = new List<ChangedFile>(fileChanges);
                 _projIgnoreData.FilterChangedFileList(filteredChangedList);
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
@@ -602,7 +608,8 @@ namespace DeployAssistant.DataComponent
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                 Trace.TraceError($"{ex.Message}. Couldn't Run Find Version Differences Against Given Src");
-                significantDiff = -1; 
+                significantDiff = -1;
+                rawDiff = -1;
                 return null;
             }
         }

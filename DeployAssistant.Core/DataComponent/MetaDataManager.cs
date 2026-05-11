@@ -453,11 +453,12 @@ namespace DeployAssistant.DataComponent
                     //Compute the file differences 
                         try
                         {
-                            int sigDiff = 0; 
-                            List<ChangedFile>? identifiedDiff = _fileManager.FindVersionDifferencesForIntegration(srcProjectData, projData, out sigDiff);
+                            int sigDiff = 0;
+                            List<ChangedFile>? identifiedDiff = _fileManager.FindVersionDifferencesForIntegration(
+                                srcProjectData, projData, out sigDiff, out int rawDiff);
                             similaraity.projData = projData;
-                            similaraity.numDiffWithResources = identifiedDiff?.Count ?? -1; 
-                            similaraity.numDiffWithoutResources = sigDiff;
+                            similaraity.numDiffWithResources    = rawDiff;   // unfiltered total (incl. resource-only changes)
+                            similaraity.numDiffWithoutResources = sigDiff;   // filtered (significant) count
                             similaraity.fileDifferences = identifiedDiff ?? [];
                         }
                         catch(Exception ex)

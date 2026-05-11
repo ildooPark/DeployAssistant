@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Xunit;
 
 namespace DeployAssistant.Tests.Integration
@@ -133,7 +134,7 @@ namespace DeployAssistant.Tests.Integration
             ignoreData.ConfigureDefaultIgnore("TestProj");
             fileManager.MetaDataManager_UpdateIgnoreListCallBack(ignoreData);
 
-            var result = fileManager.FindVersionDifferencesForIntegration(srcData, dstData, out int significantDiff);
+            var result = fileManager.FindVersionDifferencesForIntegration(srcData, dstData, out int significantDiff, out int rawDiff);
 
             Assert.NotNull(result);
 
@@ -148,8 +149,11 @@ namespace DeployAssistant.Tests.Integration
             Assert.DoesNotContain(relPaths, r => r.StartsWith("Resources", StringComparison.OrdinalIgnoreCase));
 
             // The unfiltered list had 7 entries (4 files + 3 dirs); after filtering only app.dll remains
-            Assert.Equal(1, result!.Count);
+            Assert.Single(result);
             Assert.Equal(significantDiff, result.Count);
+            // rawDiff must be larger than significantDiff when resource-only changes are present
+            Assert.True(rawDiff > significantDiff,
+                $"rawDiff ({rawDiff}) should exceed significantDiff ({significantDiff}) because locale-dir entries were filtered out");
         }
 
         /// <summary>
@@ -172,10 +176,13 @@ namespace DeployAssistant.Tests.Integration
             ignoreData.ConfigureDefaultIgnore("Proj2");
             fileManager.MetaDataManager_UpdateIgnoreListCallBack(ignoreData);
 
-            var result = fileManager.FindVersionDifferencesForIntegration(srcData, dstData, out int significantDiff);
+            var result = fileManager.FindVersionDifferencesForIntegration(srcData, dstData, out int significantDiff, out int rawDiff);
 
             Assert.NotNull(result);
             Assert.Equal(significantDiff, result!.Count);
+            // rawDiff >= significantDiff always (rawDiff includes resource-only changes that were filtered)
+            Assert.True(rawDiff >= significantDiff,
+                $"rawDiff ({rawDiff}) must be >= significantDiff ({significantDiff})");
         }
 
         // ------------------------------------------------------------------ Fix 2
@@ -232,6 +239,99 @@ namespace DeployAssistant.Tests.Integration
             Assert.DoesNotContain(deletedRelPaths, p => p.EndsWith(".ignore", StringComparison.OrdinalIgnoreCase));
             // No spurious deletions at all
             Assert.Empty(deletedRelPaths);
+        }
+
+        // ------------------------------------------------------------------ Fix 3
+
+        /// <summary>
+        /// RegisterAllSrcFiles must not pre-stage files that match IgnoreType.Deploy entries.
+        /// *.deploy files placed anywhere in the source folder tree must be absent from the
+        /// DataPreStagedEventHandler snapshot; a real .dll in a subdirectory must be present.
+        ///
+        /// Design notes:
+        ///   - Decoy files are named "app.deploy" (not "DeployAssistant.deploy") so that
+        ///     RetrieveDataSrc's TryGetDeployMetaFile doesn't intercept the root file as a
+        ///     canonical deploy meta file and short-circuit the scan.
+        ///   - The control "actual.dll" is placed in a subdirectory so it is registered via
+        ///     RegisterFilesUnderSubDirectory (which adds to _preStagedFilesDict directly)
+        ///     rather than HandleAbnormalFiles (which defers top-level files to overlap
+        ///     resolution when no matching destination project is loaded).
+        ///   - *.VersionLog files are intentionally excluded from this test's source folder
+        ///     because RetrieveDataSrc treats a single *.VersionLog as a project metadata file
+        ///     and skips the full scan when deserialization fails — not the subject of Fix 3.
+        /// </summary>
+        [Fact]
+        public void Fix3_SourceScan_AppliesDeployFilter()
+        {
+            // --- 1. Build a source directory with decoy files and one real file ---
+            string srcDir = Path.Combine(_tempRoot, "DA_IgnorePR_A_Fix3_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(srcDir);
+
+            // Root-level *.deploy file — must be filtered (IgnoreType.Deploy).
+            // Not named "DeployAssistant.deploy" to avoid TryGetDeployMetaFile interception.
+            string deployRoot = Path.Combine(srcDir, "app.deploy");
+            File.WriteAllText(deployRoot, "{}");
+
+            // Subdirectory with a nested *.deploy — verifies subtree filtering
+            string nestedDir = Path.Combine(srcDir, "nested");
+            Directory.CreateDirectory(nestedDir);
+            string deployNested = Path.Combine(nestedDir, "sub.deploy");
+            File.WriteAllText(deployNested, "{}");
+
+            // Real .dll in the nested subdirectory — registered via RegisterFilesUnderSubDirectory,
+            // so it lands in _preStagedFilesDict and appears in the snapshot.
+            string realDll = Path.Combine(nestedDir, "actual.dll");
+            File.WriteAllText(realDll, "MZ");
+
+            // --- 2. Set up FileManager with ignore data ---
+            var fileManager = new FileManager();
+
+            var ignoreData = new ProjectIgnoreData("Fix3Proj");
+            ignoreData.ConfigureDefaultIgnore("Fix3Proj");
+            fileManager.MetaDataManager_UpdateIgnoreListCallBack(ignoreData);
+
+            // --- 3. Subscribe to DataPreStagedEventHandler and capture the final snapshot ---
+            // RegisterAllSrcFiles fires DataPreStagedEventHandler twice:
+            //   first from RegisterFilesUnderSubDirectory (dirs + sub-files),
+            //   then from HandleAbnormalFiles (top-level files).
+            // We capture the LAST firing so the snapshot is complete.
+            List<ProjectFile>? capturedSnapshot = null;
+            var preStagedFired = new ManualResetEventSlim(initialState: false);
+
+            fileManager.DataPreStagedEventHandler += obj =>
+            {
+                if (obj is List<ProjectFile> snapshot)
+                {
+                    capturedSnapshot = snapshot;
+                    preStagedFired.Set();   // set (or re-set) on every firing
+                }
+            };
+
+            // --- 4. Trigger the source scan via the public API ---
+            // RetrieveDataSrc → RegisterNewData → RegisterAllSrcFiles (async void).
+            // We wait briefly after the event fires to allow HandleAbnormalFiles to also complete.
+            fileManager.RetrieveDataSrc(srcDir);
+
+            bool fired = preStagedFired.Wait(TimeSpan.FromSeconds(10));
+            Assert.True(fired, "DataPreStagedEventHandler did not fire within 10 seconds");
+
+            // Allow the second firing (HandleAbnormalFiles) to complete before reading the snapshot.
+            Thread.Sleep(200);
+            Assert.NotNull(capturedSnapshot);
+
+            // --- 5. Assert correct files are / are not pre-staged ---
+            var relPaths = capturedSnapshot!
+                .Select(f => f.DataRelPath)
+                .ToList();
+
+            // nested/actual.dll must be present (control — real deployable file in a subdir)
+            Assert.Contains(relPaths, r => r.EndsWith("actual.dll", StringComparison.OrdinalIgnoreCase));
+
+            // app.deploy must NOT be staged (root-level IgnoreType.Deploy filter)
+            Assert.DoesNotContain(relPaths, r => r.EndsWith(".deploy", StringComparison.OrdinalIgnoreCase));
+
+            // nested/sub.deploy must NOT be staged (subtree IgnoreType.Deploy filter)
+            Assert.DoesNotContain(relPaths, r => r.EndsWith("sub.deploy", StringComparison.OrdinalIgnoreCase));
         }
 
         // ------------------------------------------------------------------ Fix 4
