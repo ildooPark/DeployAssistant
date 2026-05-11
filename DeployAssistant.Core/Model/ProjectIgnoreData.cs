@@ -31,7 +31,7 @@ namespace DeployAssistant.Model
             {
                 new RecordedFile("ProjectMetaData.bin" , ProjectDataType.File, IgnoreType.All),
                 new RecordedFile("*.ignore" , ProjectDataType.File, IgnoreType.All),
-                new RecordedFile("*.deploy" , ProjectDataType.File, IgnoreType.Deploy),
+                new RecordedFile("*.deploy" , ProjectDataType.File, IgnoreType.Deploy | IgnoreType.Initialization),
                 new RecordedFile("*.VersionLog", ProjectDataType.File, IgnoreType.All),
                 new RecordedFile("Export_XLSX", ProjectDataType.Directory, IgnoreType.All),
                 new RecordedFile("en-US", ProjectDataType.Directory, IgnoreType.Integration),
@@ -71,9 +71,9 @@ namespace DeployAssistant.Model
         public void ConfigureDefaultIgnore(string projName)
         {
             string backupDir = $"Backup_{projName}";
-            IgnoreFileList.Add(new RecordedFile(backupDir, ProjectDataType.Directory, IgnoreType.IntegrityCheck));
+            IgnoreFileList.Add(new RecordedFile(backupDir, ProjectDataType.Directory, IgnoreType.IntegrityCheck | IgnoreType.Initialization));
             string exportDir = $"Export_{projName}";
-            IgnoreFileList.Add(new RecordedFile(exportDir, ProjectDataType.Directory, IgnoreType.IntegrityCheck));
+            IgnoreFileList.Add(new RecordedFile(exportDir, ProjectDataType.Directory, IgnoreType.IntegrityCheck | IgnoreType.Initialization));
         }
         
         public (List<string>, List<string>) GetIgnoreFilesAndDirPaths(string searchPath, IgnoreType requestedIgnoreType)
