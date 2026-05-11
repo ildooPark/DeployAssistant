@@ -287,7 +287,7 @@ namespace DeployAssistant.DataComponent
                 DataStagedEventHandler?.Invoke(_registeredChangesDict.Values.ToList());
                 IntegrityCheckEventHandler?.Invoke(fileIntegrityLog.ToString(), _preStagedFilesDict.Values.ToList());
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                Console.Write(sw.ToString());
+                Trace.TraceInformation($"Integrity check timing: {sw.Elapsed}");
                 sw.Stop();
             }
 

@@ -45,7 +45,7 @@ internal sealed class IntegrityResultScreen : Screen
             AnsiConsole.MarkupLine($" {marker}{row}");
         }
         AnsiConsole.MarkupLine(TextStyle.Dim("─────────────────────────────────────────────"));
-        AnsiConsole.MarkupLine(TextStyle.Dim("↑↓ move · d/u half-page · r revert · esc back"));
+        AnsiConsole.MarkupLine(TextStyle.Dim("↑↓ move · d/u half-page · r revert · u update · esc back"));
 
         if (_lastError != null)
         {
@@ -87,8 +87,27 @@ internal sealed class IntegrityResultScreen : Screen
             return ScreenAction.StayAction;
         }
 
+        // Handle 'u' (update as new version) before delegating to _list.Handle,
+        // so it takes precedence over SelectableList's 'u' half-page-up binding.
+        if (key.KeyChar == 'u')
+        {
+            if (_files.Count == 0)
+            {
+                _lastError = "Nothing to commit.";
+                return ScreenAction.StayAction;
+            }
+            return new ScreenAction.Push(new UpdateVersionPromptScreen(_mgr, _files.Count));
+        }
+
         _list.Handle(key);
         return ScreenAction.StayAction;
+    }
+
+    public override ScreenAction? AutoAdvance()
+    {
+        if (_mgr.ConsumeLastUpdated() != null)
+            return ScreenAction.PopAction;
+        return null;
     }
 
     private string BuildSummary()
