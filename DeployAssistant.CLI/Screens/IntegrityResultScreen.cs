@@ -11,12 +11,15 @@ namespace DeployAssistant.CLI.Screens;
 
 internal sealed class IntegrityResultScreen : Screen
 {
+    private readonly MetaDataManager _mgr;
     private readonly List<ProjectFile> _files;
-    private readonly SelectableList _list;
+    private SelectableList _list;
+    private string? _lastError;
     private const int ViewportHeight = 12;
 
-    public IntegrityResultScreen(IEnumerable<ProjectFile> files)
+    public IntegrityResultScreen(MetaDataManager mgr, IEnumerable<ProjectFile> files)
     {
+        _mgr = mgr;
         _files = files.ToList();
         _list = new SelectableList(_files.Count, ViewportHeight);
     }
@@ -42,15 +45,69 @@ internal sealed class IntegrityResultScreen : Screen
             AnsiConsole.MarkupLine($" {marker}{row}");
         }
         AnsiConsole.MarkupLine(TextStyle.Dim("─────────────────────────────────────────────"));
-        AnsiConsole.MarkupLine(TextStyle.Dim("↑↓ move · d/u half-page · esc back"));
+        AnsiConsole.MarkupLine(TextStyle.Dim("↑↓ move · d/u half-page · r revert · u update · esc back"));
+
+        if (_lastError != null)
+        {
+            AnsiConsole.MarkupLine($"  [red]{_lastError}[/]");
+        }
     }
 
     public override ScreenAction Handle(ConsoleKeyInfo key)
     {
+        // Any non-r key clears the transient error.
+        if (key.Key != ConsoleKey.R) _lastError = null;
+
         if (key.Key == ConsoleKey.Escape) return ScreenAction.PopAction;
         if (_files.Count == 0) return ScreenAction.PopAction;
+
+        if (key.Key == ConsoleKey.R)
+        {
+            var selected = _files[_list.SelectedIndex];
+            bool confirmed = TuiPrompt.Confirm(
+                "Revert change",
+                $"Revert {selected.DataRelPath}? Local change will be replaced with backup contents.");
+            if (!confirmed)
+            {
+                _lastError = null;
+                return ScreenAction.StayAction;
+            }
+
+            bool success = _mgr.RequestRevertChange(selected);
+            if (success)
+            {
+                _files.RemoveAt(_list.SelectedIndex);
+                _list.SetItemCount(_files.Count);
+                _lastError = null;
+            }
+            else
+            {
+                _lastError = $"Revert failed: {Markup.Escape(selected.DataRelPath)} (backup may be missing)";
+            }
+            return ScreenAction.StayAction;
+        }
+
+        // Handle 'u' (update as new version) before delegating to _list.Handle,
+        // so it takes precedence over SelectableList's 'u' half-page-up binding.
+        if (key.KeyChar == 'u')
+        {
+            if (_files.Count == 0)
+            {
+                _lastError = "Nothing to commit.";
+                return ScreenAction.StayAction;
+            }
+            return new ScreenAction.Push(new UpdateVersionPromptScreen(_mgr, _files.Count));
+        }
+
         _list.Handle(key);
         return ScreenAction.StayAction;
+    }
+
+    public override ScreenAction? AutoAdvance()
+    {
+        if (_mgr.ConsumeLastUpdated() != null)
+            return ScreenAction.PopAction;
+        return null;
     }
 
     private string BuildSummary()

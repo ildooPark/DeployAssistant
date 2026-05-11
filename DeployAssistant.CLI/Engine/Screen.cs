@@ -24,6 +24,13 @@ namespace DeployAssistant.CLI.Engine
         public abstract ScreenAction Handle(ConsoleKeyInfo key);
 
         /// <summary>
+        /// Called by the engine whenever this screen is popped off the stack,
+        /// replaced by another screen, or the application exits. Use for cleanup
+        /// (e.g. unsubscribing event handlers). Default: no-op.
+        /// </summary>
+        public virtual void OnExit() { }
+
+        /// <summary>
         /// Optional: return a non-null ScreenAction to transition without waiting for a key.
         /// Engine calls this once after OnEnter and Render. Default: return null.
         /// </summary>

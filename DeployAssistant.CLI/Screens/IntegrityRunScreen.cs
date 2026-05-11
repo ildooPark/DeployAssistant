@@ -41,17 +41,53 @@ internal sealed class IntegrityRunScreen : Screen
             if (s == MetaDataState.Idle) done.Set();
         }
 
+        int totalKnown = 0;
+        var progressLock = new object();
+        ProgressTask? activeTask = null;
+
+        void OnProgress(int completed, int total)
+        {
+            lock (progressLock)
+            {
+                if (activeTask is null) return;
+                if (totalKnown == 0)
+                {
+                    totalKnown = total;
+                    activeTask.MaxValue = total;
+                }
+                if (completed > activeTask.Value)
+                    activeTask.Value = completed;
+            }
+        }
+
         _mgr.IntegrityCheckCompleteEventHandler += OnComplete;
         _mgr.ManagerStateEventHandler += OnState;
+        _mgr.IntegrityProgressEventHandler += OnProgress;
         try
         {
-            AnsiConsole.Status()
-                .Spinner(Spinner.Known.Dots)
-                .SpinnerStyle(Style.Parse("cyan"))
-                .Start("[cyan]Running integrity check…[/]", _ =>
+            AnsiConsole.Progress()
+                .AutoClear(false)
+                .HideCompleted(false)
+                .Columns(new ProgressColumn[]
                 {
+                    new TaskDescriptionColumn(),
+                    new ProgressBarColumn(),
+                    new PercentageColumn(),
+                    new RemainingTimeColumn(),
+                })
+                .Start(ctx =>
+                {
+                    lock (progressLock)
+                    {
+                        activeTask = ctx.AddTask("[cyan]Integrity check[/]", new ProgressTaskSettings { AutoStart = true, MaxValue = 1 });
+                    }
                     _mgr.RequestProjectIntegrityCheck();
                     done.Wait(TimeSpan.FromMinutes(10));
+                    lock (progressLock)
+                    {
+                        if (activeTask is not null && totalKnown > 0)
+                            activeTask.Value = totalKnown; // ensure 100% on completion
+                    }
                 });
 
             lock (captured) { _result = new List<ProjectFile>(captured); }
@@ -61,16 +97,17 @@ internal sealed class IntegrityRunScreen : Screen
         {
             _mgr.IntegrityCheckCompleteEventHandler -= OnComplete;
             _mgr.ManagerStateEventHandler -= OnState;
+            _mgr.IntegrityProgressEventHandler -= OnProgress;
         }
     }
 
     public override void Render()
     {
-        // Status owns the console during OnEnter; AutoAdvance fires immediately after.
+        // Progress owns the console during OnEnter; AutoAdvance fires immediately after.
     }
 
     public override ScreenAction? AutoAdvance() =>
-        new ScreenAction.Replace(new IntegrityResultScreen(_result));
+        new ScreenAction.Replace(new IntegrityResultScreen(_mgr, _result));
 
     public override ScreenAction Handle(ConsoleKeyInfo key) => ScreenAction.StayAction;
 }

@@ -374,12 +374,12 @@ All public `Request*` methods are the sole API surface that ViewModels call. The
 | `RequestStageChanges()` | Hash pre-staged files and compute diff against main project |
 | `RequestClearStagedFiles()` | Clear staged changes (preserves `IntegrityChecked` entries) |
 | `RequestProjectUpdate(updaterName, updateLog, path)` | Commit staged changes as a new version (with optional integration merge path) |
-| `RequestRevertProject(ProjectData target)` | Compute and apply file diff to roll back to a previous version |
+| `RequestRevertProject(ProjectData target) → bool` | Compute and apply file diff to roll back to a previous version. Returns `true` on success (sets `LastCheckedOut`); `false` if target is null, diff is null, or the apply pipeline throws. |
 | `RequestProjectCleanRestore(ProjectData target)` | Full on-disk integrity check then restore to target version |
 | `RequestProjectIntegrityCheck()` | Async hash comparison of all tracked files vs. disk |
 | `RequestFetchBackup()` | Populate backup version list |
 | `RequestFileRestore(file, state)` | Queue a single file for restore |
-| `RequestRevertChange(file)` | Revert a single `IntegrityChecked`-flagged file |
+| `RequestRevertChange(file) → bool` | Revert a single `IntegrityChecked`-flagged file. Returns `true` if the `IntegrityChecked` flag is cleared after the call (success); `false` if `FileManager.RevertChange` re-applied the flag due to missing backup or missing project file entry. |
 | `RequestOverlappedFileAllocation(overlaps, newFiles)` | Accept resolved overlap decisions from the UI |
 | `RequestProjVersionDiff(srcData)` | Compute diff between a given version and main |
 | `RequestProjectCompatibility(srcData)` | Compute similarity of a source project against all history entries |

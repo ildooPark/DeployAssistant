@@ -218,7 +218,7 @@ namespace DeployAssistant.Utils
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Error serializing ProjectData: " + ex.Message);
+                Trace.TraceWarning("Error serializing ProjectData: " + ex.Message);
                 return false;
             }
         }
@@ -240,7 +240,7 @@ namespace DeployAssistant.Utils
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Error deserializing ProjectData: " + ex.Message);
+                Trace.TraceWarning("Error deserializing ProjectData: " + ex.Message);
                 projectData = null;
                 return false;
             }
@@ -256,7 +256,7 @@ namespace DeployAssistant.Utils
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Error serializing ProjectMetaData: " + ex.Message);
+                Trace.TraceWarning("Error serializing ProjectMetaData: " + ex.Message);
                 return false;
             }
         }
@@ -279,7 +279,7 @@ namespace DeployAssistant.Utils
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Error deserializing ProjectMetaData: " + ex.Message);
+                Trace.TraceWarning("Error deserializing ProjectMetaData: " + ex.Message);
                 projectMetaData = null;
                 return false;
             }

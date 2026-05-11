@@ -42,7 +42,7 @@ namespace DeployAssistant.DataComponent
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                Trace.TraceWarning("SettingManager ctor: " + ex.Message);
             }
             _fileHandlerTool = new FileHandlerTool();
         }
@@ -50,29 +50,41 @@ namespace DeployAssistant.DataComponent
         {
             try
             {
-                if (File.Exists(DAMetaFilePath))
+                if (!File.Exists(DAMetaFilePath)) return;
+                if (!_fileHandlerTool.TryDeserializeJsonData(DAMetaFilePath, out LocalConfigData? localConfigData)) return;
+
+                string? lastPath = localConfigData?.LastOpenedDstPath;
+                if (string.IsNullOrWhiteSpace(lastPath))
                 {
-                    if (!_fileHandlerTool.TryDeserializeJsonData(DAMetaFilePath, out LocalConfigData? localConfigData)) return;
-                    bool proceed = DialogService.Confirm(
-                        "Import Previous Destination Project",
-                        $"Recent Destination Project Path Found: Proceed with this Destination? {localConfigData?.LastOpenedDstPath}") == DialogChoice.Yes;
-                    if (proceed && localConfigData?.LastOpenedDstPath != null)
-                    {
-                        SetPrevProjectEventHandler?.Invoke(localConfigData.LastOpenedDstPath);
-                    }
-                    else
-                    {
-                        Trace.TraceWarning("Couldn't Retrieve ");
-                        return;
-                    }
+                    Trace.TraceWarning("SettingManager.Awake: stored LastOpenedDstPath is empty");
+                    return;
+                }
+
+                // Reject obviously-invalid stored paths (e.g. drive root like "C:" left over
+                // from earlier tests). A real project directory contains a ProjectMetaData.bin.
+                string projectMetaFile = Path.Combine(lastPath, "ProjectMetaData.bin");
+                if (!Directory.Exists(lastPath) || !File.Exists(projectMetaFile))
+                {
+                    Trace.TraceWarning($"SettingManager.Awake: stored path '{lastPath}' is not a valid project directory; skipping restore");
+                    return;
+                }
+
+                bool proceed = DialogService.Confirm(
+                    "Import Previous Destination Project",
+                    $"Recent Destination Project Path Found: Proceed with this Destination? {lastPath}") == DialogChoice.Yes;
+                if (proceed)
+                {
+                    SetPrevProjectEventHandler?.Invoke(lastPath);
+                }
+                else
+                {
+                    Trace.TraceWarning("SettingManager.Awake: user declined previous-project restore");
                 }
             }
-            //GetConfigData
             catch (Exception ex)
             {
-                Console.WriteLine(ex.ToString());
+                Trace.TraceWarning("SettingManager.Awake: " + ex.ToString());
             }
-
         }
         public void RegisterDefaultSettings(string dstPath)
         {

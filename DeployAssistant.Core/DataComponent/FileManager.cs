@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading;
 
 namespace DeployAssistant.DataComponent
 {
@@ -58,6 +59,13 @@ namespace DeployAssistant.DataComponent
         public event Action<object>? DataPreStagedEventHandler;
         public event Action<object>? PreStagedDataOverlapEventHandler;
         public event Action<string, List<ProjectFile>>? IntegrityCheckEventHandler;
+        /// <summary>
+        /// Fires periodically during MainProjectIntegrityCheck: (completed, total).
+        /// "Total" = 2 × intersectFiles.Count (the parallel hash phase plus the diff
+        /// phase each iterate the intersect set once). "Completed" monotonically
+        /// increases 0 → total. Useful for CLI/GUI progress bars.
+        /// </summary>
+        public event Action<int, int>? IntegrityProgressEventHandler;
         public event Action<MetaDataState> ManagerStateEventHandler;
         #endregion
 
@@ -169,10 +177,17 @@ namespace DeployAssistant.DataComponent
                 ConcurrentDictionary<string, ProjectFile> projectFilesConcurrent = new ConcurrentDictionary<string, ProjectFile> ();
                 ConcurrentBag<string> hashFailureLog = new ConcurrentBag<string>();
                 var maxConcurrency = new ParallelOptions { MaxDegreeOfParallelism = Convert.ToInt32(Math.Ceiling((Environment.ProcessorCount * 0.75) * 1.0)) };
+                int completed = 0;
+                int total = intersectFiles.Count() * 2;
                 Parallel.ForEach(intersectFiles, maxConcurrency, fileRelPath =>
                 {
                     //TODO : Resolve Hard coded issue -> Setting Manager Ignore
-                    if (projectFilesDict[fileRelPath].DataType == ProjectDataType.Directory) return;
+                    if (projectFilesDict[fileRelPath].DataType == ProjectDataType.Directory)
+                    {
+                        int c = Interlocked.Increment(ref completed);
+                        try { IntegrityProgressEventHandler?.Invoke(c, total); } catch (Exception) { }
+                        return;
+                    }
                     ProjectFile intersectedFile = new ProjectFile(projectFilesDict[fileRelPath]);
                     // Clear stored hash so a silent GetFileMD5CheckSum failure (it swallows exceptions
                     // internally) leaves DataHash empty and is detectable below.
@@ -181,6 +196,8 @@ namespace DeployAssistant.DataComponent
                     {
                         ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                         Trace.TraceWarning($"Couldn't Run File Integrity Check, Couldn't Hash Intersected File on {fileRelPath}");
+                        int c = Interlocked.Increment(ref completed);
+                        try { IntegrityProgressEventHandler?.Invoke(c, total); } catch (Exception) { }
                         return;
                     }
                     try
@@ -192,6 +209,8 @@ namespace DeployAssistant.DataComponent
                         ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                         Trace.TraceWarning($"Couldn't Run File Integrity Check: File async Hashing Failed\n{ex.Message}");
                         projectFilesConcurrent.TryRemove(fileRelPath, out _);
+                        int c = Interlocked.Increment(ref completed);
+                        try { IntegrityProgressEventHandler?.Invoke(c, total); } catch (Exception) { }
                         return;
                     }
                     // Empty hash after the call means silent internal failure; remove the file
@@ -201,17 +220,21 @@ namespace DeployAssistant.DataComponent
                         hashFailureLog.Add($"Warning: Failed to compute hash for {fileRelPath}, file excluded from integrity check");
                         projectFilesConcurrent.TryRemove(fileRelPath, out _);
                     }
+                    {
+                        int c = Interlocked.Increment(ref completed);
+                        try { IntegrityProgressEventHandler?.Invoke(c, total); } catch (Exception) { }
+                    }
                 });
 
                 foreach (string warning in hashFailureLog)
                     fileIntegrityLog.AppendLine(warning);
 
-                List<Task> asyncTask = []; 
+                List<Task> asyncTask = [];
                 foreach (ProjectFile intersectedFile in projectFilesConcurrent.Values)
                 {
                     asyncTask.Add(Task.Run(async () =>
                     {
-                        await _asyncControl.WaitAsync(); 
+                        await _asyncControl.WaitAsync();
                         try
                         {
                             if (!projectFilesDict.TryGetValue(intersectedFile.DataRelPath, out ProjectFile? projectFile))
@@ -246,13 +269,15 @@ namespace DeployAssistant.DataComponent
                         catch (Exception Ex)
                         {
                             Trace.TraceWarning($"Failed During Integrity Test {Ex.Message}");
-                            return; 
+                            return;
                         }
                         finally
                         {
-                            _asyncControl.Release(); 
+                            _asyncControl.Release();
+                            int c = Interlocked.Increment(ref completed);
+                            try { IntegrityProgressEventHandler?.Invoke(c, total); } catch (Exception) { }
                         }
-                    })); 
+                    }));
                 }
 
                 await Task.WhenAll(asyncTask);
@@ -262,7 +287,7 @@ namespace DeployAssistant.DataComponent
                 DataStagedEventHandler?.Invoke(_registeredChangesDict.Values.ToList());
                 IntegrityCheckEventHandler?.Invoke(fileIntegrityLog.ToString(), _preStagedFilesDict.Values.ToList());
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                Console.Write(sw.ToString());
+                Trace.TraceInformation($"Integrity check timing: {sw.Elapsed}");
                 sw.Stop();
             }
 

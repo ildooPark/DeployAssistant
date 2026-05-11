@@ -2,6 +2,7 @@
 using DeployAssistant.Model;
 using DeployAssistant.Services;
 using DeployAssistant.Utils;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -38,6 +39,11 @@ namespace DeployAssistant.DataComponent
         public event Action<object>? MetaDataLoadedEventHandler;
         public event Action<object>? FetchRequestEventHandler;
         public event Action<string, ObservableCollection<ProjectFile>>? IntegrityCheckCompleteEventHandler;
+        /// <summary>
+        /// Forwarded from FileManager.IntegrityProgressEventHandler.
+        /// (completed, total) — completed runs 0 → total, total = 2 × intersect file count.
+        /// </summary>
+        public event Action<int, int>? IntegrityProgressEventHandler;
         public event Action<ProjectData, ProjectData, List<ChangedFile>>? ProjComparisonCompleteEventHandler;
         public event Action<MetaDataState> ManagerStateEventHandler;
         public event Action<ProjectIgnoreData> UpdateIgnoreListEventHandler;
@@ -143,8 +149,9 @@ namespace DeployAssistant.DataComponent
             _fileManager.ManagerStateEventHandler += ManagerStateCallBack;
             _fileManager.DataPreStagedEventHandler += FileManager_DataPreStagedCallBack;
             _fileManager.DataStagedEventHandler += FileManager_DataStagedCallBack;
-            _fileManager.OverlappedFileFoundEventHandler += FileManager_OverlappedFileFoundCallBack; 
+            _fileManager.OverlappedFileFoundEventHandler += FileManager_OverlappedFileFoundCallBack;
             _fileManager.IntegrityCheckEventHandler += FileManager_IntegrityCheckCallBack;
+            _fileManager.IntegrityProgressEventHandler += FileManager_IntegrityProgressCallBack;
             _fileManager.SrcProjectDataLoadedEventHandler += FileManager_SrcProjectLoadedCallBack;
 
             _exportManager.ManagerStateEventHandler += ManagerStateCallBack;
@@ -326,16 +333,57 @@ namespace DeployAssistant.DataComponent
             return true;
         }
 
-        public void RequestRevertProject(ProjectData? targetProject)
+        /// <summary>
+        /// Set when RequestRevertProject succeeds. Read-once flag for the
+        /// RevisionListScreen to detect a recent checkout and pop back to MainScreen.
+        /// Consumers should clear it after reading via ConsumeLastCheckedOut().
+        /// </summary>
+        public ProjectData? LastCheckedOut { get; private set; }
+
+        public ProjectData? ConsumeLastCheckedOut()
+        {
+            var v = LastCheckedOut;
+            LastCheckedOut = null;
+            return v;
+        }
+
+        /// <summary>
+        /// Set when RequestProjectUpdate succeeds. Read-once flag for the
+        /// IntegrityResultScreen to detect a recent update and pop back to MainScreen.
+        /// </summary>
+        public ProjectData? LastUpdated { get; private set; }
+
+        public ProjectData? ConsumeLastUpdated()
+        {
+            var v = LastUpdated;
+            LastUpdated = null;
+            return v;
+        }
+
+        public bool RequestRevertProject(ProjectData? targetProject)
         {
             if (targetProject == null)
             {
-                Trace.TraceWarning("Invalid Request For Backup: Targeting Project is Null");
-                return;
+                Trace.TraceWarning("RequestRevertProject: targetProject is null");
+                return false;
             }
-
-            List<ChangedFile>? fileDifferences = _fileManager.FindVersionDifferences(targetProject, MainProjectData, true);
-            _backupManager.RevertProject(targetProject, fileDifferences);
+            try
+            {
+                List<ChangedFile>? fileDifferences = _fileManager.FindVersionDifferences(targetProject, MainProjectData, true);
+                if (fileDifferences == null)
+                {
+                    Trace.TraceWarning("RequestRevertProject: FindVersionDifferences returned null");
+                    return false;
+                }
+                _backupManager.RevertProject(targetProject, fileDifferences);
+                LastCheckedOut = targetProject;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError($"RequestRevertProject failed: {ex.Message}");
+                return false;
+            }
         }
 
         public void RequestProjectCleanRestore(ProjectData? targetProject)
@@ -344,9 +392,12 @@ namespace DeployAssistant.DataComponent
             _backupManager.RevertProject(targetProject, fileDifferences);
         }
 
-        public void RequestRevertChange(ProjectFile file)
+        public bool RequestRevertChange(ProjectFile file)
         {
             _fileManager.RevertChange(file);
+            // FileManager.RevertChange re-applies IntegrityChecked on failure paths
+            // (missing backup, missing project file). Cleared flag => success.
+            return (file.DataState & DataState.IntegrityChecked) == 0;
         }
 
         public void RequestStageChanges()
@@ -434,15 +485,15 @@ namespace DeployAssistant.DataComponent
             _exportManager.ExportProjectFilesXLSX(projData, projectFiles);
         }
 
-        public void RequestProjectUpdate(string? updaterName, string? updateLog, string? currentProjectPath)
+        public bool RequestProjectUpdate(string? updaterName, string? updateLog, string? currentProjectPath)
         {
+            if (string.IsNullOrWhiteSpace(updaterName) || string.IsNullOrWhiteSpace(currentProjectPath))
+            {
+                Trace.TraceWarning("RequestProjectUpdate: updaterName or projectPath is null/empty");
+                return false;
+            }
             try
             {
-                if (currentProjectPath == null)
-                {
-                    Trace.TraceWarning("Project Path must be set for Update Request");
-                    return;
-                }
                 if (_srcProjectData != null)
                 {
                     bool tryIntegrate = _dialogService.Confirm("Integrate Project", "Src Project Data Found, Try Integrate?") == DialogChoice.Yes;
@@ -454,13 +505,13 @@ namespace DeployAssistant.DataComponent
                             bool updateAnyway = _dialogService.Confirm("Update Project", "Integration Failed, Update Anyway?") == DialogChoice.Yes;
                             if (!updateAnyway)
                             {
-                                return;
+                                return false;
                             }
                         }
                         else
                         {
                             _updateManager.MergeProjectMain(updaterName, updateLog, currentProjectPath);
-                            return;
+                            return false;
                         }
                     }
                     else
@@ -468,15 +519,18 @@ namespace DeployAssistant.DataComponent
                         bool updateAnyway = _dialogService.Confirm("Update Project", "Update Anyway?") == DialogChoice.Yes;
                         if (!updateAnyway)
                         {
-                            return;
+                            return false;
                         }
                     }
                 }
-                _updateManager.UpdateProjectMain(updaterName, updateLog, currentProjectPath);
+                bool ok = _updateManager.UpdateProjectMain(updaterName!, updateLog ?? "", currentProjectPath!);
+                if (ok) LastUpdated = MainProjectData;
+                return ok;
             }
             catch (Exception ex)
             {
-                Trace.TraceError(ex.Message);
+                Trace.TraceError($"RequestProjectUpdate failed: {ex.Message}");
+                return false;
             }
         }
 
@@ -552,6 +606,11 @@ namespace DeployAssistant.DataComponent
         private void FileManager_IntegrityCheckCallBack(string changeLog, List<ProjectFile> changedFileList)
         {
             IntegrityCheckCompleteEventHandler?.Invoke(changeLog, new ObservableCollection<ProjectFile>(changedFileList));
+        }
+
+        private void FileManager_IntegrityProgressCallBack(int completed, int total)
+        {
+            IntegrityProgressEventHandler?.Invoke(completed, total);
         }
 
         private void FileManager_DataPreStagedCallBack(object preStagedFileListObj)
