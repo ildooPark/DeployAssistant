@@ -127,23 +127,10 @@ internal sealed class RevisionDetailScreen : Screen
                 _lastError = "Already on this revision.";
                 return ScreenAction.StayAction;
             }
-            int changeCount = _diff?.Count ?? _revision.NumberOfChanges;
-            bool ok = TuiPrompt.Confirm("Checkout revision",
-                $"Restore project to {_revision.UpdatedVersion}? {changeCount} files will change on disk.");
-            if (!ok) return ScreenAction.StayAction;
-
-            bool success = _mgr.RequestRevertProject(_revision);
-            if (success)
-            {
-                // Pop this screen; RevisionListScreen.AutoAdvance will detect
-                // ConsumeLastCheckedOut() and pop again, returning to MainScreen.
-                return ScreenAction.PopAction;
-            }
-            else
-            {
-                _lastError = "Checkout failed (see trace logs).";
-                return ScreenAction.StayAction;
-            }
+            // Push the checkout gate, which runs an integrity check first and handles
+            // the dirty/clean prompt logic. On success it pops and RevisionListScreen.AutoAdvance
+            // pops again (back to MainScreen) via the existing LastCheckedOut flag.
+            return new ScreenAction.Push(new CheckoutGateScreen(_mgr, _revision));
         }
 
         if (_diffList != null) _diffList.Handle(key);
