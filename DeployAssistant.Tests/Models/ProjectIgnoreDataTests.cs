@@ -64,43 +64,68 @@ namespace DeployAssistant.Tests.Models
             Assert.Contains("Export_MyProj", names);
         }
 
+        // FilterChangedFileList tests removed — predicate-based filtering moved to
+        // DeployAssistant.Filtering.IgnoreFilter, exhaustively tested in IgnoreFilterTests.
+
         [Fact]
-        public void FilterChangedFileList_ExcludesIgnoredFilesByName()
+        public void EnsureDefaultFlags_AddsIntegrationFlagToLegacyDeployBackupAndExport()
         {
-            var ignore = new ProjectIgnoreData("Proj");
-            // "ProjectMetaData.bin" is a default ignore entry
-            var ignoredFile = MakeFile(@"ProjectMetaData.bin", "ProjectMetaData.bin");
-            var normalFile = MakeFile(@"app.dll", "app.dll");
+            // Simulate a .ignore file that was persisted before the Integration flag
+            // was added to these three default entries.  EnsureDefaultFlags must
+            // self-heal them up to the current default-flag set.
+            var legacy = new ProjectIgnoreData("MyProj");
+            legacy.IgnoreFileList.Clear();
+            legacy.IgnoreFileList.Add(new RecordedFile("*.deploy", ProjectDataType.File,
+                IgnoreType.Deploy | IgnoreType.Initialization));
+            legacy.IgnoreFileList.Add(new RecordedFile("Backup_MyProj", ProjectDataType.Directory,
+                IgnoreType.IntegrityCheck | IgnoreType.Initialization));
+            legacy.IgnoreFileList.Add(new RecordedFile("Export_MyProj", ProjectDataType.Directory,
+                IgnoreType.IntegrityCheck | IgnoreType.Initialization));
 
-            var changes = new List<ChangedFile>
-            {
-                new ChangedFile(ignoredFile, DataState.Added),
-                new ChangedFile(normalFile, DataState.Modified)
-            };
+            bool changed = legacy.EnsureDefaultFlags();
 
-            ignore.FilterChangedFileList(changes);
+            Assert.True(changed);
+            var deploy = legacy.IgnoreFileList.First(e => e.DataName == "*.deploy");
+            var backup = legacy.IgnoreFileList.First(e => e.DataName == "Backup_MyProj");
+            var export = legacy.IgnoreFileList.First(e => e.DataName == "Export_MyProj");
+            Assert.True((deploy.IgnoreType & IgnoreType.Integration) != 0,
+                "*.deploy must carry Integration after EnsureDefaultFlags");
+            Assert.True((backup.IgnoreType & IgnoreType.Integration) != 0,
+                "Backup_<Name> must carry Integration after EnsureDefaultFlags");
+            Assert.True((export.IgnoreType & IgnoreType.Integration) != 0,
+                "Export_<Name> must carry Integration after EnsureDefaultFlags");
 
-            // Only the non-ignored file should remain
-            Assert.Single(changes);
-            Assert.Equal("app.dll", changes[0].DstFile!.DataName);
+            // Original flags must be preserved (heal is additive)
+            Assert.True((deploy.IgnoreType & IgnoreType.Deploy) != 0);
+            Assert.True((backup.IgnoreType & IgnoreType.IntegrityCheck) != 0);
         }
 
         [Fact]
-        public void FilterChangedFileList_NoIgnoredFiles_LeavesListUnchanged()
+        public void EnsureDefaultFlags_AlreadyCurrent_ReturnsFalse()
         {
-            var ignore = new ProjectIgnoreData("Proj");
-            var file1 = MakeFile(@"logic.dll", "logic.dll");
-            var file2 = MakeFile(@"core.dll", "core.dll");
+            // A freshly constructed ProjectIgnoreData with ConfigureDefaultIgnore
+            // already carries the current flag set.  Heal must be idempotent —
+            // return false so the caller does not pointlessly re-serialize.
+            var fresh = new ProjectIgnoreData("MyProj");
+            fresh.ConfigureDefaultIgnore("MyProj");
 
-            var changes = new List<ChangedFile>
-            {
-                new ChangedFile(file1, DataState.Added),
-                new ChangedFile(file2, DataState.Modified)
-            };
+            bool changed = fresh.EnsureDefaultFlags();
 
-            ignore.FilterChangedFileList(changes);
+            Assert.False(changed);
+        }
 
-            Assert.Equal(2, changes.Count);
+        [Fact]
+        public void EnsureDefaultFlags_DoesNotTouchUserCustomEntries()
+        {
+            // Heal targets only well-known default entries by name.  A user-added
+            // custom entry must be left exactly as-is, regardless of its flags.
+            var data = new ProjectIgnoreData("MyProj");
+            data.IgnoreFileList.Add(new RecordedFile("custom.tool", ProjectDataType.File, IgnoreType.Deploy));
+
+            data.EnsureDefaultFlags();
+
+            var custom = data.IgnoreFileList.First(e => e.DataName == "custom.tool");
+            Assert.Equal(IgnoreType.Deploy, custom.IgnoreType);
         }
 
         [Fact]

@@ -1,6 +1,7 @@
 #pragma warning disable CS0618  // V1 types used intentionally
 
 using DeployAssistant.DataComponent;
+using DeployAssistant.Filtering;
 using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
 using System;
@@ -129,10 +130,11 @@ namespace DeployAssistant.Tests.Integration
             var dstData = MakeProjectData(projPath);
 
             var fileManager = new FileManager();
-            // Inject ignore data so _projIgnoreData != null
+            // Inject ignore data via the new ProjectContext callback (replaces UpdateIgnoreList chain)
             var ignoreData = new ProjectIgnoreData("TestProj");
             ignoreData.ConfigureDefaultIgnore("TestProj");
-            fileManager.MetaDataManager_UpdateIgnoreListCallBack(ignoreData);
+            var metaData = new ProjectMetaData("TestProj", projPath);
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(ProjectContext.Create(metaData, ignoreData));
 
             var result = fileManager.FindVersionDifferencesForIntegration(srcData, dstData, out int significantDiff, out int rawDiff);
 
@@ -174,7 +176,8 @@ namespace DeployAssistant.Tests.Integration
             var fileManager = new FileManager();
             var ignoreData = new ProjectIgnoreData("Proj2");
             ignoreData.ConfigureDefaultIgnore("Proj2");
-            fileManager.MetaDataManager_UpdateIgnoreListCallBack(ignoreData);
+            var metaData = new ProjectMetaData("Proj2", projPath);
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(ProjectContext.Create(metaData, ignoreData));
 
             var result = fileManager.FindVersionDifferencesForIntegration(srcData, dstData, out int significantDiff, out int rawDiff);
 
@@ -222,7 +225,7 @@ namespace DeployAssistant.Tests.Integration
 
             var ignoreData = new ProjectIgnoreData("CleanRestoreProj");
             ignoreData.ConfigureDefaultIgnore("CleanRestoreProj");
-            fileManager.MetaDataManager_UpdateIgnoreListCallBack(ignoreData);
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(ProjectContext.Create(metaData, ignoreData));
 
             var changes = fileManager.ProjectIntegrityCheck(snapshot);
 
@@ -288,7 +291,8 @@ namespace DeployAssistant.Tests.Integration
 
             var ignoreData = new ProjectIgnoreData("Fix3Proj");
             ignoreData.ConfigureDefaultIgnore("Fix3Proj");
-            fileManager.MetaDataManager_UpdateIgnoreListCallBack(ignoreData);
+            var metaData = new ProjectMetaData("Fix3Proj", srcDir);
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(ProjectContext.Create(metaData, ignoreData));
 
             // --- 3. Subscribe to DataPreStagedEventHandler and capture the final snapshot ---
             // RegisterAllSrcFiles fires DataPreStagedEventHandler twice:
@@ -337,11 +341,14 @@ namespace DeployAssistant.Tests.Integration
         // ------------------------------------------------------------------ Fix 4
 
         /// <summary>
-        /// GetIgnoreFilesAndDirPaths with IgnoreType.Initialization must exclude
-        /// *.deploy files, Backup_<Name>/ and Export_<Name>/ after ConfigureDefaultIgnore.
+        /// End-to-end Initialization-scope filtering via the new ProjectScanner.
+        /// After ConfigureDefaultIgnore, *.deploy / Backup_&lt;Name&gt; / Export_&lt;Name&gt;
+        /// must be absent from the scanner's enumeration; the control file
+        /// (app.dll) must be present.  Replaces the prior GetIgnoreFilesAndDirPaths
+        /// test (the method was deleted with the refactor).
         /// </summary>
         [Fact]
-        public void Fix4_GetIgnoreFilesAndDirPaths_InitializationScope_ExcludesDeployAndBackupAndExport()
+        public void Fix4_Scanner_InitializationScope_ExcludesDeployAndBackupAndExport()
         {
             string projDir = Path.Combine(_tempRoot, "InitScopeProj");
             Directory.CreateDirectory(projDir);
@@ -366,24 +373,111 @@ namespace DeployAssistant.Tests.Integration
 
             var ignoreData = new ProjectIgnoreData("InitScopeProj");
             ignoreData.ConfigureDefaultIgnore("InitScopeProj");
+            var ctx = ProjectContext.Create(new ProjectMetaData("InitScopeProj", projDir), ignoreData);
 
-            var (excludedFiles, excludedDirs) = ignoreData.GetIgnoreFilesAndDirPaths(projDir, IgnoreType.Initialization);
+            var includedFiles = ctx.Scanner.EnumerateFiles(projDir, IgnoreType.Initialization).ToList();
+            var includedDirs = ctx.Scanner.EnumerateDirectories(projDir, IgnoreType.Initialization).ToList();
 
-            // *.deploy must be excluded (Initialization flag added in Fix 4)
-            Assert.Contains(excludedFiles, f => f.EndsWith("DeployAssistant.deploy", StringComparison.OrdinalIgnoreCase));
+            // *.deploy must be filtered out (Initialization flag added in Fix 4)
+            Assert.DoesNotContain(includedFiles, f => f.EndsWith("DeployAssistant.deploy", StringComparison.OrdinalIgnoreCase));
 
-            // Backup dir and its contents must be excluded (Initialization flag added in Fix 4)
-            Assert.Contains(excludedDirs, d => d.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                .EndsWith("Backup_InitScopeProj", StringComparison.OrdinalIgnoreCase));
-            Assert.Contains(excludedFiles, f => f.EndsWith("old.dll", StringComparison.OrdinalIgnoreCase));
+            // Backup dir and its contents must be filtered out
+            Assert.DoesNotContain(includedDirs, d => d.EndsWith("Backup_InitScopeProj", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(includedFiles, f => f.EndsWith("old.dll", StringComparison.OrdinalIgnoreCase));
 
-            // Export dir and its contents must be excluded (Initialization flag added in Fix 4)
-            Assert.Contains(excludedDirs, d => d.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                .EndsWith("Export_InitScopeProj", StringComparison.OrdinalIgnoreCase));
-            Assert.Contains(excludedFiles, f => f.EndsWith("report.xlsx", StringComparison.OrdinalIgnoreCase));
+            // Export dir and its contents must be filtered out
+            Assert.DoesNotContain(includedDirs, d => d.EndsWith("Export_InitScopeProj", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(includedFiles, f => f.EndsWith("report.xlsx", StringComparison.OrdinalIgnoreCase));
 
-            // Normal app.dll must NOT be excluded
-            Assert.DoesNotContain(excludedFiles, f => f.EndsWith("app.dll", StringComparison.OrdinalIgnoreCase));
+            // Control: normal app.dll must remain
+            Assert.Contains(includedFiles, f => f.EndsWith("app.dll", StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
+        /// End-to-end legacy-file heal: writing a pre-refactor <c>.ignore</c>
+        /// JSON to disk and triggering <c>SettingManager.MetaDataLoaded</c>
+        /// must (a) load it, (b) heal in-memory flags, and (c) re-persist the
+        /// healed file back to disk.  Validates the SettingManager wiring on
+        /// top of the EnsureDefaultFlags unit tests.
+        /// </summary>
+        [Fact]
+        public void SettingManager_LoadingLegacyIgnoreFile_PersistsHealedFlags()
+        {
+            string projDir = Path.Combine(_tempRoot, "LegacyIgnoreProj");
+            Directory.CreateDirectory(projDir);
+            string ignoreFilePath = Path.Combine(projDir, "DeployAssistant.ignore");
+
+            // Persist a legacy-format ignore file (no Integration flag on the
+            // three entries the refactor cares about).
+            string legacyJson = @"{
+              ""ProjectName"": ""LegacyIgnoreProj"",
+              ""IgnoreFileList"": [
+                { ""DataName"": ""*.deploy"", ""DataType"": 0, ""IgnoreType"": 12, ""UpdatedTime"": ""2024-01-01T00:00:00"" },
+                { ""DataName"": ""Backup_LegacyIgnoreProj"", ""DataType"": 1, ""IgnoreType"": 10, ""UpdatedTime"": ""2024-01-01T00:00:00"" },
+                { ""DataName"": ""Export_LegacyIgnoreProj"", ""DataType"": 1, ""IgnoreType"": 10, ""UpdatedTime"": ""2024-01-01T00:00:00"" }
+              ]
+            }";
+            File.WriteAllText(ignoreFilePath, legacyJson);
+
+            var settingManager = new SettingManager();
+            var metaData = new ProjectMetaData("LegacyIgnoreProj", projDir);
+
+            settingManager.MetaDataManager_MetaDataLoadedCallBack(metaData);
+
+            // Re-read from disk and assert the heal was persisted.
+            var fileHandler = new DeployAssistant.Utils.FileHandlerTool();
+            Assert.True(fileHandler.TryDeserializeJsonData(ignoreFilePath, out ProjectIgnoreData? healed));
+            Assert.NotNull(healed);
+
+            var deploy = healed!.IgnoreFileList.First(e => e.DataName == "*.deploy");
+            var backup = healed.IgnoreFileList.First(e => e.DataName == "Backup_LegacyIgnoreProj");
+            var export = healed.IgnoreFileList.First(e => e.DataName == "Export_LegacyIgnoreProj");
+
+            Assert.True((deploy.IgnoreType & IgnoreType.Integration) != 0);
+            Assert.True((backup.IgnoreType & IgnoreType.Integration) != 0);
+            Assert.True((export.IgnoreType & IgnoreType.Integration) != 0);
+        }
+
+        /// <summary>
+        /// Integration-scope behavioral test for the all-in refactor:
+        /// after the predicate-based filter started honoring IgnoreType,
+        /// the default *.deploy / Backup_&lt;Name&gt; / Export_&lt;Name&gt; entries
+        /// must also carry Integration so they remain filtered from
+        /// version-diff results (previously masked by scope-blind PartOfIgnore).
+        /// </summary>
+        [Fact]
+        public void Defaults_DeployAndBackupAndExport_AreFilteredFromIntegrationDiff()
+        {
+            string projPath = @"C:\IntegFakeDst";
+            string srcPath  = @"C:\IntegFakeSrc";
+
+            var srcFiles = new[]
+            {
+                MakeFile(@"app.deploy", srcPath),
+                MakeFile(@"Backup_TestProj\old.dll", srcPath),
+                MakeFile(@"Export_TestProj\report.xlsx", srcPath),
+                MakeFile(@"app.dll", srcPath),
+            };
+
+            var srcData = MakeProjectData(srcPath, srcFiles);
+            var dstData = MakeProjectData(projPath);
+
+            var fileManager = new FileManager();
+            var ignoreData = new ProjectIgnoreData("TestProj");
+            ignoreData.ConfigureDefaultIgnore("TestProj");
+            var metaData = new ProjectMetaData("TestProj", projPath);
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(ProjectContext.Create(metaData, ignoreData));
+
+            var result = fileManager.FindVersionDifferencesForIntegration(srcData, dstData, out _, out _);
+            Assert.NotNull(result);
+
+            var relPaths = result!.Select(c => c.SrcFile?.DataRelPath ?? c.DstFile?.DataRelPath ?? "").ToList();
+
+            Assert.DoesNotContain(relPaths, r => r.EndsWith(".deploy", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(relPaths, r => r.StartsWith("Backup_TestProj", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(relPaths, r => r.StartsWith("Export_TestProj", StringComparison.OrdinalIgnoreCase));
+            // Control: real file remains
+            Assert.Contains(relPaths, r => r.EndsWith("app.dll", StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>

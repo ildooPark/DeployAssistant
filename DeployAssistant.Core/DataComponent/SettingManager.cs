@@ -19,7 +19,13 @@ namespace DeployAssistant.DataComponent
     {
         public event Action<MetaDataState>? ManagerStateEventHandler;
         public event Action<string>? SetPrevProjectEventHandler;
-        public event Action<ProjectIgnoreData>? UpdateIgnoreListEventHandler;
+        /// <summary>
+        /// Fired after the per-project <see cref="ProjectIgnoreData"/> is loaded
+        /// (or freshly constructed and persisted).  Carries both the metaData
+        /// that triggered the load and the resolved ignoreData so the consumer
+        /// can compose them into a single <c>ProjectContext</c>.
+        /// </summary>
+        public event Action<ProjectMetaData, ProjectIgnoreData>? IgnoreDataLoadedEventHandler;
         public ProjectIgnoreData _projectIgnoreData; 
 
         public IDialogService DialogService { get; set; } = new NullDialogService();
@@ -144,6 +150,16 @@ namespace DeployAssistant.DataComponent
                         {
                             throw new ArgumentNullException(nameof(projectIgnoreData));
                         }
+                        // Self-heal legacy .ignore files that were persisted before the
+                        // default flag set was expanded.  Re-persist only if anything
+                        // actually changed, to keep file mtime stable for unchanged files.
+                        if (projectIgnoreData.EnsureDefaultFlags())
+                        {
+                            if (!_fileHandlerTool.TrySerializeJsonData(ignoreMetaFilePath, projectIgnoreData))
+                            {
+                                Trace.TraceWarning($"Setting Manager Project Ignore: heal succeeded in memory but failed to re-persist {ignoreMetaFilePath}");
+                            }
+                        }
                         _projectIgnoreData = projectIgnoreData;
                     }
                 }
@@ -157,7 +173,7 @@ namespace DeployAssistant.DataComponent
                         return;
                     }
                 }
-                UpdateIgnoreListEventHandler?.Invoke(_projectIgnoreData);
+                IgnoreDataLoadedEventHandler?.Invoke(projectMetaData, _projectIgnoreData);
             }
             catch (Exception ex)
             {
