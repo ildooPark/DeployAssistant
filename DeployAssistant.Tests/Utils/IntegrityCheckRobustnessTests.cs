@@ -177,6 +177,48 @@ namespace DeployAssistant.Tests.Utils
             Assert.Equal(ProjectDataType.File, file.DataType);
         }
 
+        // -----------------------------------------------------------------------
+        // String-overload resilience: the GetFileMD5CheckSum(projectPath, relPath)
+        // overload at HashTool.cs:48 was documented as "swallows exceptions" but
+        // didn't.  A locked or missing file would throw IOException straight to
+        // the caller, aborting MainProjectIntegrityCheck.added-files loop and
+        // ProjectIntegrityCheck.intersect loop via the outer catch.  These tests
+        // pin the new resilient behavior: return "" on failure, never throw.
+        // -----------------------------------------------------------------------
+
+        [Fact]
+        public void StringOverload_MissingFile_ReturnsEmptyString_NotThrows()
+        {
+            // Sibling of HashFailureOnInaccessibleFile_LeavesDataHashEmpty but for
+            // the (projectPath, relPath) overload that the integrity-check loops use.
+            var ex = Record.Exception(() =>
+            {
+                string result = _hashTool.GetFileMD5CheckSum(_tempDir, "does_not_exist.dll");
+                Assert.Equal("", result);
+            });
+            Assert.Null(ex);
+        }
+
+        [Fact]
+        public void StringOverload_LockedFile_ReturnsEmptyString_NotThrows()
+        {
+            // Hold the file open with FileShare.None — the worst-case lock encountered
+            // during a deploy when another process has the binary loaded.  The hash
+            // attempt must return "" rather than throw IOException up the stack.
+            string fileName = "locked.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "MZ-fake-binary");
+
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var ex = Record.Exception(() =>
+            {
+                string result = _hashTool.GetFileMD5CheckSum(_tempDir, fileName);
+                Assert.Equal("", result);
+            });
+            Assert.Null(ex);
+        }
+
         [Fact]
         public void ProjectFileConstructor_Directory_DoesNotCallFileVersionInfo()
         {
