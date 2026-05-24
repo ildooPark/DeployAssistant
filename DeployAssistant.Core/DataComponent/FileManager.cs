@@ -450,13 +450,24 @@ namespace DeployAssistant.DataComponent
                 foreach (string fileRelPath in intersectFiles)
                 {
                     string? dirFileHash = _hashTool.GetFileMD5CheckSum(targetProject.ProjectPath, fileRelPath);
+
                     if (string.IsNullOrEmpty(dirFileHash))
                     {
-                        string msg = $"Failed To Hash File {fileRelPath} (locked or unreadable); skipping integrity comparison";
-                        Trace.TraceWarning(msg);
-                        restoreFailures.Add(msg);
-                        continue;
+                        // Hash retries exhausted — fall back to size + BuildVersion metadata
+                        // comparison.  Match → no change record. Mismatch → fall through to
+                        // the existing backup-lookup branch using the snapshot's stored hash.
+                        var (metadataMatch, logMsg) = VerifyByMetadata(targetProject.ProjectPath, fileRelPath, projectFilesDict[fileRelPath]);
+                        Trace.TraceWarning(logMsg);
+                        restoreFailures.Add(logMsg);
+                        if (metadataMatch)
+                        {
+                            continue;  // Unchanged — no change record emitted
+                        }
+                        // Metadata mismatch: route through the Modified branch.  Set the disk hash
+                        // to a sentinel that differs from the stored hash so the next if-block fires.
+                        dirFileHash = "<metadata-mismatch-sentinel>";
                     }
+
                     if (projectFilesDict[fileRelPath].DataHash != dirFileHash)
                     {
                         if (!_backupFilesDict.TryGetValue(projectFilesDict[fileRelPath].DataHash, out ProjectFile? backupFile))
@@ -1389,6 +1400,47 @@ namespace DeployAssistant.DataComponent
             _projectFilesDict_relDirSorted = _dstProjectData.ProjectFilesDict_RelDirSorted; 
             DataStagedEventHandler?.Invoke(_registeredChangesDict.Values.ToList());
         }
+        /// <summary>
+        /// Fallback verification when MD5 hashing fails.  Compares file size and
+        /// FileVersionInfo.FileVersion against the snapshot entry.  Returns
+        /// <c>(match, log)</c> where match=true means treat as Unchanged
+        /// (metadata matches snapshot) and match=false means treat as Modified
+        /// (metadata differs).  Catches its own exceptions — if even metadata is
+        /// unreadable (rare double-failure: file vanished mid-scan, disk error),
+        /// returns match=true to keep the checkout integrity gate functional.
+        /// </summary>
+        private static (bool match, string logMessage) VerifyByMetadata(string projectPath, string relPath, ProjectFile snapshotEntry)
+        {
+            try
+            {
+                var info = new FileInfo(Path.Combine(projectPath, relPath));
+                long currentSize = info.Length;
+                string currentVersion = "";
+                try
+                {
+                    currentVersion = FileVersionInfo.GetVersionInfo(info.FullName).FileVersion ?? "";
+                }
+                catch
+                {
+                    // Non-PE file or unreadable version info — fall back to ""
+                    currentVersion = "";
+                }
+
+                bool matches = currentSize == snapshotEntry.DataSize
+                            && currentVersion == (snapshotEntry.BuildVersion ?? "");
+
+                string msg = matches
+                    ? $"Note: {relPath} verified by metadata only — hash unavailable (size={currentSize}, version='{currentVersion}')"
+                    : $"Modified: {relPath} — metadata differs from snapshot (size: {currentSize} vs {snapshotEntry.DataSize}, version: '{currentVersion}' vs '{snapshotEntry.BuildVersion}'; hash unavailable)";
+                return (matches, msg);
+            }
+            catch (Exception ex)
+            {
+                // Extreme double-failure: file vanished or disk error.  Err toward Unchanged.
+                return (true, $"Warning: {relPath} — metadata read also failed ({ex.GetType().Name}: {ex.Message}); treating as Unchanged");
+            }
+        }
+
         public void MetaDataManager_MetaDataLoadedCallBack(object metaDataObj)
         {
             if (metaDataObj is not ProjectMetaData projectMetaData) return;
