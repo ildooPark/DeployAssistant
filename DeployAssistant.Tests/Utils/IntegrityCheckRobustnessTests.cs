@@ -220,6 +220,74 @@ namespace DeployAssistant.Tests.Utils
         }
 
         [Fact]
+        public void StringOverload_PersistentLock_AllRetriesFail_ReturnsEmpty_AndActuallyRetries()
+        {
+            // Hold the file with FileShare.None for the entire duration.
+            // With maxRetries=2 and retryDelayMs=50, the call must:
+            //   1. Return "" (all retries failed)
+            //   2. Take at least 100 ms (= 2 retries × 50 ms — proves retries actually ran, not short-circuited)
+            string fileName = "persistent-lock.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "MZ-fake-binary");
+
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            string result = _hashTool.GetFileMD5CheckSum(_tempDir, fileName, maxRetries: 2, retryDelayMs: 50);
+            stopwatch.Stop();
+
+            Assert.Equal("", result);
+            Assert.True(stopwatch.ElapsedMilliseconds >= 100,
+                $"Expected at least 100 ms elapsed (2 retries × 50 ms), actually {stopwatch.ElapsedMilliseconds} ms");
+        }
+
+        [Fact]
+        public void StringOverload_LockReleasedAfterOneRetry_HashEventuallySucceeds()
+        {
+            // Background task holds the file for ~150 ms then releases.
+            // With maxRetries=3 retryDelayMs=100, the second or third attempt should succeed.
+            string fileName = "temp-lock.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "MZ-fake-binary");
+
+            var holdStarted = new System.Threading.ManualResetEventSlim(false);
+            var holderTask = System.Threading.Tasks.Task.Run(() =>
+            {
+                using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+                holdStarted.Set();
+                System.Threading.Thread.Sleep(150);
+                // fs disposes here, releasing the lock
+            });
+
+            holdStarted.Wait(TimeSpan.FromSeconds(5));  // ensure the lock is established before we call
+
+            string result = _hashTool.GetFileMD5CheckSum(_tempDir, fileName, maxRetries: 3, retryDelayMs: 100);
+            holderTask.Wait();
+
+            Assert.NotEqual("", result);
+            Assert.Equal(32, result.Length);  // MD5 hex = 32 chars
+        }
+
+        [Fact]
+        public void StringOverload_MaxRetriesZero_SkipsRetryEntirely()
+        {
+            // maxRetries=0 means "try once, no retries" — total elapsed should be near-zero.
+            string fileName = "no-retry-lock.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "MZ-fake-binary");
+
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            string result = _hashTool.GetFileMD5CheckSum(_tempDir, fileName, maxRetries: 0, retryDelayMs: 500);
+            stopwatch.Stop();
+
+            Assert.Equal("", result);
+            Assert.True(stopwatch.ElapsedMilliseconds < 100,
+                $"Expected near-zero elapsed time with maxRetries=0, actually {stopwatch.ElapsedMilliseconds} ms");
+        }
+
+        [Fact]
         public void ProjectFileConstructor_Directory_DoesNotCallFileVersionInfo()
         {
             // Directories never call FileVersionInfo; constructor should always succeed.
