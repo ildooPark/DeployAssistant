@@ -230,12 +230,13 @@ namespace DeployAssistant.DataComponent
                         try { IntegrityProgressEventHandler?.Invoke(c, total); } catch (Exception) { }
                         return;
                     }
-                    // Empty hash after the call means silent internal failure; remove the file
-                    // to prevent a false match against the stored hash.
+                    // Empty hash after the call means hash retries exhausted.  KEEP the file
+                    // in projectFilesConcurrent so the async-task block can engage the metadata
+                    // fallback (VerifyByMetadata).  Log the deferred verification so the user
+                    // sees it.
                     if (string.IsNullOrEmpty(intersectedFile.DataHash))
                     {
-                        hashFailureLog.Add($"Warning: Failed to compute hash for {fileRelPath}, file excluded from integrity check");
-                        projectFilesConcurrent.TryRemove(fileRelPath, out _);
+                        hashFailureLog.Add($"Note: {fileRelPath} — hash unavailable after retries; will verify by metadata");
                     }
                     {
                         int c = Interlocked.Increment(ref completed);
@@ -261,7 +262,20 @@ namespace DeployAssistant.DataComponent
                                 Trace.TraceWarning($"Couldn't Run File Integrity Check, project File does not exist in Intersected file list {intersectedFile.DataName}");
                                 return;
                             }
-                            if (projectFile.DataHash != intersectedFile.DataHash)
+                            bool hashMismatch;
+                            if (string.IsNullOrEmpty(intersectedFile.DataHash))
+                            {
+                                // Hash retries exhausted — fall back to size + version metadata.
+                                var (metadataMatch, logMsg) = VerifyByMetadata(_dstProjectData.ProjectPath, projectFile.DataRelPath, projectFile);
+                                fileIntegrityLog.AppendLine(logMsg);
+                                hashMismatch = !metadataMatch;
+                            }
+                            else
+                            {
+                                hashMismatch = projectFile.DataHash != intersectedFile.DataHash;
+                            }
+
+                            if (hashMismatch)
                             {
                                 fileIntegrityLog.AppendLine($"File {projectFile.DataName} on {projectFile.DataRelPath} has been modified");
 
@@ -277,8 +291,15 @@ namespace DeployAssistant.DataComponent
                                     // Version/size read failed; retain values copied from projectFile and log the warning.
                                     fileIntegrityLog.AppendLine($"Warning: Could not read version/size for modified file {projectFile.DataRelPath}: {ex.Message}");
                                 }
-                                dstFile.DataHash = intersectedFile.DataHash;
-                                dstFile.UpdatedTime = new FileInfo(srcFile.DataAbsPath).LastAccessTime;
+                                dstFile.DataHash = intersectedFile.DataHash;  // may be "" when hash failed — new contract: callers tolerate empty
+                                try
+                                {
+                                    dstFile.UpdatedTime = new FileInfo(srcFile.DataAbsPath).LastAccessTime;
+                                }
+                                catch
+                                {
+                                    // File may be unreadable (locked); keep the copied UpdatedTime.
+                                }
 
                                 _preStagedFilesDict.TryAdd(projectFile.DataRelPath, dstFile);
                                 _registeredChangesDict.TryAdd(dstFile.DataRelPath, new ChangedFile(srcFile, dstFile, DataState.Modified | DataState.IntegrityChecked, true));
