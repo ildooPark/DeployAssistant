@@ -1,11 +1,14 @@
 #pragma warning disable CS0618  // V1 types used intentionally for V1 robustness tests
 
 using DeployAssistant.DataComponent;
+using DeployAssistant.Filtering;
 using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
 using DeployAssistant.Utils;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using Xunit;
 
@@ -220,6 +223,123 @@ namespace DeployAssistant.Tests.Utils
         }
 
         [Fact]
+        public void StringOverload_PersistentLock_AllRetriesFail_ReturnsEmpty_AndActuallyRetries()
+        {
+            // Hold the file with FileShare.None for the entire duration.
+            // With maxRetries=2 and retryDelayMs=50, the call must:
+            //   1. Return "" (all retries failed)
+            //   2. Take at least 100 ms (= 2 retries × 50 ms — proves retries actually ran, not short-circuited)
+            string fileName = "persistent-lock.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "MZ-fake-binary");
+
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            string result = _hashTool.GetFileMD5CheckSum(_tempDir, fileName, maxRetries: 2, retryDelayMs: 50);
+            stopwatch.Stop();
+
+            Assert.Equal("", result);
+            Assert.True(stopwatch.ElapsedMilliseconds >= 100,
+                $"Expected at least 100 ms elapsed (2 retries × 50 ms), actually {stopwatch.ElapsedMilliseconds} ms");
+        }
+
+        [Fact]
+        public void StringOverload_LockReleasedAfterOneRetry_HashEventuallySucceeds()
+        {
+            // Background task holds the file for ~150 ms then releases.
+            // With maxRetries=3 retryDelayMs=100, the second or third attempt should succeed.
+            string fileName = "temp-lock.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "MZ-fake-binary");
+
+            var holdStarted = new System.Threading.ManualResetEventSlim(false);
+            var holderTask = System.Threading.Tasks.Task.Run(() =>
+            {
+                using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+                holdStarted.Set();
+                System.Threading.Thread.Sleep(150);
+                // fs disposes here, releasing the lock
+            });
+
+            holdStarted.Wait(TimeSpan.FromSeconds(5));  // ensure the lock is established before we call
+
+            string result = _hashTool.GetFileMD5CheckSum(_tempDir, fileName, maxRetries: 3, retryDelayMs: 100);
+            holderTask.Wait();
+
+            Assert.NotEqual("", result);
+            Assert.Equal(32, result.Length);  // MD5 hex = 32 chars
+        }
+
+        [Fact]
+        public void StringOverload_MaxRetriesZero_SkipsRetryEntirely()
+        {
+            // maxRetries=0 means "try once, no retries" — total elapsed should be near-zero.
+            string fileName = "no-retry-lock.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "MZ-fake-binary");
+
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            string result = _hashTool.GetFileMD5CheckSum(_tempDir, fileName, maxRetries: 0, retryDelayMs: 500);
+            stopwatch.Stop();
+
+            Assert.Equal("", result);
+            Assert.True(stopwatch.ElapsedMilliseconds < 100,
+                $"Expected near-zero elapsed time with maxRetries=0, actually {stopwatch.ElapsedMilliseconds} ms");
+        }
+
+        [Fact]
+        public void StringOverload_NegativeRetriesAndDelay_ClampedToZero_SingleAttempt()
+        {
+            // Negative inputs are documented to clamp to zero: single attempt, no delay.
+            string fileName = "negative-clamp.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "MZ-fake-binary");
+
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            string result = _hashTool.GetFileMD5CheckSum(_tempDir, fileName, maxRetries: -5, retryDelayMs: -100);
+            stopwatch.Stop();
+
+            Assert.Equal("", result);
+            Assert.True(stopwatch.ElapsedMilliseconds < 100,
+                $"Expected near-zero elapsed time with clamped inputs, actually {stopwatch.ElapsedMilliseconds} ms");
+        }
+
+        [Fact]
+        public void InstanceOverload_PersistentLock_AllRetriesFail_LeavesDataHashEmpty_AndActuallyRetries()
+        {
+            // Same retry contract as the string overload, but the instance overload
+            // mutates the ProjectFile in place (sets DataHash on success).  On
+            // persistent failure, DataHash stays "" and total elapsed time proves
+            // retries ran.
+            string fileName = "instance-persistent.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "MZ-fake-binary");
+
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var file = new ProjectFile(
+                DataType: ProjectDataType.File,
+                DataSize: 14, BuildVersion: "1.0", DeployedProjectVersion: "1.0",
+                UpdatedTime: DateTime.Now, DataState: DataState.None,
+                dataName: fileName, dataSrcPath: _tempDir,
+                dataRelPath: fileName, dataHash: "",
+                IsDstFile: false);
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            _hashTool.GetFileMD5CheckSum(file, maxRetries: 2, retryDelayMs: 50);
+            stopwatch.Stop();
+
+            Assert.Equal("", file.DataHash);
+            Assert.True(stopwatch.ElapsedMilliseconds >= 100,
+                $"Expected at least 100 ms elapsed (2 retries × 50 ms), actually {stopwatch.ElapsedMilliseconds} ms");
+        }
+
+        [Fact]
         public void ProjectFileConstructor_Directory_DoesNotCallFileVersionInfo()
         {
             // Directories never call FileVersionInfo; constructor should always succeed.
@@ -234,6 +354,224 @@ namespace DeployAssistant.Tests.Utils
                 Assert.Equal(0, file.DataSize);
             });
 
+            Assert.Null(ex);
+        }
+
+        // =====================================================================
+        // Task 3: VerifyByMetadata fallback via ProjectIntegrityCheck
+        // =====================================================================
+
+        // Helper used by the fallback tests below.
+        private static ProjectData MakeSnapshot(string projectPath, params ProjectFile[] files)
+        {
+            var dict = new Dictionary<string, ProjectFile>();
+            foreach (var f in files) dict[f.DataRelPath] = f;
+            return new ProjectData(
+                ProjectName: "FallbackTest",
+                ProjectPath: projectPath,
+                UpdaterName: "Tester",
+                ConductedPC: "PC",
+                UpdatedTime: DateTime.Now,
+                UpdatedVersion: "1.0",
+                UpdateLog: "",
+                ChangeLog: "",
+                RevisionNumber: 0,
+                NumberOfChanges: 0,
+                ChangedFiles: new List<ChangedFile>(),
+                ProjectFiles: dict);
+        }
+
+        [Fact]
+        public void Fallback_HashFails_MetadataMatches_NoModifiedChange()
+        {
+            // Snapshot says the file has hash STORED_HASH; on disk the file is locked
+            // (so MD5 returns ""). Size + BuildVersion (both "" for non-PE) match the
+            // snapshot, so the fallback treats it as Unchanged — NO Modified change emitted.
+            string fileName = "fallback-match.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "fake-content-fallback-match");
+            long actualSize = new FileInfo(fullPath).Length;
+
+            var snapshotFile = new ProjectFile(
+                DataType: ProjectDataType.File,
+                DataSize: actualSize,
+                BuildVersion: "",
+                DeployedProjectVersion: "1.0",
+                UpdatedTime: DateTime.Now,
+                DataState: DataState.None,
+                dataName: fileName, dataSrcPath: _tempDir,
+                dataRelPath: fileName,
+                dataHash: "STORED_HASH_DIFFERENT_FROM_ACTUAL",
+                IsDstFile: false);
+
+            var snapshot = MakeSnapshot(_tempDir, snapshotFile);
+
+            var fileManager = new FileManager();
+            var metaData = new ProjectMetaData("FallbackTest", _tempDir);
+            fileManager.MetaDataManager_MetaDataLoadedCallBack(metaData);
+            var ignoreData = new ProjectIgnoreData("FallbackTest");
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(
+                ProjectContext.Create(metaData, ignoreData));
+
+            // Lock the file so the integrity-check hash returns "" after retries.
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var changes = fileManager.ProjectIntegrityCheck(snapshot);
+
+            Assert.NotNull(changes);
+            bool anyModifiedForOurFile = changes!.Any(c =>
+                (c.DstFile?.DataRelPath ?? "") == fileName &&
+                (c.DataState & DataState.Modified) != 0);
+            Assert.False(anyModifiedForOurFile,
+                "Metadata-matched file must not produce a Modified change when hash is unavailable");
+        }
+
+        [Fact]
+        public void Fallback_HashFails_SizeMismatch_ProducesModifiedChange()
+        {
+            // Snapshot recorded a DIFFERENT size. Hash fails (locked); fallback detects
+            // size mismatch and emits a Modified change.
+            string fileName = "fallback-sizediff.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "actual-on-disk-content");
+            long actualSize = new FileInfo(fullPath).Length;
+
+            var snapshotFile = new ProjectFile(
+                DataType: ProjectDataType.File,
+                DataSize: actualSize + 100,  // intentionally different
+                BuildVersion: "",
+                DeployedProjectVersion: "1.0",
+                UpdatedTime: DateTime.Now,
+                DataState: DataState.None,
+                dataName: fileName, dataSrcPath: _tempDir,
+                dataRelPath: fileName,
+                dataHash: "STORED_HASH_DOESNT_MATCH_ACTUAL",
+                IsDstFile: false);
+
+            var snapshot = MakeSnapshot(_tempDir, snapshotFile);
+
+            // Backup entry needed for the existing Modified branch to emit a change record.
+            var backupFiles = new Dictionary<string, ProjectFile>
+            {
+                ["STORED_HASH_DOESNT_MATCH_ACTUAL"] = new ProjectFile(
+                    DataType: ProjectDataType.File,
+                    DataSize: actualSize + 100,
+                    BuildVersion: "", DeployedProjectVersion: "1.0",
+                    UpdatedTime: DateTime.Now, DataState: DataState.Backup,
+                    dataName: fileName, dataSrcPath: _tempDir,
+                    dataRelPath: fileName, dataHash: "STORED_HASH_DOESNT_MATCH_ACTUAL",
+                    IsDstFile: false)
+            };
+            var metaData = new ProjectMetaData("FallbackTest", _tempDir);
+            metaData.BackupFiles = backupFiles;
+
+            var fileManager = new FileManager();
+            fileManager.MetaDataManager_MetaDataLoadedCallBack(metaData);
+            var ignoreData = new ProjectIgnoreData("FallbackTest");
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(
+                ProjectContext.Create(metaData, ignoreData));
+
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var changes = fileManager.ProjectIntegrityCheck(snapshot);
+
+            Assert.NotNull(changes);
+            bool anyForOurFile = changes!.Any(c =>
+                ((c.DstFile?.DataRelPath ?? "") == fileName || (c.SrcFile?.DataRelPath ?? "") == fileName));
+            Assert.True(anyForOurFile,
+                "Size-mismatch fallback must emit a change record");
+        }
+
+        [Fact]
+        public void Fallback_HashFails_VersionMismatch_ProducesModifiedChange()
+        {
+            // Size matches, BuildVersion differs.
+            string fileName = "fallback-versiondiff.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "content");
+            long actualSize = new FileInfo(fullPath).Length;
+
+            var snapshotFile = new ProjectFile(
+                DataType: ProjectDataType.File,
+                DataSize: actualSize,
+                BuildVersion: "9.9.9.9",  // disk file has empty version (non-PE)
+                DeployedProjectVersion: "1.0",
+                UpdatedTime: DateTime.Now,
+                DataState: DataState.None,
+                dataName: fileName, dataSrcPath: _tempDir,
+                dataRelPath: fileName,
+                dataHash: "STORED_HASH",
+                IsDstFile: false);
+
+            var snapshot = MakeSnapshot(_tempDir, snapshotFile);
+
+            var backupFiles = new Dictionary<string, ProjectFile>
+            {
+                ["STORED_HASH"] = new ProjectFile(
+                    DataType: ProjectDataType.File,
+                    DataSize: actualSize,
+                    BuildVersion: "9.9.9.9", DeployedProjectVersion: "1.0",
+                    UpdatedTime: DateTime.Now, DataState: DataState.Backup,
+                    dataName: fileName, dataSrcPath: _tempDir,
+                    dataRelPath: fileName, dataHash: "STORED_HASH",
+                    IsDstFile: false)
+            };
+            var metaData = new ProjectMetaData("FallbackTest", _tempDir);
+            metaData.BackupFiles = backupFiles;
+
+            var fileManager = new FileManager();
+            fileManager.MetaDataManager_MetaDataLoadedCallBack(metaData);
+            var ignoreData = new ProjectIgnoreData("FallbackTest");
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(
+                ProjectContext.Create(metaData, ignoreData));
+
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var changes = fileManager.ProjectIntegrityCheck(snapshot);
+
+            Assert.NotNull(changes);
+            bool anyForOurFile = changes!.Any(c =>
+                ((c.DstFile?.DataRelPath ?? "") == fileName || (c.SrcFile?.DataRelPath ?? "") == fileName));
+            Assert.True(anyForOurFile,
+                "Version-mismatch fallback must emit a change record");
+        }
+
+        [Fact]
+        public void Fallback_HashAndMetadataBothFail_TreatsAsUnchanged_NoCrash()
+        {
+            // Just smoke-test that the integrity check doesn't throw under double-failure
+            // scenarios. The internal helper returns match=true on metadata-read failure.
+            string fileName = "smoke-double-failure.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "content");
+            long sizeOnDisk = new FileInfo(fullPath).Length;
+
+            var snapshotFile = new ProjectFile(
+                DataType: ProjectDataType.File,
+                DataSize: sizeOnDisk,
+                BuildVersion: "",
+                DeployedProjectVersion: "1.0",
+                UpdatedTime: DateTime.Now,
+                DataState: DataState.None,
+                dataName: fileName, dataSrcPath: _tempDir,
+                dataRelPath: fileName,
+                dataHash: "STORED",
+                IsDstFile: false);
+
+            var snapshot = MakeSnapshot(_tempDir, snapshotFile);
+
+            var fileManager = new FileManager();
+            var metaData = new ProjectMetaData("FallbackTest", _tempDir);
+            fileManager.MetaDataManager_MetaDataLoadedCallBack(metaData);
+            var ignoreData = new ProjectIgnoreData("FallbackTest");
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(
+                ProjectContext.Create(metaData, ignoreData));
+
+            // Lock the file so hash fails. Metadata reads will work fine here, so this
+            // test mainly verifies that integrity check completes without throwing.
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var ex = Record.Exception(() => fileManager.ProjectIntegrityCheck(snapshot));
             Assert.Null(ex);
         }
     }

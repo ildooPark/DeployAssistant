@@ -230,12 +230,13 @@ namespace DeployAssistant.DataComponent
                         try { IntegrityProgressEventHandler?.Invoke(c, total); } catch (Exception) { }
                         return;
                     }
-                    // Empty hash after the call means silent internal failure; remove the file
-                    // to prevent a false match against the stored hash.
+                    // Empty hash after the call means hash retries exhausted.  KEEP the file
+                    // in projectFilesConcurrent so the async-task block can engage the metadata
+                    // fallback (VerifyByMetadata).  Log the deferred verification so the user
+                    // sees it.
                     if (string.IsNullOrEmpty(intersectedFile.DataHash))
                     {
-                        hashFailureLog.Add($"Warning: Failed to compute hash for {fileRelPath}, file excluded from integrity check");
-                        projectFilesConcurrent.TryRemove(fileRelPath, out _);
+                        hashFailureLog.Add($"Note: {fileRelPath} — hash unavailable after retries; will verify by metadata");
                     }
                     {
                         int c = Interlocked.Increment(ref completed);
@@ -261,7 +262,20 @@ namespace DeployAssistant.DataComponent
                                 Trace.TraceWarning($"Couldn't Run File Integrity Check, project File does not exist in Intersected file list {intersectedFile.DataName}");
                                 return;
                             }
-                            if (projectFile.DataHash != intersectedFile.DataHash)
+                            bool hashMismatch;
+                            if (string.IsNullOrEmpty(intersectedFile.DataHash))
+                            {
+                                // Hash retries exhausted — fall back to size + version metadata.
+                                var (metadataMatch, logMsg) = VerifyByMetadata(_dstProjectData.ProjectPath, projectFile.DataRelPath, projectFile);
+                                fileIntegrityLog.AppendLine(logMsg);
+                                hashMismatch = !metadataMatch;
+                            }
+                            else
+                            {
+                                hashMismatch = projectFile.DataHash != intersectedFile.DataHash;
+                            }
+
+                            if (hashMismatch)
                             {
                                 fileIntegrityLog.AppendLine($"File {projectFile.DataName} on {projectFile.DataRelPath} has been modified");
 
@@ -277,8 +291,15 @@ namespace DeployAssistant.DataComponent
                                     // Version/size read failed; retain values copied from projectFile and log the warning.
                                     fileIntegrityLog.AppendLine($"Warning: Could not read version/size for modified file {projectFile.DataRelPath}: {ex.Message}");
                                 }
-                                dstFile.DataHash = intersectedFile.DataHash;
-                                dstFile.UpdatedTime = new FileInfo(srcFile.DataAbsPath).LastAccessTime;
+                                dstFile.DataHash = intersectedFile.DataHash;  // may be "" when hash failed — new contract: callers tolerate empty
+                                try
+                                {
+                                    dstFile.UpdatedTime = new FileInfo(srcFile.DataAbsPath).LastAccessTime;
+                                }
+                                catch
+                                {
+                                    // File may be unreadable (locked); keep the copied UpdatedTime.
+                                }
 
                                 _preStagedFilesDict.TryAdd(projectFile.DataRelPath, dstFile);
                                 _registeredChangesDict.TryAdd(dstFile.DataRelPath, new ChangedFile(srcFile, dstFile, DataState.Modified | DataState.IntegrityChecked, true));
@@ -450,13 +471,24 @@ namespace DeployAssistant.DataComponent
                 foreach (string fileRelPath in intersectFiles)
                 {
                     string? dirFileHash = _hashTool.GetFileMD5CheckSum(targetProject.ProjectPath, fileRelPath);
+
                     if (string.IsNullOrEmpty(dirFileHash))
                     {
-                        string msg = $"Failed To Hash File {fileRelPath} (locked or unreadable); skipping integrity comparison";
-                        Trace.TraceWarning(msg);
-                        restoreFailures.Add(msg);
-                        continue;
+                        // Hash retries exhausted — fall back to size + BuildVersion metadata
+                        // comparison.  Match → no change record. Mismatch → fall through to
+                        // the existing backup-lookup branch using the snapshot's stored hash.
+                        var (metadataMatch, logMsg) = VerifyByMetadata(targetProject.ProjectPath, fileRelPath, projectFilesDict[fileRelPath]);
+                        Trace.TraceWarning(logMsg);
+                        restoreFailures.Add(logMsg);
+                        if (metadataMatch)
+                        {
+                            continue;  // Unchanged — no change record emitted
+                        }
+                        // Metadata mismatch: route through the Modified branch.  Set the disk hash
+                        // to a sentinel that differs from the stored hash so the next if-block fires.
+                        dirFileHash = "<metadata-mismatch-sentinel>";
                     }
+
                     if (projectFilesDict[fileRelPath].DataHash != dirFileHash)
                     {
                         if (!_backupFilesDict.TryGetValue(projectFilesDict[fileRelPath].DataHash, out ProjectFile? backupFile))
@@ -1389,6 +1421,47 @@ namespace DeployAssistant.DataComponent
             _projectFilesDict_relDirSorted = _dstProjectData.ProjectFilesDict_RelDirSorted; 
             DataStagedEventHandler?.Invoke(_registeredChangesDict.Values.ToList());
         }
+        /// <summary>
+        /// Fallback verification when MD5 hashing fails.  Compares file size and
+        /// FileVersionInfo.FileVersion against the snapshot entry.  Returns
+        /// <c>(match, log)</c> where match=true means treat as Unchanged
+        /// (metadata matches snapshot) and match=false means treat as Modified
+        /// (metadata differs).  Catches its own exceptions — if even metadata is
+        /// unreadable (rare double-failure: file vanished mid-scan, disk error),
+        /// returns match=true to keep the checkout integrity gate functional.
+        /// </summary>
+        private static (bool match, string logMessage) VerifyByMetadata(string projectPath, string relPath, ProjectFile snapshotEntry)
+        {
+            try
+            {
+                var info = new FileInfo(Path.Combine(projectPath, relPath));
+                long currentSize = info.Length;
+                string currentVersion = "";
+                try
+                {
+                    currentVersion = FileVersionInfo.GetVersionInfo(info.FullName).FileVersion ?? "";
+                }
+                catch
+                {
+                    // Non-PE file or unreadable version info — fall back to ""
+                    currentVersion = "";
+                }
+
+                bool matches = currentSize == snapshotEntry.DataSize
+                            && currentVersion == (snapshotEntry.BuildVersion ?? "");
+
+                string msg = matches
+                    ? $"Note: {relPath} verified by metadata only — hash unavailable (size={currentSize}, version='{currentVersion}')"
+                    : $"Modified: {relPath} — metadata differs from snapshot (size: {currentSize} vs {snapshotEntry.DataSize}, version: '{currentVersion}' vs '{snapshotEntry.BuildVersion}'; hash unavailable)";
+                return (matches, msg);
+            }
+            catch (Exception ex)
+            {
+                // Extreme double-failure: file vanished or disk error.  Err toward Unchanged.
+                return (true, $"Warning: {relPath} — metadata read also failed ({ex.GetType().Name}: {ex.Message}); treating as Unchanged");
+            }
+        }
+
         public void MetaDataManager_MetaDataLoadedCallBack(object metaDataObj)
         {
             if (metaDataObj is not ProjectMetaData projectMetaData) return;

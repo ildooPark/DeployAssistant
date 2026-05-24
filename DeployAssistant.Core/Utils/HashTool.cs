@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 
 namespace DeployAssistant.Utils
 {
@@ -47,36 +48,54 @@ namespace DeployAssistant.Utils
         }
         /// <summary>
         /// Reads <paramref name="srcFileRelPath"/> (relative to <paramref name="projectPath"/>)
-        /// and returns its MD5 hex digest.  Returns <c>""</c> on any failure
-        /// (file missing, file locked with FileShare.None, IO error, MD5 init failure)
-        /// rather than throwing — callers in <see cref="DeployAssistant.DataComponent.FileManager"/>
-        /// integrity-check loops rely on this to keep processing remaining files
-        /// after one fails.  Use the empty return as the "this file couldn't be
-        /// hashed" sentinel and surface it via the integrity log.
+        /// and returns its MD5 hex digest.  Retries up to <paramref name="maxRetries"/> times
+        /// with <paramref name="retryDelayMs"/> milliseconds between attempts when the file
+        /// can't be opened (locked, transient IO).  Returns <c>""</c> if all attempts fail
+        /// — callers (FileManager integrity-check loops) use the empty string as the
+        /// fallback sentinel to engage metadata-only verification.
         /// </summary>
-        public string GetFileMD5CheckSum(string projectPath, string srcFileRelPath)
+        /// <remarks>
+        /// Negative <paramref name="maxRetries"/> or <paramref name="retryDelayMs"/> values
+        /// are clamped to zero — a negative input behaves as "no retry / no delay".
+        /// </remarks>
+        public string GetFileMD5CheckSum(string projectPath, string srcFileRelPath, int maxRetries = 3, int retryDelayMs = 200)
         {
-            try
+            if (maxRetries < 0) maxRetries = 0;
+            if (retryDelayMs < 0) retryDelayMs = 0;
+            string srcFileFullPath = Path.Combine(projectPath, srcFileRelPath);
+            int totalAttempts = 1 + maxRetries;
+            for (int attempt = 0; attempt < totalAttempts; attempt++)
             {
-                byte[] srcHashBytes;
-                string srcFileFullPath = Path.Combine(projectPath, srcFileRelPath);
-                using MD5 md5 = MD5.Create();
-                if (md5 == null)
+                try
                 {
-                    Trace.TraceError($"Failed to Initialize MD5 for file {srcFileRelPath}");
-                    return "";
+                    byte[] srcHashBytes;
+                    using MD5 md5 = MD5.Create();
+                    if (md5 == null)
+                    {
+                        Trace.TraceError($"Failed to Initialize MD5 for file {srcFileRelPath}");
+                        return "";
+                    }
+                    using (var srcStream = File.OpenRead(srcFileFullPath))
+                    {
+                        srcHashBytes = md5.ComputeHash(srcStream);
+                    }
+                    return BitConverter.ToString(srcHashBytes).Replace("-", "");
                 }
-                using (var srcStream = File.OpenRead(srcFileFullPath))
+                catch (Exception ex)
                 {
-                    srcHashBytes = md5.ComputeHash(srcStream);
+                    bool isLastAttempt = attempt == totalAttempts - 1;
+                    if (isLastAttempt)
+                    {
+                        Trace.TraceWarning($"Hash failed for '{srcFileRelPath}' under '{projectPath}' after {totalAttempts} attempt(s): {ex.GetType().Name}: {ex.Message}");
+                        return "";
+                    }
+                    if (retryDelayMs > 0)
+                    {
+                        Thread.Sleep(retryDelayMs);
+                    }
                 }
-                return BitConverter.ToString(srcHashBytes).Replace("-", "");
             }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning($"Hash failed for '{srcFileRelPath}' under '{projectPath}': {ex.GetType().Name}: {ex.Message}");
-                return "";
-            }
+            return "";  // unreachable: the loop above is guaranteed to return (totalAttempts >= 1 after clamping)
         }
         public async Task GetFileMD5CheckSumAsync(ProjectFile file)
         {
@@ -102,28 +121,53 @@ namespace DeployAssistant.Utils
                 Trace.TraceError($"Error occured {ex.Message} \nwhile Computing hash async by this file {file.DataName}");
             }
         }
-        public void GetFileMD5CheckSum(ProjectFile file)
+        /// <summary>
+        /// Computes the MD5 hex digest of <paramref name="file"/>'s on-disk content and
+        /// assigns it to <c>file.DataHash</c>.  Retries up to <paramref name="maxRetries"/>
+        /// times with <paramref name="retryDelayMs"/> milliseconds between attempts when
+        /// the file can't be opened.  Leaves <c>DataHash</c> unchanged (typically empty,
+        /// per the caller's pre-clear convention) if all attempts fail.
+        /// </summary>
+        /// <remarks>
+        /// Negative <paramref name="maxRetries"/> or <paramref name="retryDelayMs"/> values
+        /// are clamped to zero — a negative input behaves as "no retry / no delay".
+        /// </remarks>
+        public void GetFileMD5CheckSum(ProjectFile file, int maxRetries = 3, int retryDelayMs = 200)
         {
-            try
+            if (maxRetries < 0) maxRetries = 0;
+            if (retryDelayMs < 0) retryDelayMs = 0;
+            int totalAttempts = 1 + maxRetries;
+            for (int attempt = 0; attempt < totalAttempts; attempt++)
             {
-                byte[] srcHashBytes;
-                using MD5 md5 = MD5.Create();
-                if (md5 == null)
+                try
                 {
-                    Trace.TraceError("Failed to Initialize MD5");
+                    byte[] srcHashBytes;
+                    using MD5 md5 = MD5.Create();
+                    if (md5 == null)
+                    {
+                        Trace.TraceError("Failed to Initialize MD5");
+                        return;
+                    }
+                    using (var srcStream = File.OpenRead(file.DataAbsPath))
+                    {
+                        srcHashBytes = md5.ComputeHash(srcStream);
+                    }
+                    file.DataHash = BitConverter.ToString(srcHashBytes).Replace("-", "");
                     return;
                 }
-                using (var srcStream = File.OpenRead(file.DataAbsPath))
+                catch (Exception ex)
                 {
-                    srcHashBytes = md5.ComputeHash(srcStream);
+                    bool isLastAttempt = attempt == totalAttempts - 1;
+                    if (isLastAttempt)
+                    {
+                        Trace.TraceError($"Error occured {ex.Message} \nwhile Computing hash by this file {file.DataName} (after {totalAttempts} attempt(s))");
+                        return;
+                    }
+                    if (retryDelayMs > 0)
+                    {
+                        Thread.Sleep(retryDelayMs);
+                    }
                 }
-                string resultHash = BitConverter.ToString(srcHashBytes).Replace("-", "");
-                file.DataHash = resultHash;
-                md5.Dispose();
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceError($"Error occured {ex.Message} \nwhile Computing hash by this file {file.DataName}");
             }
         }
         public async Task<string?> GetFileMD5CheckSumAsync(string fileFullPath)
