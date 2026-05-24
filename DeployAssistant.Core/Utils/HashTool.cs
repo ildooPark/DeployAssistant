@@ -54,8 +54,14 @@ namespace DeployAssistant.Utils
         /// — callers (FileManager integrity-check loops) use the empty string as the
         /// fallback sentinel to engage metadata-only verification.
         /// </summary>
+        /// <remarks>
+        /// Negative <paramref name="maxRetries"/> or <paramref name="retryDelayMs"/> values
+        /// are clamped to zero — a negative input behaves as "no retry / no delay".
+        /// </remarks>
         public string GetFileMD5CheckSum(string projectPath, string srcFileRelPath, int maxRetries = 3, int retryDelayMs = 200)
         {
+            if (maxRetries < 0) maxRetries = 0;
+            if (retryDelayMs < 0) retryDelayMs = 0;
             string srcFileFullPath = Path.Combine(projectPath, srcFileRelPath);
             int totalAttempts = 1 + maxRetries;
             for (int attempt = 0; attempt < totalAttempts; attempt++)
@@ -89,7 +95,7 @@ namespace DeployAssistant.Utils
                     }
                 }
             }
-            return "";  // unreachable, but satisfies the compiler
+            return "";  // unreachable: the loop above is guaranteed to return (totalAttempts >= 1 after clamping)
         }
         public async Task GetFileMD5CheckSumAsync(ProjectFile file)
         {

@@ -288,6 +288,25 @@ namespace DeployAssistant.Tests.Utils
         }
 
         [Fact]
+        public void StringOverload_NegativeRetriesAndDelay_ClampedToZero_SingleAttempt()
+        {
+            // Negative inputs are documented to clamp to zero: single attempt, no delay.
+            string fileName = "negative-clamp.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "MZ-fake-binary");
+
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            string result = _hashTool.GetFileMD5CheckSum(_tempDir, fileName, maxRetries: -5, retryDelayMs: -100);
+            stopwatch.Stop();
+
+            Assert.Equal("", result);
+            Assert.True(stopwatch.ElapsedMilliseconds < 100,
+                $"Expected near-zero elapsed time with clamped inputs, actually {stopwatch.ElapsedMilliseconds} ms");
+        }
+
+        [Fact]
         public void ProjectFileConstructor_Directory_DoesNotCallFileVersionInfo()
         {
             // Directories never call FileVersionInfo; constructor should always succeed.
