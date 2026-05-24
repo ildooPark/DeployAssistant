@@ -307,6 +307,36 @@ namespace DeployAssistant.Tests.Utils
         }
 
         [Fact]
+        public void InstanceOverload_PersistentLock_AllRetriesFail_LeavesDataHashEmpty_AndActuallyRetries()
+        {
+            // Same retry contract as the string overload, but the instance overload
+            // mutates the ProjectFile in place (sets DataHash on success).  On
+            // persistent failure, DataHash stays "" and total elapsed time proves
+            // retries ran.
+            string fileName = "instance-persistent.dll";
+            string fullPath = Path.Combine(_tempDir, fileName);
+            File.WriteAllText(fullPath, "MZ-fake-binary");
+
+            using var holdOpen = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var file = new ProjectFile(
+                DataType: ProjectDataType.File,
+                DataSize: 14, BuildVersion: "1.0", DeployedProjectVersion: "1.0",
+                UpdatedTime: DateTime.Now, DataState: DataState.None,
+                dataName: fileName, dataSrcPath: _tempDir,
+                dataRelPath: fileName, dataHash: "",
+                IsDstFile: false);
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            _hashTool.GetFileMD5CheckSum(file, maxRetries: 2, retryDelayMs: 50);
+            stopwatch.Stop();
+
+            Assert.Equal("", file.DataHash);
+            Assert.True(stopwatch.ElapsedMilliseconds >= 100,
+                $"Expected at least 100 ms elapsed (2 retries × 50 ms), actually {stopwatch.ElapsedMilliseconds} ms");
+        }
+
+        [Fact]
         public void ProjectFileConstructor_Directory_DoesNotCallFileVersionInfo()
         {
             // Directories never call FileVersionInfo; constructor should always succeed.
