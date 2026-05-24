@@ -45,22 +45,38 @@ namespace DeployAssistant.Utils
             result = (srcHashString, dstHashString);
             return srcHashString == dstHashString;
         }
+        /// <summary>
+        /// Reads <paramref name="srcFileRelPath"/> (relative to <paramref name="projectPath"/>)
+        /// and returns its MD5 hex digest.  Returns <c>""</c> on any failure
+        /// (file missing, file locked with FileShare.None, IO error, MD5 init failure)
+        /// rather than throwing — callers in <see cref="DeployAssistant.DataComponent.FileManager"/>
+        /// integrity-check loops rely on this to keep processing remaining files
+        /// after one fails.  Use the empty return as the "this file couldn't be
+        /// hashed" sentinel and surface it via the integrity log.
+        /// </summary>
         public string GetFileMD5CheckSum(string projectPath, string srcFileRelPath)
         {
-            byte[] srcHashBytes;
-            string srcFileFullPath = Path.Combine(projectPath, srcFileRelPath);
-            using MD5 md5 = MD5.Create();
-            if (md5 == null)
+            try
             {
-                Trace.TraceError($"Failed to Initialize MD5 for file {srcFileRelPath}");
+                byte[] srcHashBytes;
+                string srcFileFullPath = Path.Combine(projectPath, srcFileRelPath);
+                using MD5 md5 = MD5.Create();
+                if (md5 == null)
+                {
+                    Trace.TraceError($"Failed to Initialize MD5 for file {srcFileRelPath}");
+                    return "";
+                }
+                using (var srcStream = File.OpenRead(srcFileFullPath))
+                {
+                    srcHashBytes = md5.ComputeHash(srcStream);
+                }
+                return BitConverter.ToString(srcHashBytes).Replace("-", "");
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning($"Hash failed for '{srcFileRelPath}' under '{projectPath}': {ex.GetType().Name}: {ex.Message}");
                 return "";
             }
-            using (var srcStream = File.OpenRead(srcFileFullPath))
-            {
-                srcHashBytes = md5.ComputeHash(srcStream);
-            }
-            md5.Dispose();
-            return BitConverter.ToString(srcHashBytes).Replace("-", "");
         }
         public async Task GetFileMD5CheckSumAsync(ProjectFile file)
         {

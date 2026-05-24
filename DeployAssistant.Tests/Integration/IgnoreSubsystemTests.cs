@@ -96,6 +96,107 @@ namespace DeployAssistant.Tests.Integration
                 ProjectFiles: dict);
         }
 
+        // ------------------------------------------------------------------ Partial-failure resilience (Fix 6)
+        //
+        // ProjectIntegrityCheck previously returned null on the first missing
+        // backup or unhashable file, discarding all changes already accumulated.
+        // Resilient behavior: skip the bad entry, log it, return the partial diff.
+
+        /// <summary>
+        /// A missing backup for one entry in filesToAdd must NOT abort the whole
+        /// scan.  Other change types (deletes, etc.) that have already been
+        /// accumulated must remain in the returned list.
+        /// </summary>
+        [Fact]
+        public void Fix6_ProjectIntegrityCheck_MissingBackupForOneFile_OtherChangesReturned()
+        {
+            string projDir = Path.Combine(_tempRoot, "Fix6_PartialFailure");
+            Directory.CreateDirectory(projDir);
+
+            // Disk has a stale file that's NOT in the target snapshot — produces a Delete change.
+            File.WriteAllText(Path.Combine(projDir, "stale.dll"), "stale");
+
+            // Target snapshot demands app.dll exists with hash NO_BACKUP_HASH; no on-disk file.
+            // Combined with an empty _backupFilesDict, this entry has no backup and used to abort.
+            var appFile = new ProjectFile(
+                DataType: ProjectDataType.File,
+                DataSize: 64, BuildVersion: "1.0", DeployedProjectVersion: "1.0",
+                UpdatedTime: DateTime.Now, DataState: DataState.None,
+                dataName: "app.dll", dataSrcPath: projDir,
+                dataRelPath: "app.dll", dataHash: "NO_BACKUP_HASH", IsDstFile: false);
+            var targetSnapshot = MakeProjectData(projDir, appFile);
+
+            var fileManager = new FileManager();
+            var metaData = new ProjectMetaData("Fix6_PartialFailure", projDir);
+            fileManager.MetaDataManager_MetaDataLoadedCallBack(metaData);
+
+            var ignoreData = new ProjectIgnoreData("Fix6_PartialFailure");
+            ignoreData.ConfigureDefaultIgnore("Fix6_PartialFailure");
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(ProjectContext.Create(metaData, ignoreData));
+
+            var changes = fileManager.ProjectIntegrityCheck(targetSnapshot);
+
+            // Before fix: returns null because app.dll has no backup.
+            // After fix:  returns the stale.dll Delete change; the missing-backup add is skipped.
+            Assert.NotNull(changes);
+
+            bool hasDeleteForStale = changes!.Any(c =>
+                (c.DstFile?.DataRelPath ?? "").EndsWith("stale.dll", StringComparison.OrdinalIgnoreCase));
+            Assert.True(hasDeleteForStale, "Delete change for stale.dll must remain in the partial-failure diff");
+
+            // app.dll cannot be added (no backup); it must NOT appear in the result.
+            bool hasAddForApp = changes!.Any(c =>
+                (c.DstFile?.DataRelPath ?? "").EndsWith("app.dll", StringComparison.OrdinalIgnoreCase) ||
+                (c.SrcFile?.DataRelPath ?? "").EndsWith("app.dll", StringComparison.OrdinalIgnoreCase));
+            Assert.False(hasAddForApp, "app.dll has no backup, must be skipped");
+        }
+
+        /// <summary>
+        /// When ProjectIntegrityCheck hits a fatal exception (e.g. uninitialized
+        /// state), the outer catch must fire IntegrityCheckEventHandler so the
+        /// GUI/CLI sees the abort.  Previously the catch only Trace.TraceError'd
+        /// and returned null silently, leaving the UI waiting for results that
+        /// would never come.
+        /// </summary>
+        [Fact]
+        public void Fix6_ProjectIntegrityCheck_OuterCatch_FiresIntegrityCheckEvent()
+        {
+            string projDir = Path.Combine(_tempRoot, "Fix6_OuterCatch");
+            Directory.CreateDirectory(projDir);
+
+            var appFile = new ProjectFile(
+                DataType: ProjectDataType.File,
+                DataSize: 64, BuildVersion: "1.0", DeployedProjectVersion: "1.0",
+                UpdatedTime: DateTime.Now, DataState: DataState.None,
+                dataName: "app.dll", dataSrcPath: projDir,
+                dataRelPath: "app.dll", dataHash: "SOME_HASH", IsDstFile: false);
+            var targetSnapshot = MakeProjectData(projDir, appFile);
+
+            var fileManager = new FileManager();
+            // Deliberately SKIP MetaDataLoadedCallBack so _backupFilesDict stays
+            // null — the foreach over filesToAdd will throw NRE on its first lookup,
+            // landing in the outer catch.
+            var ignoreData = new ProjectIgnoreData("Fix6_OuterCatch");
+            var metaData = new ProjectMetaData("Fix6_OuterCatch", projDir);
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(ProjectContext.Create(metaData, ignoreData));
+
+            string? capturedLog = null;
+            List<ProjectFile>? capturedFiles = null;
+            fileManager.IntegrityCheckEventHandler += (log, files) =>
+            {
+                capturedLog = log;
+                capturedFiles = files;
+            };
+
+            var result = fileManager.ProjectIntegrityCheck(targetSnapshot);
+
+            Assert.Null(result);
+            Assert.NotNull(capturedLog);
+            Assert.Contains("aborted", capturedLog!, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(capturedFiles);
+            Assert.Empty(capturedFiles!);
+        }
+
         // ------------------------------------------------------------------ Git-style invisibility (Fix 5)
         //
         // Reported by user with a real .ignore file that included an "OMM"

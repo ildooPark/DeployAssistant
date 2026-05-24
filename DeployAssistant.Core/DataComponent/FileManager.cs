@@ -163,7 +163,14 @@ namespace DeployAssistant.DataComponent
                 foreach (string fileRelPath in addedFiles)
                 {
                     fileIntegrityLog.AppendLine($"{fileRelPath} has been Added");
+                    // HashTool string overload returns "" on failure (locked file, IO error,
+                    // missing file) — surface that via the integrity log so the user sees
+                    // which added files couldn't be hashed.  Fix #3.
                     string? fileHash = _hashTool.GetFileMD5CheckSum(_dstProjectData.ProjectPath, fileRelPath);
+                    if (string.IsNullOrEmpty(fileHash))
+                    {
+                        fileIntegrityLog.AppendLine($"Warning: Failed to hash added file {fileRelPath}; included with empty hash");
+                    }
                     ProjectFile dstFile = new ProjectFile(_dstProjectData.ProjectPath, fileRelPath, fileHash, DataState.Added | DataState.IntegrityChecked, ProjectDataType.File);
                     _preStagedFilesDict.TryAdd(fileRelPath, dstFile);
                     _registeredChangesDict.TryAdd(dstFile.DataRelPath, new ChangedFile(dstFile, DataState.Added | DataState.IntegrityChecked));
@@ -199,7 +206,10 @@ namespace DeployAssistant.DataComponent
                     intersectedFile.DataHash = "";
                     if (!projectFilesConcurrent.TryAdd(fileRelPath, intersectedFile))
                     {
-                        ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
+                        // Per-iteration failure — log + skip this file, but do NOT
+                        // flip global state to Idle (the scan as a whole is still in
+                        // progress).  Fix #5: removed premature ManagerStateEventHandler call.
+                        hashFailureLog.Add($"Warning: Could not enqueue {fileRelPath} for hashing (duplicate); excluded from integrity check");
                         Trace.TraceWarning($"Couldn't Run File Integrity Check, Couldn't Hash Intersected File on {fileRelPath}");
                         int c = Interlocked.Increment(ref completed);
                         try { IntegrityProgressEventHandler?.Invoke(c, total); } catch (Exception) { }
@@ -211,7 +221,9 @@ namespace DeployAssistant.DataComponent
                     }
                     catch (Exception ex)
                     {
-                        ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
+                        // Fix #5: removed premature ManagerStateEventHandler Idle flip — the
+                        // scan as a whole is still running; this single file just failed.
+                        hashFailureLog.Add($"Warning: Hashing threw for {fileRelPath}: {ex.Message}; excluded from integrity check");
                         Trace.TraceWarning($"Couldn't Run File Integrity Check: File async Hashing Failed\n{ex.Message}");
                         projectFilesConcurrent.TryRemove(fileRelPath, out _);
                         int c = Interlocked.Increment(ref completed);
@@ -244,7 +256,8 @@ namespace DeployAssistant.DataComponent
                         {
                             if (!projectFilesDict.TryGetValue(intersectedFile.DataRelPath, out ProjectFile? projectFile))
                             {
-                                ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
+                                // Fix #5: don't flip global state to Idle mid-scan — only this
+                                // file is broken, not the whole check.
                                 Trace.TraceWarning($"Couldn't Run File Integrity Check, project File does not exist in Intersected file list {intersectedFile.DataName}");
                                 return;
                             }
@@ -300,6 +313,11 @@ namespace DeployAssistant.DataComponent
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                 Trace.TraceError($"{ex.Message}. Couldn't Run File Integrity Check");
+                // Fix #4: surface the abort to the GUI/CLI so they don't sit silent
+                // waiting for results that will never arrive.
+                IntegrityCheckEventHandler?.Invoke(
+                    $"Integrity check aborted: {ex.GetType().Name}: {ex.Message}",
+                    new List<ProjectFile>());
             }
         }
         public List<ChangedFile>? ProjectIntegrityCheck(ProjectData targetProject)
@@ -408,12 +426,20 @@ namespace DeployAssistant.DataComponent
                     fileChanges.Add(newChange);
                 }
 
+                // Per-file failures (missing backup, unhashable file) get accumulated
+                // here and surfaced via Trace + the integrity-check log argument so
+                // the GUI/CLI user sees what couldn't be restored without the whole
+                // scan aborting.
+                List<string> restoreFailures = new List<string>();
+
                 foreach (string fileRelPath in filesToAdd)
                 {
                     if (!_backupFilesDict.TryGetValue(projectFilesDict[fileRelPath].DataHash, out ProjectFile? backupFile))
                     {
-                        Trace.TraceWarning($"Failed To Retrieve File {projectFilesDict[fileRelPath].DataName} For Restoration");
-                        return null;
+                        string msg = $"Failed To Retrieve File {projectFilesDict[fileRelPath].DataName} For Restoration (no backup for hash)";
+                        Trace.TraceWarning(msg);
+                        restoreFailures.Add(msg);
+                        continue;
                     }
                     ProjectFile srcFile = new ProjectFile(backupFile, DataState.None);
                     ProjectFile dstFile = new ProjectFile(projectFilesDict[fileRelPath], DataState.Added);
@@ -424,12 +450,21 @@ namespace DeployAssistant.DataComponent
                 foreach (string fileRelPath in intersectFiles)
                 {
                     string? dirFileHash = _hashTool.GetFileMD5CheckSum(targetProject.ProjectPath, fileRelPath);
+                    if (string.IsNullOrEmpty(dirFileHash))
+                    {
+                        string msg = $"Failed To Hash File {fileRelPath} (locked or unreadable); skipping integrity comparison";
+                        Trace.TraceWarning(msg);
+                        restoreFailures.Add(msg);
+                        continue;
+                    }
                     if (projectFilesDict[fileRelPath].DataHash != dirFileHash)
                     {
                         if (!_backupFilesDict.TryGetValue(projectFilesDict[fileRelPath].DataHash, out ProjectFile? backupFile))
                         {
-                            Trace.TraceWarning($"Failed To Retrieve File {projectFilesDict[fileRelPath].DataName} For Restoration");
-                            return null; 
+                            string msg = $"Failed To Retrieve File {projectFilesDict[fileRelPath].DataName} For Restoration (no backup for stored hash)";
+                            Trace.TraceWarning(msg);
+                            restoreFailures.Add(msg);
+                            continue;
                         }
                         ProjectFile srcFile = new ProjectFile(backupFile, DataState.None);
                         ProjectFile dstFile = new ProjectFile(backupFile, DataState.Restored, targetProject.ProjectPath);
@@ -439,14 +474,24 @@ namespace DeployAssistant.DataComponent
                     }
                 }
 
+                if (restoreFailures.Count > 0)
+                {
+                    Trace.TraceWarning($"ProjectIntegrityCheck completed with {restoreFailures.Count} per-file failure(s); see warnings above.");
+                }
+
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
                 return fileChanges;
             }
 
             catch (Exception ex)
             {
-                Trace.TraceError($"{ex.Message}. Couldn't Run Version Clearn Restoring File Check");
+                Trace.TraceError($"{ex.Message}. Couldn't Run Version Clean Restoring File Check");
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
+                // Surface the abort so GUI/CLI doesn't sit silent.  Empty file list
+                // because no partial work survives an outer-catch exception.
+                IntegrityCheckEventHandler?.Invoke(
+                    $"Integrity check aborted: {ex.GetType().Name}: {ex.Message}",
+                    new List<ProjectFile>());
                 return null;
             }
         }
