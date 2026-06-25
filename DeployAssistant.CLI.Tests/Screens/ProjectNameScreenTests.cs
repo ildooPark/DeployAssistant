@@ -21,7 +21,7 @@ namespace DeployAssistant.CLI.Tests.Screens
                 actualName = n;
             });
 
-            // Simulate typing "MyProject" then pressing Enter
+            // Simulate appending "MyP" then pressing Enter
             screen.Handle(new ConsoleKeyInfo('M', ConsoleKey.M, false, false, false));
             screen.Handle(new ConsoleKeyInfo('y', ConsoleKey.Y, false, false, false));
             screen.Handle(new ConsoleKeyInfo('P', ConsoleKey.P, false, false, false));
