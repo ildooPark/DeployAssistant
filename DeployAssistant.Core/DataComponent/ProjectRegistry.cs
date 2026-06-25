@@ -12,12 +12,12 @@ namespace DeployAssistant.DataComponent;
 /// </summary>
 public static class ProjectRegistry
 {
-    private const string RegistryFileName = "DeployAssistant.projects.json";
+    private static string RegistryFileName = "DeployAssistant.projects.json";
 
-    private static string RegistryPath =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            RegistryFileName);
+    // Allow overriding for tests
+    public static string RegistryDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+    private static string RegistryPath => Path.Combine(RegistryDirectory, RegistryFileName);
 
     /// <summary>Load all saved project entries. Returns empty list on error.</summary>
     public static List<ProjectEntry> Load()
