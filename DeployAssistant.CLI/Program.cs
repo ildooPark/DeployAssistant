@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using DeployAssistant.CLI.Engine;
 using DeployAssistant.CLI.Screens;
+using DeployAssistant.DataComponent;
 
 namespace DeployAssistant.CLI
 {

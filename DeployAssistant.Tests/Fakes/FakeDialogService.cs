@@ -28,5 +28,8 @@ namespace DeployAssistant.Tests.Fakes
             => _folderAnswers.Count > 0 ? _folderAnswers.Dequeue() : null;
 
         public void OpenInShell(string path) => OpenedShellPaths.Add(path);
+
+        public string? ShowProjectSelectionDialog()
+            => _folderAnswers.Count > 0 ? _folderAnswers.Dequeue() : null;
     }
 }

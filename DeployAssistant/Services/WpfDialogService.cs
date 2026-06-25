@@ -39,5 +39,23 @@ namespace DeployAssistant.Services.Wpf
             try { Process.Start(new ProcessStartInfo("explorer.exe", path) { UseShellExecute = true }); }
             catch { /* shell invocation must not crash the app */ }
         }
+
+        public string? ShowProjectSelectionDialog()
+        {
+            var vm = new DeployAssistant.ViewModel.ProjectSelectionViewModel(this);
+            var window = new DeployAssistant.View.ProjectSelectionWindow { DataContext = vm };
+            
+            vm.RequestCloseWithSuccess = () =>
+            {
+                window.DialogResult = true;
+                window.Close();
+            };
+
+            if (window.ShowDialog() == true)
+            {
+                return vm.SelectedPath;
+            }
+            return null;
+        }
     }
 }

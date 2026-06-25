@@ -12,5 +12,7 @@ namespace DeployAssistant.Services
         public void Inform(string title, string message) { }
         public string? PickFolder(string title, string? initialPath = null) => null;
         public void OpenInShell(string path) { }
+
+        public string? ShowProjectSelectionDialog() => null;
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using DeployAssistant.CLI.Engine;
 using DeployAssistant.CLI.Engine.Widgets;
+using DeployAssistant.DataComponent;
 using Spectre.Console;
 
 namespace DeployAssistant.CLI.Screens;

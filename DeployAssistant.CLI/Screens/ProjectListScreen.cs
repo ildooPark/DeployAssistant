@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DeployAssistant.CLI.Engine;
+using DeployAssistant.DataComponent;
 using Spectre.Console;
 
 namespace DeployAssistant.CLI.Screens;

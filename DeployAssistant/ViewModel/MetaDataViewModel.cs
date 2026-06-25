@@ -150,15 +150,10 @@ namespace DeployAssistant.ViewModel
         private void RetrieveProject(object parameter)
         {
             if (_projectFiles != null && _projectFiles.Count != 0) _projectFiles.Clear();
-            var openFD = new OpenFolderDialog();
-            string? projectPath;
-            if (openFD.ShowDialog() == true)
-            {
-                projectPath = openFD.FolderName;
-                CurrentProjectPath = openFD.FolderName;
-            }
-            else return;
+            string? projectPath = _dialogService.ShowProjectSelectionDialog();
             if (string.IsNullOrEmpty(projectPath)) return;
+
+            CurrentProjectPath = projectPath;
 
             bool retrieveProjectResult = _metaDataManager.RequestProjectRetrieval(projectPath);
             if (!retrieveProjectResult)
@@ -199,6 +194,14 @@ namespace DeployAssistant.ViewModel
             CurrentProjectPath = projectData.ProjectPath;
             UpdaterName = "";
             UpdateLog = "";
+
+            // Auto-save project to registry for quick switching
+            string trimmedPath = projectData.ProjectPath.TrimEnd('\\', '/');
+            string folderName = System.IO.Path.GetFileName(trimmedPath);
+            if (string.IsNullOrEmpty(folderName)) folderName = trimmedPath;
+
+            string defaultName = projectData.ProjectName ?? folderName;
+            ProjectRegistry.SaveOrUpdate(trimmedPath, defaultName);
         }
 
         #endregion

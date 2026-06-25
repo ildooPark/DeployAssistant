@@ -4,13 +4,13 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 
-namespace DeployAssistant.CLI.Engine;
+namespace DeployAssistant.DataComponent;
 
 /// <summary>
 /// Persists a list of previously configured projects (name + path) to a JSON file
 /// in the user's Documents folder. Used by "Switch project" to offer quick selection.
 /// </summary>
-internal static class ProjectRegistry
+public static class ProjectRegistry
 {
     private const string RegistryFileName = "DeployAssistant.projects.json";
 
@@ -29,8 +29,9 @@ internal static class ProjectRegistry
             var entries = JsonSerializer.Deserialize<List<ProjectEntry>>(json);
             return entries ?? new List<ProjectEntry>();
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Trace.TraceWarning($"ProjectRegistry.Load: failed to load project registry from {RegistryPath}. Error: {ex.Message}");
             return new List<ProjectEntry>();
         }
     }
@@ -82,9 +83,9 @@ internal static class ProjectRegistry
             var options = new JsonSerializerOptions { WriteIndented = true };
             File.WriteAllText(RegistryPath, JsonSerializer.Serialize(entries, options));
         }
-        catch
+        catch (Exception ex)
         {
-            // Silently fail — not critical.
+            System.Diagnostics.Trace.TraceWarning($"ProjectRegistry.Persist: failed to write project registry to {RegistryPath}. Error: {ex.Message}");
         }
     }
 
@@ -92,7 +93,7 @@ internal static class ProjectRegistry
         p.TrimEnd('\\', '/');
 }
 
-internal sealed class ProjectEntry
+public sealed class ProjectEntry
 {
     public string Name { get; set; } = "";
     public string Path { get; set; } = "";

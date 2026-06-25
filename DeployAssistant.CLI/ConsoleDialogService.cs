@@ -38,5 +38,11 @@ namespace DeployAssistant.CLI
 
         public void OpenInShell(string path)
             => Console.Error.WriteLine($"(would open in shell: {path})");
+
+        public string? ShowProjectSelectionDialog()
+        {
+            Console.Error.WriteLine("CLI handles project selection via its own TUI screens.");
+            return null;
+        }
     }
 }

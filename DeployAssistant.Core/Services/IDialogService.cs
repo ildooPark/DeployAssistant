@@ -18,5 +18,8 @@ namespace DeployAssistant.Services
 
         /// <summary>Open a path in the platform shell (Explorer on Windows). No-op in headless contexts.</summary>
         void OpenInShell(string path);
+
+        /// <summary>Shows the project selection dialog listing previously opened projects. Returns the selected path or null if cancelled.</summary>
+        string? ShowProjectSelectionDialog();
     }
 }
