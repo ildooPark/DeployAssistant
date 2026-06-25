@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using DeployAssistant.CLI.Engine;
 using DeployAssistant.DataComponent;
@@ -46,6 +47,12 @@ internal sealed class InitRunScreen : Screen
                 _error = $"Failed to initialize project at {_path}.";
                 return;
             }
+
+            // Save to project registry
+            string defaultName = mgr.ProjectMetaData.ProjectName
+                ?? Path.GetFileName(_path)
+                ?? _path;
+            ProjectRegistry.SaveOrUpdate(_path, defaultName);
 
             _mgr = mgr;
         }

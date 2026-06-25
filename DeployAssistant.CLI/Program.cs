@@ -41,9 +41,15 @@ namespace DeployAssistant.CLI
             if (string.IsNullOrWhiteSpace(lastPath)) return new TopMenuScreen(loaded: false);
 
             var mgr = ManagerFactory.LoadOrThrow(lastPath!, out _);
-            return mgr is null
-                ? (Screen)new TopMenuScreen(loaded: false)
-                : new MainScreen(mgr);
+            if (mgr is null)
+                return new TopMenuScreen(loaded: false);
+
+            // Ensure the loaded project is in the registry for future "Switch project" listing.
+            string defaultName = mgr.ProjectMetaData?.ProjectName
+                ?? System.IO.Path.GetFileName(lastPath!) ?? lastPath!;
+            ProjectRegistry.SaveOrUpdate(lastPath!, defaultName);
+
+            return new MainScreen(mgr);
         }
 
         private static void PrintHelp()

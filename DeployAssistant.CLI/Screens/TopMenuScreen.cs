@@ -44,7 +44,7 @@ internal sealed class TopMenuScreen : Screen
             case ConsoleKey.Enter:
                 return _selected switch
                 {
-                    0 => new ScreenAction.Push(new PathPickerScreen(PathPickerScreen.Mode.Switch)),
+                    0 => new ScreenAction.Push(new ProjectListScreen()),
                     1 => new ScreenAction.Push(new PathPickerScreen(PathPickerScreen.Mode.Init)),
                     2 => ScreenAction.ExitAction,
                     _ => ScreenAction.StayAction,

@@ -85,6 +85,12 @@ internal sealed class PathPickerScreen : Screen
                 _error = loadError ?? "Failed to load project.";
                 return ScreenAction.StayAction;
             }
+
+            string defaultName = mgr.ProjectMetaData?.ProjectName
+                ?? Path.GetFileName(path)
+                ?? path;
+            ProjectRegistry.SaveOrUpdate(path, defaultName);
+
             return new ScreenAction.Replace(new MainScreen(mgr));
         }
 
