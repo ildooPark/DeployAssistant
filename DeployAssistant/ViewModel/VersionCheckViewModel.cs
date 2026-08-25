@@ -72,7 +72,7 @@ namespace DeployAssistant.ViewModel
         {
             _metaDataManager = metaDataManager;
             _projectData = projectData;
-            _updateLog = "Integrity Checking";
+            _updateLog = Loc.T("S.IntegrityChecking", "Integrity Checking");
             _changeLog = versionLog;
             _fileList = fileList;
         }
@@ -84,8 +84,8 @@ namespace DeployAssistant.ViewModel
             _projectDataReview = new Dictionary<string, object>();
             _projectData.RegisterProjectInfo(ProjectDataReview);
             FileList = _projectData.ProjectFilesObs;
-            ChangeLog = _projectData.ChangeLog ?? "Undefined";
-            UpdateLog = _projectData.UpdateLog ?? "Undefined";
+            ChangeLog = _projectData.ChangeLog ?? Loc.T("S.Undefined", "Undefined");
+            UpdateLog = _projectData.UpdateLog ?? Loc.T("S.Undefined", "Undefined");
         }
     }
 }

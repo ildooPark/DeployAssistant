@@ -68,7 +68,9 @@ internal sealed class MainScreen : Screen
             $"{TextStyle.Bold("Path   ")}  {Markup.Escape(pd?.ProjectPath ?? "")}\n" +
             $"{TextStyle.Bold("Version")}  {TextStyle.Accent(Markup.Escape(version))}   {TextStyle.Dim("← main")}\n" +
             $"{TextStyle.Bold("Updated")}  {pd?.UpdatedTime:yyyy-MM-dd HH:mm}  by {Markup.Escape(pd?.UpdaterName ?? "")}\n" +
-            $"{TextStyle.Bold("Files  ")}  {pd?.ProjectFiles.Count ?? 0}   {TextStyle.Dim($"({revCount} revision(s))")}";
+            $"{TextStyle.Bold("Files  ")}  {pd?.ProjectFiles.Count ?? 0}   {TextStyle.Dim($"({revCount} revision(s))")}\n" +
+            // Build stamp — keeps the running CLI version visible without a --version round trip.
+            $"\n{TextStyle.Dim(Markup.Escape(CliVersion.Banner))}";
 
         return new Panel(body)
             .Header(TextStyle.Accent(Markup.Escape(_mgr.ProjectMetaData?.ProjectName ?? "Unknown")))

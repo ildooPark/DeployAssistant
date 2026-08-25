@@ -17,6 +17,8 @@ namespace DeployAssistant.Model
         public ProjectDataType DataType { get; private set; }
         public long DataSize { get; set; }
         public string BuildVersion {  get; set; }
+        /// <summary>Win32 ProductVersion, which carries the build's commit id (e.g. "0.0.1682+HEAD.f05eda3"). Serialized by the shipped 3.6.1; must round-trip.</summary>
+        public string ProductVersion { get; set; } = "";
         public string DeployedProjectVersion { get; set; }
         public DateTime UpdatedTime { get; set; }
         public bool IsDstFile { get; set; }
@@ -29,6 +31,8 @@ namespace DeployAssistant.Model
 
         #region [JsonIgnore] 
         [JsonIgnore] 
+        public string VersionDisplay => string.IsNullOrEmpty(ProductVersion) ? BuildVersion : ProductVersion;
+        [JsonIgnore]
         public string DataAbsPath => Path.Combine(DataSrcPath, DataRelPath);
         [JsonIgnore]
         public string DataRelDir => DataType == ProjectDataType.Directory ? DataRelPath: Path.GetDirectoryName(DataRelPath) ?? "";
@@ -110,6 +114,8 @@ namespace DeployAssistant.Model
             this.DataType = srcData.DataType;
             this.DataSize = srcData.DataSize;
             this.BuildVersion = srcData.BuildVersion;
+            this.ProductVersion = srcData.ProductVersion;
+            this.ProductVersion = srcData.ProductVersion;
             this.DeployedProjectVersion = srcData.DeployedProjectVersion;
             this.UpdatedTime = srcData.UpdatedTime;
             this.DataState = srcData.DataState;
@@ -123,6 +129,8 @@ namespace DeployAssistant.Model
             this.DataType = updatedData.DataType;
             this.DataSize = updatedData.DataSize;
             this.BuildVersion = updatedData.BuildVersion;
+            this.ProductVersion = updatedData.ProductVersion;
+            this.ProductVersion = updatedData.ProductVersion;
             this.DeployedProjectVersion = deployedProjectVersion;
             this.UpdatedTime = DateTime.Now;
             this.DataState = updatedData.DataState;
@@ -136,6 +144,8 @@ namespace DeployAssistant.Model
             this.DataType = srcData.DataType;
             this.DataSize = srcData.DataSize;
             this.BuildVersion = srcData.BuildVersion;
+            this.ProductVersion = srcData.ProductVersion;
+            this.ProductVersion = srcData.ProductVersion;
             this.DeployedProjectVersion = srcData.DeployedProjectVersion;
             this.UpdatedTime = DateTime.Now;
             this.DataState = state;
@@ -149,6 +159,8 @@ namespace DeployAssistant.Model
             this.DataType = srcData.DataType;
             this.DataSize = srcData.DataSize;
             this.BuildVersion = srcData.BuildVersion;
+            this.ProductVersion = srcData.ProductVersion;
+            this.ProductVersion = srcData.ProductVersion;
             this.DeployedProjectVersion = srcData.DeployedProjectVersion;
             this.UpdatedTime = DateTime.Now;
             this.DataState = DataState;
@@ -159,19 +171,31 @@ namespace DeployAssistant.Model
         }
         public ProjectFile(string fileSrcPath, string fileRelPath, string? fileHash, DataState DataState, ProjectDataType dataType)
         {
-            string fileFullPath = Path.Combine(fileSrcPath, fileRelPath);
+            string fileFullPath = DeployAssistant.Utils.PathCompat.ToNetFrameworkLongPath(Path.Combine(fileSrcPath, fileRelPath));
+            DateTime updatedTime = DateTime.Now;
             if (dataType == ProjectDataType.File)
             {
                 try
                 {
-                    this.BuildVersion = FileVersionInfo.GetVersionInfo(fileFullPath).FileVersion ?? "";
+                    var versionInfo = FileVersionInfo.GetVersionInfo(fileFullPath);
+                    this.BuildVersion = versionInfo.FileVersion ?? "";
+                    this.ProductVersion = versionInfo.ProductVersion ?? "";
                 }
                 catch (Exception)
                 {
                     // Non-PE files (e.g. config, data) may not expose version info; default to empty.
                     this.BuildVersion = "";
                 }
-                this.DataSize = new FileInfo(fileFullPath).Length;
+                var fileInfo = new FileInfo(fileFullPath);
+                this.DataSize = fileInfo.Length;
+                try
+                {
+                    // Must be the file's own write time; scan time would stamp the whole batch identically.
+                    updatedTime = fileInfo.LastWriteTime;
+                }
+                catch (Exception)
+                {
+                }
             }
             else
             {
@@ -179,11 +203,11 @@ namespace DeployAssistant.Model
                 this.BuildVersion = "";
             }
             this.DeployedProjectVersion = "";
-            this.DataSrcPath = fileSrcPath; 
+            this.DataSrcPath = fileSrcPath;
             this.DataName = Path.GetFileName(fileFullPath);
             this.DataRelPath = fileRelPath;
             this.DataHash = fileHash ?? "";
-            this.UpdatedTime = DateTime.Now;
+            this.UpdatedTime = updatedTime;
             this.DataState = DataState;
             this.DataType = dataType;
         }

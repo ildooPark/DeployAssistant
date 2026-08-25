@@ -2,7 +2,6 @@ using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.Services;
 using DeployAssistant.ViewModel.Utils;
-using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -74,6 +73,9 @@ namespace DeployAssistant.ViewModel
         private ICommand? _revertChange;
         public ICommand RevertChange => _revertChange ??= new RelayCommand(RevertIntegrityCheckFile);
 
+        private ICommand? _revertAllChanges;
+        public ICommand RevertAllChanges => _revertAllChanges ??= new RelayCommand(RevertAllIntegrityCheckFiles, CanRevertAllChanges);
+
         private ICommand? _checkProjectIntegrity;
         public ICommand CheckProjectIntegrity => _checkProjectIntegrity ??= new RelayCommand(MainProjectIntegrityTest, CanRunIntegrityTest);
 
@@ -141,11 +143,11 @@ namespace DeployAssistant.ViewModel
         {
             try
             {
-                var openUpdateDir = new OpenFolderDialog();
-                if (openUpdateDir.ShowDialog() == true)
+                string? srcPath = _dialogService.PickFolder(Loc.T("S.Dlg.PickSrcFolder", "Set Deploy Source Directory"));
+                if (srcPath != null)
                 {
                     _srcProjectData = null;
-                    _deploySrcPath = openUpdateDir.FolderName;
+                    _deploySrcPath = srcPath;
                     _metaDataManager.RequestSrcDataRetrieval(_deploySrcPath);
                 }
                 else
@@ -156,7 +158,7 @@ namespace DeployAssistant.ViewModel
             }
             catch (Exception ex)
             {
-                _dialogService.Inform("Error", ex.Message);
+                _dialogService.Inform(Loc.T("S.Dlg.ErrorTitle", "Error"), ex.Message);
             }
         }
 
@@ -193,6 +195,7 @@ namespace DeployAssistant.ViewModel
             if (_metaDataState != MetaDataState.Idle) return false;
             if (obj is ProjectFile projFile &&
                 (projFile.DataState == DataState.Deleted ||
+                (projFile.DataState & DataState.Added) != 0 ||
                 !projFile.IsDstFile)) return true;
             else return false;
         }
@@ -209,10 +212,35 @@ namespace DeployAssistant.ViewModel
         {
             if (_deploySrcPath == null)
             {
-                _dialogService.Inform("Refresh", "Please Set Src Deploy Path");
+                _dialogService.Inform(Loc.T("S.Refresh", "Refresh"),
+                    Loc.T("S.Dlg.SetSrcPath", "Please set the source deploy path first."));
             }
             _metaDataManager.RequestClearStagedFiles();
             _metaDataManager.RequestSrcDataRetrieval(_deploySrcPath);
+        }
+
+        private bool CanRevertAllChanges(object? obj)
+        {
+            if (_metaDataState != MetaDataState.Idle) return false;
+            foreach (ProjectFile file in ChangedFileList)
+                if ((file.DataState & DataState.IntegrityChecked) != 0) return true;
+            return false;
+        }
+
+        private void RevertAllIntegrityCheckFiles(object? obj)
+        {
+            var revertTargets = new List<ProjectFile>();
+            foreach (ProjectFile file in ChangedFileList)
+                if ((file.DataState & DataState.IntegrityChecked) != 0) revertTargets.Add(file);
+            if (revertTargets.Count == 0) return;
+
+            var choice = _dialogService.Confirm(Loc.T("S.RevertAll", "Revert All"),
+                string.Format(Loc.T("S.Dlg.RevertAllConfirm", "Revert all {0} integrity-detected change(s) back to the current version?"),
+                    revertTargets.Count));
+            if (choice != DialogChoice.Yes) return;
+
+            foreach (ProjectFile file in revertTargets)
+                _metaDataManager.RequestRevertChange(file);
         }
 
         private void RevertIntegrityCheckFile(object? obj)
@@ -221,7 +249,8 @@ namespace DeployAssistant.ViewModel
             {
                 if ((file.DataState & DataState.IntegrityChecked) == 0)
                 {
-                    _dialogService.Inform("Revert Change", "Only Applicable for Integrity Check Failed Files");
+                    _dialogService.Inform(Loc.T("S.Dlg.RevertChangeTitle", "Revert Change"),
+                        Loc.T("S.Dlg.RevertOnlyIntegrity", "Only applicable to files flagged by the integrity check."));
                     return;
                 }
                 _metaDataManager.RequestRevertChange(file);
@@ -289,7 +318,8 @@ namespace DeployAssistant.ViewModel
         {
             if (changedFileList == null)
             {
-                _dialogService.Inform("Integrity Check", "Model Binding Issue: ChangedList is Empty");
+                _dialogService.Inform(Loc.T("S.IntegrityCheck", "Integrity Check"),
+                    Loc.T("S.Dlg.ChangedListEmpty", "Model binding issue: the changed list is empty."));
                 return;
             }
 

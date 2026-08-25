@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -13,9 +13,10 @@ namespace DeployAssistant.CLI.Screens;
 
 /// <summary>
 /// Pre-checkout integrity gate. Runs an integrity check, then:
-/// - Clean path: inline y/n confirm before calling RequestRevertProject.
-/// - Dirty path: shows the list of local modifications; user can discard all
-///   changes and checkout, or cancel.
+/// - Clean path: inline y/n confirm before calling RequestCheckoutVersion.
+/// - Dirty path: shows the list of local modifications. In <see cref="CheckoutMode.Fast"/>
+///   the user must discard those changes first; in <see cref="CheckoutMode.CleanRestore"/>
+///   the checkout itself repairs the drift, so a plain y/n confirm is the whole gate.
 /// </summary>
 internal sealed class CheckoutGateScreen : Screen
 {
@@ -23,17 +24,24 @@ internal sealed class CheckoutGateScreen : Screen
 
     private readonly MetaDataManager _mgr;
     private readonly ProjectData _target;
+    private readonly CheckoutMode _mode;
     private Phase _phase = Phase.Running;
     private List<ProjectFile> _modifications = new List<ProjectFile>();
     private SelectableList? _modList;
     private string? _errorMessage;
     private const int DiffViewportHeight = 8;
 
-    public CheckoutGateScreen(MetaDataManager mgr, ProjectData target)
+    // internal test seam; production default stays 10 minutes
+    internal static TimeSpan IntegrityWaitTimeout = TimeSpan.FromMinutes(10);
+
+    public CheckoutGateScreen(MetaDataManager mgr, ProjectData target, CheckoutMode mode = CheckoutMode.Fast)
     {
         _mgr = mgr;
         _target = target;
+        _mode = mode;
     }
+
+    internal CheckoutMode Mode => _mode;
 
     // internal test seam
     internal void SetPhaseForTesting(Phase phase, List<ProjectFile>? mods = null)
@@ -52,6 +60,7 @@ internal sealed class CheckoutGateScreen : Screen
 
         var captured = new List<ProjectFile>();
         using var done = new ManualResetEventSlim(false);
+        bool integrityCompleted = false;
 
         void OnComplete(string _, ObservableCollection<ProjectFile> files)
         {
@@ -110,13 +119,22 @@ internal sealed class CheckoutGateScreen : Screen
                             new ProgressTaskSettings { AutoStart = true, MaxValue = 1 });
                     }
                     _mgr.RequestProjectIntegrityCheck();
-                    done.Wait(TimeSpan.FromMinutes(10));
+                    integrityCompleted = done.Wait(IntegrityWaitTimeout);
                     lock (progressLock)
                     {
                         if (activeTask is not null && totalKnown > 0)
                             activeTask.Value = totalKnown; // ensure 100% on completion
                     }
                 });
+
+            if (!integrityCompleted)
+            {
+                // A check that never reported back must not read as "no modifications" —
+                // that would let a checkout proceed unverified over dirty local state.
+                _errorMessage = "Integrity check did not complete (timed out). Checkout cancelled; re-open the project and retry.";
+                _phase = Phase.Error;
+                return;
+            }
 
             lock (captured) { _modifications = new List<ProjectFile>(captured); }
             _phase = _modifications.Count == 0 ? Phase.Clean : Phase.Dirty;
@@ -140,17 +158,22 @@ internal sealed class CheckoutGateScreen : Screen
                 return;
 
             case Phase.Clean:
-                AnsiConsole.MarkupLine($"  [bold]Checkout revision[/]");
+                AnsiConsole.MarkupLine($"  [bold]{ModeTitle}[/]");
                 AnsiConsole.MarkupLine($"  Restore project to [cyan]{Markup.Escape(_target.UpdatedVersion ?? "")}[/]?");
                 AnsiConsole.MarkupLine($"  Updated: {_target.UpdatedTime:yyyy-MM-dd HH:mm} by {Markup.Escape(_target.UpdaterName ?? "")}");
                 AnsiConsole.MarkupLine($"  [dim]{TextStyle.SuccessGlyph} No local modifications detected.[/]");
+                if (_mode == CheckoutMode.CleanRestore)
+                    AnsiConsole.MarkupLine(TextStyle.Dim("  Safe checkout re-hashes the working directory against the target snapshot."));
                 AnsiConsole.WriteLine();
                 AnsiConsole.MarkupLine(TextStyle.Dim("  y checkout · n/esc cancel"));
                 return;
 
             case Phase.Dirty:
                 AnsiConsole.MarkupLine($"  [bold yellow]Local modifications detected[/]");
-                AnsiConsole.MarkupLine($"  Restoring to [cyan]{Markup.Escape(_target.UpdatedVersion ?? "")}[/] requires discarding {_modifications.Count} change(s):");
+                if (_mode == CheckoutMode.CleanRestore)
+                    AnsiConsole.MarkupLine($"  Safe checkout to [cyan]{Markup.Escape(_target.UpdatedVersion ?? "")}[/] will repair {_modifications.Count} drifted file(s):");
+                else
+                    AnsiConsole.MarkupLine($"  Restoring to [cyan]{Markup.Escape(_target.UpdatedVersion ?? "")}[/] requires discarding {_modifications.Count} change(s):");
                 AnsiConsole.WriteLine();
 
                 int top = _modList!.ViewportTop;
@@ -163,7 +186,9 @@ internal sealed class CheckoutGateScreen : Screen
                     AnsiConsole.MarkupLine($"   {marker}{row}");
                 }
                 AnsiConsole.WriteLine();
-                AnsiConsole.MarkupLine(TextStyle.Dim("  ↑↓ move · u half-page up · d discard & checkout · esc cancel"));
+                AnsiConsole.MarkupLine(_mode == CheckoutMode.CleanRestore
+                    ? TextStyle.Dim("  ↑↓ move · d/u half-page · y safe checkout · esc cancel")
+                    : TextStyle.Dim("  ↑↓ move · u half-page up · d discard & checkout · esc cancel"));
                 return;
 
             case Phase.CheckingOut:
@@ -176,6 +201,9 @@ internal sealed class CheckoutGateScreen : Screen
                 return;
         }
     }
+
+    private string ModeTitle =>
+        _mode == CheckoutMode.CleanRestore ? "Safe checkout revision" : "Checkout revision";
 
     public override ScreenAction Handle(ConsoleKeyInfo key)
     {
@@ -191,7 +219,10 @@ internal sealed class CheckoutGateScreen : Screen
 
             case Phase.Dirty:
                 if (key.Key == ConsoleKey.Escape) return ScreenAction.PopAction;
-                if (key.KeyChar == 'd') return DiscardAndCheckout();
+                // Clean restore repairs drift as part of the checkout itself, so there is
+                // nothing to discard up front — confirming is the whole gate.
+                if (_mode == CheckoutMode.CleanRestore && key.Key == ConsoleKey.Y) return Checkout();
+                if (_mode == CheckoutMode.Fast && key.KeyChar == 'd') return DiscardAndCheckout();
                 if (_modList != null) _modList.Handle(key);
                 return ScreenAction.StayAction;
 
@@ -207,11 +238,11 @@ internal sealed class CheckoutGateScreen : Screen
     private ScreenAction Checkout()
     {
         _phase = Phase.CheckingOut;
-        bool ok = _mgr.RequestRevertProject(_target);
+        bool ok = RunCheckout(out CheckoutResult? result);
         if (ok)
-            return ScreenAction.PopAction; // RevisionListScreen.AutoAdvance pops again to MainScreen
+            return ScreenAction.PopAction; // RevisionDetailScreen.AutoAdvance pops on towards MainScreen
         _phase = Phase.Error;
-        _errorMessage = "Checkout failed (see trace logs).";
+        _errorMessage = DescribeFailure(result, "Checkout failed (see trace logs).");
         return ScreenAction.StayAction;
     }
 
@@ -233,10 +264,37 @@ internal sealed class CheckoutGateScreen : Screen
             return ScreenAction.StayAction;
         }
         // Now do the actual checkout.
-        bool ok = _mgr.RequestRevertProject(_target);
+        bool ok = RunCheckout(out CheckoutResult? result);
         if (ok) return ScreenAction.PopAction;
         _phase = Phase.Error;
-        _errorMessage = "Checkout failed after reverting local changes.";
+        _errorMessage = DescribeFailure(result, "Checkout failed after reverting local changes.");
         return ScreenAction.StayAction;
+    }
+
+    /// <summary>
+    /// Fires the request with CheckoutCompleteEventHandler attached. The event carries the
+    /// real refusal reason on every failure exit, so the user never gets a bare "see logs".
+    /// </summary>
+    private bool RunCheckout(out CheckoutResult? result)
+    {
+        CheckoutResult? captured = null;
+        void OnComplete(CheckoutResult r) => captured = r;
+
+        _mgr.CheckoutCompleteEventHandler += OnComplete;
+        try
+        {
+            return _mgr.RequestCheckoutVersion(_target, _mode);
+        }
+        finally
+        {
+            _mgr.CheckoutCompleteEventHandler -= OnComplete;
+            result = captured;
+        }
+    }
+
+    private static string DescribeFailure(CheckoutResult? result, string fallback)
+    {
+        if (result == null || result.Messages.Count == 0) return fallback;
+        return string.Join(" ", result.Messages);
     }
 }

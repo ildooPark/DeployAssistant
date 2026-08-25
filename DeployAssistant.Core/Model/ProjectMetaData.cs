@@ -1,3 +1,4 @@
+﻿using DeployAssistant.Utils;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json.Serialization;
@@ -23,7 +24,12 @@ namespace DeployAssistant.Model
         public string ProjectPath { get => projectPath; set => projectPath = value;}
         public ProjectData ProjectMain {  get; set; }
         public LinkedList<ProjectData> ProjectDataList {  get; set; }   
-        public Dictionary<string, ProjectFile> BackupFiles { get; set; }
+        private Dictionary<string, ProjectFile> backupFiles;
+        public Dictionary<string, ProjectFile> BackupFiles
+        {
+            get => backupFiles;
+            set => backupFiles = value.WithOrdinalIgnoreCaseKeys();
+        }
         #region Constructor 
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         [JsonConstructor]

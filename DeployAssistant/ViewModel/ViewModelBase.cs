@@ -43,4 +43,12 @@ namespace DeployAssistant.ViewModel
             GC.SuppressFinalize(this);
         }
     }
+
+    /// <summary>Resource lookup for code-composed strings (Strings.*.xaml keys).</summary>
+    internal static class Loc
+    {
+        // Headless-safe: tests construct ViewModels with no WPF Application.
+        public static string T(string key, string fallback)
+            => System.Windows.Application.Current?.TryFindResource(key) as string ?? fallback;
+    }
 }

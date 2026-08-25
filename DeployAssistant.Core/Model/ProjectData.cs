@@ -1,4 +1,5 @@
-﻿using DeployAssistant.Interfaces;
+﻿using DeployAssistant.Utils;
+using DeployAssistant.Interfaces;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text.Json.Serialization;
@@ -24,7 +25,12 @@ namespace DeployAssistant.Model
         public int RevisionNumber { get; set; } = 0;
         public int NumberOfChanges { get; set; }
         public List<ChangedFile> ChangedFiles {  get; set; }
-        public Dictionary<string, ProjectFile> ProjectFiles { get; set; }
+        private Dictionary<string, ProjectFile> projectFiles;
+        public Dictionary<string, ProjectFile> ProjectFiles
+        {
+            get => projectFiles;
+            set => projectFiles = value.WithOrdinalIgnoreCaseKeys();
+        }
 
         [JsonIgnore]
         public bool IsProjectMain { get; set; } = false;  

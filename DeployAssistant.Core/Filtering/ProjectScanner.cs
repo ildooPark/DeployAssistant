@@ -20,8 +20,11 @@ namespace DeployAssistant.Filtering
 
         public IEnumerable<string> EnumerateFiles(string root, IgnoreType scope)
         {
-            foreach (string fullPath in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+            // Enumerating from a plain root on .NET Framework silently drops entries whose
+            // absolute path exceeds 260 chars, so the walk itself must use the long-path form.
+            foreach (string prefixed in Directory.GetFiles(Utils.PathCompat.ToNetFrameworkLongPath(root), "*", SearchOption.AllDirectories))
             {
+                string fullPath = Utils.PathCompat.StripNetFrameworkLongPathPrefix(prefixed);
                 string rel = MakeRelative(root, fullPath);
                 if (_filter.Matches(rel, ProjectDataType.File, scope)) continue;
                 yield return fullPath;
@@ -30,8 +33,9 @@ namespace DeployAssistant.Filtering
 
         public IEnumerable<string> EnumerateDirectories(string root, IgnoreType scope)
         {
-            foreach (string fullPath in Directory.GetDirectories(root, "*", SearchOption.AllDirectories))
+            foreach (string prefixed in Directory.GetDirectories(Utils.PathCompat.ToNetFrameworkLongPath(root), "*", SearchOption.AllDirectories))
             {
+                string fullPath = Utils.PathCompat.StripNetFrameworkLongPathPrefix(prefixed);
                 string rel = MakeRelative(root, fullPath);
                 if (_filter.Matches(rel, ProjectDataType.Directory, scope)) continue;
                 yield return fullPath;

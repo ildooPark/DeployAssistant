@@ -33,7 +33,7 @@ namespace DeployAssistant.ViewModel
             private set => SetField(ref _loadedMetaFile, value);
         }
 
-        private string _dropZoneMessage = "Drop a .VersionLog file here, or use Browse above";
+        private string _dropZoneMessage = Loc.T("S.Meta.DropZoneDefault", "Drop a .VersionLog file here, or use Browse above");
         public string DropZoneMessage
         {
             get => _dropZoneMessage;
@@ -133,7 +133,7 @@ namespace DeployAssistant.ViewModel
                 IsMetaFileLoaded = false;
                 LoadedMetaFile = null;
                 DiffItems.Clear();
-                DropZoneMessage = $"File not found: {Path.GetFileName(filePath)}";
+                DropZoneMessage = string.Format(Loc.T("S.Meta.FileNotFound", "File not found: {0}"), Path.GetFileName(filePath));
                 return;
             }
             if (!filePath.EndsWith(VersionLogExtension, StringComparison.OrdinalIgnoreCase))
@@ -141,7 +141,7 @@ namespace DeployAssistant.ViewModel
                 IsMetaFileLoaded = false;
                 LoadedMetaFile = null;
                 DiffItems.Clear();
-                DropZoneMessage = "Only .VersionLog files are supported";
+                DropZoneMessage = Loc.T("S.Meta.OnlyVersionLog", "Only .VersionLog files are supported");
                 return;
             }
             LoadAndComputeDiff(filePath);
@@ -153,8 +153,8 @@ namespace DeployAssistant.ViewModel
         {
             var dialog = new OpenFileDialog
             {
-                Title  = "Select a .VersionLog Metafile",
-                Filter = "Version Log files (*.VersionLog)|*.VersionLog|All files (*.*)|*.*"
+                Title  = Loc.T("S.Meta.SelectMetafile", "Select a .VersionLog Metafile"),
+                Filter = Loc.T("S.Meta.FileFilter", "Version Log files (*.VersionLog)|*.VersionLog|All files (*.*)|*.*")
             };
             if (dialog.ShowDialog() != true) return;
             LoadAndComputeDiff(dialog.FileName);
@@ -165,26 +165,26 @@ namespace DeployAssistant.ViewModel
             ProjectData? projectData = _metaDataManager.LoadExternalMetaFile(filePath);
             if (projectData == null)
             {
-                DropZoneMessage  = $"Could not parse metafile: {Path.GetFileName(filePath)}";
+                DropZoneMessage  = string.Format(Loc.T("S.Meta.ParseFailed", "Could not parse metafile: {0}"), Path.GetFileName(filePath));
                 IsMetaFileLoaded = false;
                 return;
             }
 
             LoadedMetaFile   = projectData;
             IsMetaFileLoaded = true;
-            DropZoneMessage  = $"Loaded: {projectData.UpdatedVersion}  ({Path.GetFileName(filePath)})";
+            DropZoneMessage  = string.Format(Loc.T("S.Meta.Loaded", "Loaded: {0}  ({1})"), projectData.UpdatedVersion, Path.GetFileName(filePath));
 
             if (_metaDataManager.MainProjectData == null)
             {
                 DiffItems = new ObservableCollection<DiffItem>();
-                DropZoneMessage += " — open a project first to compute the diff";
+                DropZoneMessage += Loc.T("S.Meta.OpenProjectFirst", " — open a project first to compute the diff");
                 return;
             }
 
             List<ChangedFile>? diff = _metaDataManager.ComputeMetaFileDiff(projectData);
             if (diff == null)
             {
-                DropZoneMessage += " — diff computation failed";
+                DropZoneMessage += Loc.T("S.Meta.DiffFailed", " — diff computation failed");
                 DiffItems = new ObservableCollection<DiffItem>();
                 return;
             }
@@ -222,8 +222,9 @@ namespace DeployAssistant.ViewModel
 
             string targetVersion = LoadedMetaFile?.UpdatedVersion ?? "?";
             var confirm = _dialogService.Confirm(
-                "Import / Sync",
-                $"You are about to stage {selected.Count} file change(s) to match version {targetVersion}.\n\nContinue?");
+                Loc.T("S.Dlg.ImportSyncTitle", "Import / Sync"),
+                string.Format(Loc.T("S.Dlg.ImportSyncConfirm", "You are about to stage {0} file change(s) to match version {1}.\n\nContinue?"),
+                    selected.Count, targetVersion));
             if (confirm != DialogChoice.Yes) return;
 
             foreach (var item in selected)

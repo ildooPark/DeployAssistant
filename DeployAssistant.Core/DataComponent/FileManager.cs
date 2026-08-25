@@ -2,6 +2,7 @@
 using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
 using DeployAssistant.Utils;
+using System.Linq;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
@@ -21,7 +22,20 @@ namespace DeployAssistant.DataComponent
         PreStaged = 1 << 4,
         IntegrityChecked = 1 << 5,
         Backup = 1 << 6, 
-        Overlapped = 1 << 7
+        Overlapped = 1 << 7,
+        // 0x100 is written by the shipped 3.6.1 integration flow. Reserved; never reuse.
+        Integrate = 1 << 8
+    }
+
+    /// <summary>Per-file verdict streamed by <see cref="FileManager.IntegrityFileProgressEventHandler"/> while an integrity check runs.</summary>
+    public enum IntegrityFileOutcome
+    {
+        Checked,
+        Modified,
+        Added,
+        Deleted,
+        HashFailed,
+        MetadataFallback
     }
     public class FileManager
     {
@@ -67,6 +81,8 @@ namespace DeployAssistant.DataComponent
         /// increases 0 → total. Useful for CLI/GUI progress bars.
         /// </summary>
         public event Action<int, int>? IntegrityProgressEventHandler;
+        /// <summary>Streams (relPath, outcome) per file during MainProjectIntegrityCheck. Raised from worker threads; subscribers must marshal.</summary>
+        public event Action<string, IntegrityFileOutcome>? IntegrityFileProgressEventHandler;
         public event Action<MetaDataState> ManagerStateEventHandler;
         #endregion
 
@@ -87,10 +103,16 @@ namespace DeployAssistant.DataComponent
         public async void MainProjectIntegrityCheck()
         {
             ManagerStateEventHandler?.Invoke(MetaDataState.IntegrityChecking);
-            if (_dstProjectData == null || _projectContext == null)
+            bool staleContext = _dstProjectData != null && _projectContext != null
+                && !string.Equals(_projectContext.MetaData.ProjectPath, _dstProjectData.ProjectPath, StringComparison.OrdinalIgnoreCase);
+            if (_dstProjectData == null || _projectContext == null || staleContext)
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                Trace.TraceWarning("Main Project is Missing");
+                string reason = staleContext
+                    ? $"Integrity check refused: the loaded ignore context belongs to '{_projectContext!.MetaData.ProjectPath}', not '{_dstProjectData!.ProjectPath}'. Re-open the project and retry."
+                    : "Integrity check could not run: project or ignore context is missing. Re-open the project and retry.";
+                Trace.TraceWarning(reason);
+                IntegrityCheckEventHandler?.Invoke(reason, new List<ProjectFile>());
                 return;
             }
             _preStagedFilesDict.Clear();
@@ -174,6 +196,7 @@ namespace DeployAssistant.DataComponent
                     ProjectFile dstFile = new ProjectFile(_dstProjectData.ProjectPath, fileRelPath, fileHash, DataState.Added | DataState.IntegrityChecked, ProjectDataType.File);
                     _preStagedFilesDict.TryAdd(fileRelPath, dstFile);
                     _registeredChangesDict.TryAdd(dstFile.DataRelPath, new ChangedFile(dstFile, DataState.Added | DataState.IntegrityChecked));
+                    try { IntegrityFileProgressEventHandler?.Invoke(fileRelPath, IntegrityFileOutcome.Added); } catch (Exception) { }
                 }
 
                 foreach (string fileRelPath in deletedFiles)
@@ -184,6 +207,7 @@ namespace DeployAssistant.DataComponent
                     dstFile.UpdatedTime = DateTime.Now;
                     _preStagedFilesDict.TryAdd(fileRelPath, dstFile);
                     _registeredChangesDict.TryAdd(dstFile.DataRelPath, new ChangedFile(srcFile, dstFile, DataState.Deleted | DataState.IntegrityChecked, true));
+                    try { IntegrityFileProgressEventHandler?.Invoke(fileRelPath, IntegrityFileOutcome.Deleted); } catch (Exception) { }
                 }
 
                 ConcurrentDictionary<string, ProjectFile> projectFilesConcurrent = new ConcurrentDictionary<string, ProjectFile> ();
@@ -237,6 +261,7 @@ namespace DeployAssistant.DataComponent
                     if (string.IsNullOrEmpty(intersectedFile.DataHash))
                     {
                         hashFailureLog.Add($"Note: {fileRelPath} — hash unavailable after retries; will verify by metadata");
+                        try { IntegrityFileProgressEventHandler?.Invoke(fileRelPath, IntegrityFileOutcome.HashFailed); } catch (Exception) { }
                     }
                     {
                         int c = Interlocked.Increment(ref completed);
@@ -263,17 +288,28 @@ namespace DeployAssistant.DataComponent
                                 return;
                             }
                             bool hashMismatch;
+                            bool verifiedByMetadata = false;
                             if (string.IsNullOrEmpty(intersectedFile.DataHash))
                             {
                                 // Hash retries exhausted — fall back to size + version metadata.
                                 var (metadataMatch, logMsg) = VerifyByMetadata(_dstProjectData.ProjectPath, projectFile.DataRelPath, projectFile);
                                 fileIntegrityLog.AppendLine(logMsg);
                                 hashMismatch = !metadataMatch;
+                                verifiedByMetadata = true;
                             }
                             else
                             {
                                 hashMismatch = projectFile.DataHash != intersectedFile.DataHash;
                             }
+
+                            try
+                            {
+                                IntegrityFileProgressEventHandler?.Invoke(projectFile.DataRelPath,
+                                    hashMismatch ? IntegrityFileOutcome.Modified
+                                    : verifiedByMetadata ? IntegrityFileOutcome.MetadataFallback
+                                    : IntegrityFileOutcome.Checked);
+                            }
+                            catch (Exception) { }
 
                             if (hashMismatch)
                             {
@@ -281,25 +317,22 @@ namespace DeployAssistant.DataComponent
 
                                 ProjectFile srcFile = new ProjectFile(projectFile, DataState.None);
                                 ProjectFile dstFile = new ProjectFile(projectFile, DataState.Modified | DataState.IntegrityChecked);
+
+                                string dstAbsPath = PathCompat.ToNetFrameworkLongPath(Path.Combine(_dstProjectData.ProjectPath, projectFile.DataRelPath));
                                 try
                                 {
-                                    dstFile.BuildVersion = FileVersionInfo.GetVersionInfo(Path.Combine(_dstProjectData.ProjectPath, projectFile.DataRelPath)).FileVersion ?? "";
-                                    dstFile.DataSize = new FileInfo(Path.Combine(_dstProjectData.ProjectPath, projectFile.DataRelPath)).Length;
+                                    dstFile.BuildVersion = FileVersionInfo.GetVersionInfo(dstAbsPath).FileVersion ?? "";
+                                    var dstInfo = new FileInfo(dstAbsPath);
+                                    dstFile.DataSize = dstInfo.Length;
+                                    // Never LastAccessTime: this check reads every file, so that would stamp the whole tree identically.
+                                    dstFile.UpdatedTime = dstInfo.LastWriteTime;
                                 }
                                 catch (Exception ex)
                                 {
-                                    // Version/size read failed; retain values copied from projectFile and log the warning.
-                                    fileIntegrityLog.AppendLine($"Warning: Could not read version/size for modified file {projectFile.DataRelPath}: {ex.Message}");
+                                    // Version/size/time read failed; retain values copied from projectFile and log the warning.
+                                    fileIntegrityLog.AppendLine($"Warning: Could not read version/size/time for modified file {projectFile.DataRelPath}: {ex.Message}");
                                 }
                                 dstFile.DataHash = intersectedFile.DataHash;  // may be "" when hash failed — new contract: callers tolerate empty
-                                try
-                                {
-                                    dstFile.UpdatedTime = new FileInfo(srcFile.DataAbsPath).LastAccessTime;
-                                }
-                                catch
-                                {
-                                    // File may be unreadable (locked); keep the copied UpdatedTime.
-                                }
 
                                 _preStagedFilesDict.TryAdd(projectFile.DataRelPath, dstFile);
                                 _registeredChangesDict.TryAdd(dstFile.DataRelPath, new ChangedFile(srcFile, dstFile, DataState.Modified | DataState.IntegrityChecked, true));
@@ -381,17 +414,17 @@ namespace DeployAssistant.DataComponent
 
                 if (!Directory.Exists(backupPath)) Directory.CreateDirectory(backupPath);
                 if (!Directory.Exists(exportPath)) Directory.CreateDirectory(exportPath);
-                string[]? backupFiles = Directory.GetFiles(backupPath, "*", SearchOption.AllDirectories);
-                string[]? backupDirs = Directory.GetDirectories(backupPath, "*", SearchOption.AllDirectories);
+                string[]? backupFiles = Directory.GetFiles(PathCompat.ToNetFrameworkLongPath(backupPath), "*", SearchOption.AllDirectories).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray();
+                string[]? backupDirs = Directory.GetDirectories(PathCompat.ToNetFrameworkLongPath(backupPath), "*", SearchOption.AllDirectories).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray();
                 backupFiles ??= [];
                 backupDirs ??= [];
-                string[]? exportFiles = Directory.GetFiles(exportPath, "*", SearchOption.AllDirectories);
-                string[]? exportDirs = Directory.GetDirectories(exportPath, "*", SearchOption.AllDirectories);
+                string[]? exportFiles = Directory.GetFiles(PathCompat.ToNetFrameworkLongPath(exportPath), "*", SearchOption.AllDirectories).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray();
+                string[]? exportDirs = Directory.GetDirectories(PathCompat.ToNetFrameworkLongPath(exportPath), "*", SearchOption.AllDirectories).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray();
                 if (exportFiles == null) exportFiles = new string[0];
                 if (exportDirs == null) exportDirs = new string[0];
 
-                string[]? rawFiles = Directory.GetFiles(targetProject.ProjectPath, "*", SearchOption.AllDirectories);
-                string[]? rawDirs = Directory.GetDirectories(targetProject.ProjectPath, "*", SearchOption.AllDirectories);
+                string[]? rawFiles = Directory.GetFiles(PathCompat.ToNetFrameworkLongPath(targetProject.ProjectPath), "*", SearchOption.AllDirectories).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray();
+                string[]? rawDirs = Directory.GetDirectories(PathCompat.ToNetFrameworkLongPath(targetProject.ProjectPath), "*", SearchOption.AllDirectories).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray();
                 if (rawFiles == null) backupFiles = new string[0];
                 if (rawDirs == null) backupDirs = new string[0];
 
@@ -810,7 +843,7 @@ namespace DeployAssistant.DataComponent
             try
             {
                 ManagerStateEventHandler?.Invoke(MetaDataState.Retrieving);
-                string[] binFiles = Directory.GetFiles(srcPath, "*.VersionLog", SearchOption.AllDirectories);
+                string[] binFiles = Directory.GetFiles(PathCompat.ToNetFrameworkLongPath(srcPath), "*.VersionLog", SearchOption.AllDirectories).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray();
                 if (binFiles.Length == 1)
                 {
                     var stream = File.ReadAllBytes(binFiles[0]);
@@ -869,9 +902,9 @@ namespace DeployAssistant.DataComponent
 
             try
             {
-                var filesAllDirTask = Task.Run(() => Directory.GetFiles(srcDirPath, "*", SearchOption.AllDirectories));
-                var filesTopDirTask = Task.Run(() => Directory.GetFiles(srcDirPath, "*", SearchOption.TopDirectoryOnly));
-                var dirsAllTask = Task.Run(() => Directory.GetDirectories(srcDirPath, "*", SearchOption.AllDirectories));
+                var filesAllDirTask = Task.Run(() => Directory.GetFiles(PathCompat.ToNetFrameworkLongPath(srcDirPath), "*", SearchOption.AllDirectories).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray());
+                var filesTopDirTask = Task.Run(() => Directory.GetFiles(PathCompat.ToNetFrameworkLongPath(srcDirPath), "*", SearchOption.TopDirectoryOnly).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray());
+                var dirsAllTask = Task.Run(() => Directory.GetDirectories(PathCompat.ToNetFrameworkLongPath(srcDirPath), "*", SearchOption.AllDirectories).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray());
                 filesAllDirectories = await filesAllDirTask;
                 filesTopDirectories = await filesTopDirTask;
                 dirsAllDirectories = await dirsAllTask;     
@@ -936,8 +969,8 @@ namespace DeployAssistant.DataComponent
                 {
                     ProjectFile newFile = new ProjectFile
                         (
-                        new FileInfo(subDirFileAbsPath).Length,
-                        FileVersionInfo.GetVersionInfo(subDirFileAbsPath).FileVersion,
+                        new FileInfo(PathCompat.ToNetFrameworkLongPath(subDirFileAbsPath)).Length,
+                        FileVersionInfo.GetVersionInfo(PathCompat.ToNetFrameworkLongPath(subDirFileAbsPath)).FileVersion,
                         Path.GetFileName(subDirFileAbsPath),
                         srcDirPath,
                         PathCompat.GetRelativePath(srcDirPath, subDirFileAbsPath)
@@ -975,9 +1008,9 @@ namespace DeployAssistant.DataComponent
 
                 try
                 {
-                    filesAllDirectories = Directory.GetFiles(srcDirPath, "*", SearchOption.AllDirectories);
-                    filesTopDirectories = Directory.GetFiles(srcDirPath, "*", SearchOption.TopDirectoryOnly);
-                    dirsAllDirectories = Directory.GetDirectories(srcDirPath, "*", SearchOption.AllDirectories);
+                    filesAllDirectories = Directory.GetFiles(PathCompat.ToNetFrameworkLongPath(srcDirPath), "*", SearchOption.AllDirectories).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray();
+                    filesTopDirectories = Directory.GetFiles(PathCompat.ToNetFrameworkLongPath(srcDirPath), "*", SearchOption.TopDirectoryOnly).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray();
+                    dirsAllDirectories = Directory.GetDirectories(PathCompat.ToNetFrameworkLongPath(srcDirPath), "*", SearchOption.AllDirectories).Select(PathCompat.StripNetFrameworkLongPathPrefix).ToArray();
                 }
                 catch (Exception ex)
                 {
@@ -1020,8 +1053,8 @@ namespace DeployAssistant.DataComponent
                 {
                     ProjectFile newFile = new ProjectFile
                         (
-                        new FileInfo(subDirFileAbsPath).Length,
-                        FileVersionInfo.GetVersionInfo(subDirFileAbsPath).FileVersion,
+                        new FileInfo(PathCompat.ToNetFrameworkLongPath(subDirFileAbsPath)).Length,
+                        FileVersionInfo.GetVersionInfo(PathCompat.ToNetFrameworkLongPath(subDirFileAbsPath)).FileVersion,
                         Path.GetFileName(subDirFileAbsPath),
                         srcDirPath,
                         PathCompat.GetRelativePath(srcDirPath, subDirFileAbsPath)
@@ -1097,8 +1130,8 @@ namespace DeployAssistant.DataComponent
                 {
                     ProjectFile newFile = new ProjectFile
                         (
-                        new FileInfo(topDirFilePaths[i]).Length,
-                        FileVersionInfo.GetVersionInfo(topDirFilePaths[i]).FileVersion,
+                        new FileInfo(PathCompat.ToNetFrameworkLongPath(topDirFilePaths[i])).Length,
+                        FileVersionInfo.GetVersionInfo(PathCompat.ToNetFrameworkLongPath(topDirFilePaths[i])).FileVersion,
                         Path.GetFileName(topDirFilePaths[i]),
                         srcPath,
                         PathCompat.GetRelativePath(srcPath, topDirFilePaths[i])
@@ -1137,8 +1170,8 @@ namespace DeployAssistant.DataComponent
 
                     ProjectFile newFile = new ProjectFile
                         (
-                        new FileInfo(newSrcFilePath).Length,
-                        FileVersionInfo.GetVersionInfo(newSrcFilePath).FileVersion,
+                        new FileInfo(PathCompat.ToNetFrameworkLongPath(newSrcFilePath)).Length,
+                        FileVersionInfo.GetVersionInfo(PathCompat.ToNetFrameworkLongPath(newSrcFilePath)).FileVersion,
                         Path.GetFileName(newSrcFilePath),
                         srcPath,
                         PathCompat.GetRelativePath(srcPath, newSrcFilePath)
@@ -1151,8 +1184,8 @@ namespace DeployAssistant.DataComponent
                 {
                     ProjectFile newFile = new ProjectFile
                         (
-                        new FileInfo(topDirFilePaths[i]).Length,
-                        FileVersionInfo.GetVersionInfo(topDirFilePaths[i]).FileVersion,
+                        new FileInfo(PathCompat.ToNetFrameworkLongPath(topDirFilePaths[i])).Length,
+                        FileVersionInfo.GetVersionInfo(PathCompat.ToNetFrameworkLongPath(topDirFilePaths[i])).FileVersion,
                         Path.GetFileName(topDirFilePaths[i]),
                         srcPath,
                         PathCompat.GetRelativePath(srcPath, topDirFilePaths[i])
@@ -1247,8 +1280,8 @@ namespace DeployAssistant.DataComponent
                 {
                     string fileOriginalSrcPath = Path.Combine(dstSrcPath, registeredFile.DataName);
 
-                    if (File.Exists(registeredFile.DataAbsPath) && fileOriginalSrcPath != registeredFile.DataAbsPath) 
-                        File.Delete(registeredFile.DataAbsPath);
+                    if (File.Exists(PathCompat.ToNetFrameworkLongPath(registeredFile.DataAbsPath)) && fileOriginalSrcPath != registeredFile.DataAbsPath) 
+                        File.Delete(PathCompat.ToNetFrameworkLongPath(registeredFile.DataAbsPath));
                 }
                 return true; 
             }
@@ -1434,7 +1467,7 @@ namespace DeployAssistant.DataComponent
         {
             try
             {
-                var info = new FileInfo(Path.Combine(projectPath, relPath));
+                var info = new FileInfo(PathCompat.ToNetFrameworkLongPath(Path.Combine(projectPath, relPath)));
                 long currentSize = info.Length;
                 string currentVersion = "";
                 try
@@ -1503,7 +1536,7 @@ namespace DeployAssistant.DataComponent
             }
             else
             {
-                if (File.Exists(deployfilePath)) File.Delete(deployfilePath);
+                if (File.Exists(PathCompat.ToNetFrameworkLongPath(deployfilePath))) File.Delete(PathCompat.ToNetFrameworkLongPath(deployfilePath));
                 deployData = null;
                 return false;
             }
@@ -1518,7 +1551,7 @@ namespace DeployAssistant.DataComponent
                     if (registeredFile.DataType == ProjectDataType.Directory) continue; 
                     if (registeredFile == null || registeredFile.DataName == "") return false; 
                     string fileSrcPath = Path.Combine(srcPath, registeredFile.DataName);
-                    if (!File.Exists(fileSrcPath)) return false; 
+                    if (!File.Exists(PathCompat.ToNetFrameworkLongPath(fileSrcPath))) return false; 
                 }
                 return true; 
             }

@@ -11,10 +11,10 @@ namespace DeployAssistant.View
     /// </summary>
     public partial class VersionDiffWindow : Window
     {
-        public VersionDiffWindow(ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff, string title = "Version Diff")
+        public VersionDiffWindow(ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff, string? title = null)
         {
             InitializeComponent();
-            Title = title;
+            if (title != null) Title = title; // otherwise the localized XAML title stays
             var services = ((App)Application.Current).Services!;
             var versionDiffVM = new VersionDiffViewModel(services.MetaDataManager, srcProject, dstProject, diff);
             this.DataContext = versionDiffVM;

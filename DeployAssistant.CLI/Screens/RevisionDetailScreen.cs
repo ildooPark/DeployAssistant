@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using DeployAssistant.CLI.Engine;
@@ -19,6 +19,10 @@ internal sealed class RevisionDetailScreen : Screen
     private SelectableList? _diffList;
     private string? _lastError;
     private readonly bool _isCurrent;
+    // Set when this screen pushed a gate; the matching manager flag is only meaningful
+    // afterwards, so a stale flag from an earlier screen can never auto-pop this one.
+    private bool _checkoutRequested;
+    private bool _deleteRequested;
     private const int DiffViewportHeight = 8;
 
     public RevisionDetailScreen(MetaDataManager mgr, ProjectData revision)
@@ -105,7 +109,8 @@ internal sealed class RevisionDetailScreen : Screen
         }
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(TextStyle.Dim("  ↑↓ move · d/u half-page · c checkout · esc back"));
+        AnsiConsole.MarkupLine(TextStyle.Dim("  ↑↓ move · d/u half-page · c checkout · C safe checkout"));
+        AnsiConsole.MarkupLine(TextStyle.Dim("  r rename · x delete · esc back"));
 
         if (_lastError != null)
         {
@@ -115,26 +120,53 @@ internal sealed class RevisionDetailScreen : Screen
 
     public override ScreenAction Handle(ConsoleKeyInfo key)
     {
-        // Any non-c key clears the transient error.
-        if (key.Key != ConsoleKey.C) _lastError = null;
+        // Any key other than the checkout keys clears the transient error.
+        if (key.KeyChar != 'c' && key.KeyChar != 'C') _lastError = null;
 
         if (key.Key == ConsoleKey.Escape) return ScreenAction.PopAction;
 
-        if (key.Key == ConsoleKey.C)
+        // 'c' and 'C' both land on ConsoleKey.C, so the two checkout modes are told apart
+        // by KeyChar. (Ctrl+C never reaches here — App intercepts it.)
+        if (key.KeyChar == 'c') return PushCheckout(CheckoutMode.Fast);
+        if (key.KeyChar == 'C') return PushCheckout(CheckoutMode.CleanRestore);
+
+        // Case-insensitive, unlike c/C — these two have only one meaning each.
+        if (key.KeyChar == 'r' || key.KeyChar == 'R')
+            return new ScreenAction.Push(new VersionRenameScreen(_mgr, _revision));
+
+        if (key.KeyChar == 'x' || key.KeyChar == 'X')
         {
-            if (_isCurrent)
-            {
-                _lastError = "Already on this revision.";
-                return ScreenAction.StayAction;
-            }
-            // Push the checkout gate, which runs an integrity check first and handles
-            // the dirty/clean prompt logic. On success it pops and RevisionListScreen.AutoAdvance
-            // pops again (back to MainScreen) via the existing LastCheckedOut flag.
-            return new ScreenAction.Push(new CheckoutGateScreen(_mgr, _revision));
+            _deleteRequested = true;
+            return new ScreenAction.Push(new VersionDeleteGateScreen(_mgr, _revision));
         }
 
         if (_diffList != null) _diffList.Handle(key);
         return ScreenAction.StayAction;
+    }
+
+    private ScreenAction PushCheckout(CheckoutMode mode)
+    {
+        if (_isCurrent && mode == CheckoutMode.Fast)
+        {
+            _lastError = "Already on this revision.";
+            return ScreenAction.StayAction;
+        }
+        // Push the checkout gate, which runs an integrity check first and handles
+        // the dirty/clean prompt logic. On success it pops and this screen's
+        // AutoAdvance pops again, landing on the (rebuilt) revision list.
+        _checkoutRequested = true;
+        return new ScreenAction.Push(new CheckoutGateScreen(_mgr, _revision, mode));
+    }
+
+    public override ScreenAction? AutoAdvance()
+    {
+        // Peek — never consume — the manager's read-once flags: RevisionListScreen is the
+        // consumer, and it needs the flag to survive this hop to rebuild its rows.
+        if (_deleteRequested && _mgr.LastDeletedVersion == _revision.UpdatedVersion)
+            return ScreenAction.PopAction;   // this revision no longer exists
+        if (_checkoutRequested && _mgr.LastCheckedOut != null)
+            return ScreenAction.PopAction;   // main moved; the diff shown here is stale
+        return null;
     }
 }
 

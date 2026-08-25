@@ -1,4 +1,4 @@
-using DeployAssistant.DataComponent;
+﻿using DeployAssistant.DataComponent;
 using System;
 using System.Globalization;
 using System.Windows.Data;
@@ -50,5 +50,15 @@ namespace DeployAssistant.View
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
             => throw new NotSupportedException(
                 $"{nameof(DataStateChangeKindConverter)} is a one-way converter.");
+    }
+
+
+    public sealed class InverseBoolToVisibilityConverter : System.Windows.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            => value is bool b && b ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            => throw new NotSupportedException();
     }
 }

@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DeployAssistant.View"
         mc:Ignorable="d"
-        Title="Version Compatibility"
+        Title="{DynamicResource S.Win.VersionCompatibility}"
         Height="560" Width="940"
         MinHeight="400" MinWidth="700"
         WindowStartupLocation="CenterOwner"
@@ -20,7 +20,7 @@
         <Border Grid.Row="0" Background="#2D2D2D" Padding="10,6">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Foreground="#BBBBBB" FontSize="13" VerticalAlignment="Center">
-                    <Run Text="Source: "/>
+                    <Run Text="{DynamicResource S.SrcPrefix}"/>
                     <Run Text="{Binding SrcProjVersion, FallbackValue='—'}"
                          FontWeight="Bold" Foreground="#4EC9B0"/>
                 </TextBlock>
@@ -47,7 +47,7 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0" Style="{StaticResource HeaderLabelStyle}"
-                           Text="Snapshot history — select a version to inspect its diff"/>
+                           Text="{DynamicResource S.Cmp.SnapshotHeader}"/>
                 <ListView Grid.Row="1"
                           x:Name="LocalProjectVersions"
                           ItemsSource="{Binding VersionSimilarities}"
@@ -60,7 +60,7 @@
                         <GridView>
                             <GridViewColumn Width="220">
                                 <GridViewColumn.Header>
-                                    <TextBlock Text="Version"/>
+                                    <TextBlock Text="{StaticResource S.ColVersion}"/>
                                 </GridViewColumn.Header>
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
@@ -71,8 +71,8 @@
                             </GridViewColumn>
                             <GridViewColumn Width="55">
                                 <GridViewColumn.Header>
-                                    <TextBlock Text="Δ Sig."
-                                               ToolTip="Significant differences: files outside the integration-ignore list (en-US, ko-KR, Resources…).&#10;0 = source is an exact functional match for this snapshot."/>
+                                    <TextBlock Text="{StaticResource S.ColDeltaSig}"
+                                               ToolTip="{StaticResource S.Tip.DeltaSig}"/>
                                 </GridViewColumn.Header>
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
@@ -95,8 +95,8 @@
                             </GridViewColumn>
                             <GridViewColumn Width="65">
                                 <GridViewColumn.Header>
-                                    <TextBlock Text="Δ Resource"
-                                               ToolTip="Total differences including resource-only files (en-US, ko-KR, Resources).&#10;Equals Δ Sig. when there are no resource-only changes."/>
+                                    <TextBlock Text="{StaticResource S.ColDeltaRes}"
+                                               ToolTip="{StaticResource S.Tip.DeltaRes}"/>
                                 </GridViewColumn.Header>
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
@@ -129,7 +129,7 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0" Style="{StaticResource HeaderLabelStyle}">
-                    <Run Text="Selected: "/>
+                    <Run Text="{DynamicResource S.SelectedPrefix}"/>
                     <Run Text="{Binding TargetProjVersion, FallbackValue='—'}"
                          FontWeight="Bold" Foreground="#1976D2"/>
                 </TextBlock>
@@ -185,16 +185,16 @@
                                     </DataTemplate>
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
-                            <GridViewColumn Header="Source File"
+                            <GridViewColumn Header="{StaticResource S.ColSourceFile}"
                                             DisplayMemberBinding="{Binding SrcFile.DataRelPath}"
                                             Width="155"/>
-                            <GridViewColumn Header="Src Build V"
+                            <GridViewColumn Header="{StaticResource S.ColSrcBuildV}"
                                             DisplayMemberBinding="{Binding SrcFile.BuildVersion}"
                                             Width="110"/>
-                            <GridViewColumn Header="Destination File"
+                            <GridViewColumn Header="{StaticResource S.ColDestFile}"
                                             DisplayMemberBinding="{Binding DstFile.DataRelPath}"
                                             Width="155"/>
-                            <GridViewColumn Header="Dst Build V"
+                            <GridViewColumn Header="{StaticResource S.ColDstBuildV}"
                                             DisplayMemberBinding="{Binding DstFile.BuildVersion}"
                                             Width="110"/>
                         </GridView>

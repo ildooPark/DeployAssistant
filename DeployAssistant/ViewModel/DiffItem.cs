@@ -24,10 +24,13 @@ namespace DeployAssistant.ViewModel
         public DataState DataState        => ChangedFile.DataState;
         public string    FileName         => ChangedFile.DstFile?.DataName        ?? ChangedFile.SrcFile?.DataName        ?? string.Empty;
         public string    RelPath          => ChangedFile.DstFile?.DataRelPath      ?? ChangedFile.SrcFile?.DataRelPath      ?? string.Empty;
-        public string?   SrcBuildVersion  => ChangedFile.SrcFile?.BuildVersion;
-        public string?   DstBuildVersion  => ChangedFile.DstFile?.BuildVersion;
+        public string?   SrcBuildVersion  => ChangedFile.SrcFile?.VersionDisplay;
+        public string?   DstBuildVersion  => ChangedFile.DstFile?.VersionDisplay;
         public string?   SrcHash          => ChangedFile.SrcFile?.DataHash;
         public string?   DstHash          => ChangedFile.DstFile?.DataHash;
+        public string?   DeployedV        => ChangedFile.DstFile?.DeployedProjectVersion ?? ChangedFile.SrcFile?.DeployedProjectVersion;
+        /// <summary>The stored file a Restore should bring back: the pre-change SrcFile when one exists (Modified/Deleted), else the version's own DstFile (Added).</summary>
+        public ProjectFile? RestoreTarget => ChangedFile.SrcFile ?? ChangedFile.DstFile;
 
         public DiffItem(ChangedFile changedFile, bool defaultSelected = true)
         {

@@ -54,6 +54,14 @@ namespace DeployAssistant.DataComponent
         }
         public void Awake()
         {
+            // Wiring only. The previous-project prompt runs later via
+            // PromptPreviousProjectRestore(), after the UI has subscribed to
+            // ProjLoadedEventHandler — prompting here loads the project before
+            // any ViewModel exists to hear about it.
+        }
+
+        public void PromptPreviousProjectRestore()
+        {
             try
             {
                 if (!File.Exists(DAMetaFilePath)) return;
@@ -100,8 +108,34 @@ namespace DeployAssistant.DataComponent
 
         public void SetRecentDstDirectory(string dstPath)
         {
-            LocalConfigData localConfig = new LocalConfigData(dstPath);
+            LocalConfigData localConfig = ReadConfigOrNew();
+            localConfig.LastOpenedDstPath = dstPath;
             _fileHandlerTool.TrySerializeJsonData(DAMetaFilePath, localConfig);
+        }
+
+        public string? GetSavedLanguage() => ReadConfigOrNew().Language;
+
+        public void SaveLanguage(string languageCode)
+        {
+            LocalConfigData localConfig = ReadConfigOrNew();
+            localConfig.Language = languageCode;
+            _fileHandlerTool.TrySerializeJsonData(DAMetaFilePath, localConfig);
+        }
+
+        private LocalConfigData ReadConfigOrNew()
+        {
+            try
+            {
+                if (File.Exists(DAMetaFilePath)
+                    && _fileHandlerTool.TryDeserializeJsonData(DAMetaFilePath, out LocalConfigData? cfg)
+                    && cfg != null)
+                    return cfg;
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning("SettingManager.ReadConfigOrNew: " + ex.Message);
+            }
+            return new LocalConfigData(null);
         }
 
         public void GenerateDefaultProjIgnore(ProjectData projData)
@@ -139,17 +173,25 @@ namespace DeployAssistant.DataComponent
             {
                 if (File.Exists(ignoreMetaFilePath))
                 {
-                    if (!_fileHandlerTool.TryDeserializeJsonData(ignoreMetaFilePath, out ProjectIgnoreData? projectIgnoreData))
+                    if (!_fileHandlerTool.TryDeserializeJsonData(ignoreMetaFilePath, out ProjectIgnoreData? projectIgnoreData)
+                        || projectIgnoreData == null)
                     {
-                        Trace.TraceWarning($"Setting Manager Project Ignore Error, Couldn't Deserialize IgnoreData");
-                        return;
+                        // An unreadable .ignore must never leave the session without an ignore
+                        // context: every later integrity check would silently never complete.
+                        // Preserve the corrupt file for inspection, rebuild defaults, tell the user.
+                        Trace.TraceWarning($"Setting Manager Project Ignore Error, Couldn't Deserialize IgnoreData; regenerating defaults");
+                        try { File.Copy(Utils.PathCompat.ToNetFrameworkLongPath(ignoreMetaFilePath), Utils.PathCompat.ToNetFrameworkLongPath(ignoreMetaFilePath + ".bak"), overwrite: true); }
+                        catch (Exception bakEx) { Trace.TraceWarning($"Could not back up corrupt ignore file: {bakEx.Message}"); }
+                        projectIgnoreData = new ProjectIgnoreData(projectMetaData.ProjectName);
+                        projectIgnoreData.ConfigureDefaultIgnore(projectMetaData.ProjectName);
+                        _fileHandlerTool.TrySerializeJsonData(ignoreMetaFilePath, projectIgnoreData);
+                        _projectIgnoreData = projectIgnoreData;
+                        DialogService.Inform("Ignore File",
+                            $"DeployAssistant.ignore could not be read and was regenerated with defaults.\n" +
+                            $"Custom entries were lost; the unreadable file was kept as DeployAssistant.ignore.bak.\n{ignoreMetaFilePath}");
                     }
                     else
                     {
-                        if (projectIgnoreData == null)
-                        {
-                            throw new ArgumentNullException(nameof(projectIgnoreData));
-                        }
                         // Self-heal legacy .ignore files that were persisted before the
                         // default flag set was expanded.  Re-persist only if anything
                         // actually changed, to keep file mtime stable for unchanged files.

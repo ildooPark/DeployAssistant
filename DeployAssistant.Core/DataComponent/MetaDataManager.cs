@@ -24,6 +24,11 @@ namespace DeployAssistant.DataComponent
         IntegrationValidating,
         Integrating,
         Initializing,
+        /// <summary>
+        /// Held for the whole version-delete mutation window.  Runtime-only, like the rest
+        /// of this enum — it is never serialized, so extending the enum is safe.
+        /// </summary>
+        Deleting,
         Idle
     }
     public class MetaDataManager
@@ -45,6 +50,8 @@ namespace DeployAssistant.DataComponent
         /// (completed, total) — completed runs 0 → total, total = 2 × intersect file count.
         /// </summary>
         public event Action<int, int>? IntegrityProgressEventHandler;
+        /// <summary>Forwarded from FileManager.IntegrityFileProgressEventHandler: (relPath, outcome) per file.</summary>
+        public event Action<string, IntegrityFileOutcome>? IntegrityFileProgressEventHandler;
         public event Action<ProjectData, ProjectData, List<ChangedFile>>? ProjComparisonCompleteEventHandler;
         public event Action<MetaDataState> ManagerStateEventHandler;
         /// <summary>
@@ -55,7 +62,31 @@ namespace DeployAssistant.DataComponent
         /// </summary>
         public event Action<ProjectContext>? ProjectContextLoadedEventHandler;
         public event Action<ProjectData, List<ProjectSimilarity>>? SimilarityCheckCompleteEventHandler;
-        private MetaDataState _currentState; 
+        /// <summary>
+        /// Fires on every <see cref="RequestCheckoutVersion(ProjectData?, CheckoutMode)"/> exit —
+        /// success and failure alike — carrying the reason in <see cref="CheckoutResult.Messages"/>.
+        /// </summary>
+        public event Action<CheckoutResult>? CheckoutCompleteEventHandler;
+        /// <summary>Fires with the plan produced by <see cref="RequestVersionDeletePreview(ProjectData?)"/>.</summary>
+        public event Action<VersionDeletePlan>? VersionDeletePreviewEventHandler;
+        /// <summary>Fires on every <see cref="RequestDeleteVersion(ProjectData?, bool)"/> exit.</summary>
+        public event Action<VersionDeleteResult>? VersionDeleteCompleteEventHandler;
+        /// <summary>Fires on every <see cref="RequestRenameVersion"/> exit.</summary>
+        public event Action<VersionRenameResult>? VersionRenameCompleteEventHandler;
+        /// <summary>
+        /// Fires whenever <see cref="RequestProjectRetrieval(string)"/> fails, carrying the
+        /// structured reason the store could not be read (missing file, corrupt Base64,
+        /// malformed JSON, schema written by a newer build, ...).  Before this existed the
+        /// failure was swallowed into a <see cref="Trace"/> warning and the user saw a silent
+        /// no-op; both the GUI and the CLI subscribe so the cause is shown instead.
+        /// </summary>
+        public event Action<MetaDataLoadResult>? MetaDataLoadFailedEventHandler;
+        private MetaDataState _currentState;
+        /// <summary>
+        /// True while a Request* method owns the state machine end-to-end; sub-manager
+        /// state notifications are dropped for its duration. See <see cref="ManagerStateCallBack"/>.
+        /// </summary>
+        private bool _suppressSubManagerState;
         public MetaDataState CurrentState
         {
             get => _currentState;
@@ -159,6 +190,7 @@ namespace DeployAssistant.DataComponent
             _fileManager.OverlappedFileFoundEventHandler += FileManager_OverlappedFileFoundCallBack;
             _fileManager.IntegrityCheckEventHandler += FileManager_IntegrityCheckCallBack;
             _fileManager.IntegrityProgressEventHandler += FileManager_IntegrityProgressCallBack;
+            _fileManager.IntegrityFileProgressEventHandler += (relPath, outcome) => IntegrityFileProgressEventHandler?.Invoke(relPath, outcome);
             _fileManager.SrcProjectDataLoadedEventHandler += FileManager_SrcProjectLoadedCallBack;
 
             _exportManager.ManagerStateEventHandler += ManagerStateCallBack;
@@ -171,7 +203,30 @@ namespace DeployAssistant.DataComponent
             _settingManager.Awake();
         }
 
+        /// <summary>
+        /// Offers to reopen the last project recorded in DeployAssistant.config.
+        /// Call AFTER the UI has subscribed to the manager events — the resulting
+        /// project load reports back through ProjLoadedEventHandler.
+        /// </summary>
+        public void RequestPreviousProjectRestore() => _settingManager.PromptPreviousProjectRestore();
+
+        public string? RequestSavedLanguage() => _settingManager.GetSavedLanguage();
+
+        public void RequestSaveLanguage(string languageCode) => _settingManager.SaveLanguage(languageCode);
+
         #region View Model Request Calls
+        /// <summary>
+        /// Opens the project at <paramref name="projectPath"/> from its <c>ProjectMetaData.bin</c>.
+        /// <para>
+        /// The store is read as V1 — that is still the runtime on-disk format.  The V1→V2
+        /// migration under <c>DeployAssistant.Core/Migration/</c> is <b>not</b> on this path
+        /// (see <see cref="FileHandlerTool.MaxSupportedMetaDataSchemaVersion"/>); everything
+        /// downstream of here is V1-shaped, so routing through <c>TryLoadProjectStore</c>
+        /// would be a separate, larger change.
+        /// </para>
+        /// Every failure exit raises <see cref="MetaDataLoadFailedEventHandler"/> with the
+        /// reason before returning <c>false</c>, so callers never have to guess.
+        /// </summary>
         public bool RequestProjectRetrieval(string projectPath)
         {
             string projectMetaDataPath = $"{projectPath}\\ProjectMetaData.bin";
@@ -179,8 +234,9 @@ namespace DeployAssistant.DataComponent
             try
             {
                 CurrentState = MetaDataState.Retrieving;
-                _fileHandlerTool.TryDeserializeProjectMetaData(projectMetaDataPath, out ProjectMetaData? retrievedData);
-                if (retrievedData != null)
+                MetaDataLoadResult loadResult =
+                    _fileHandlerTool.TryLoadProjectMetaData(projectMetaDataPath, out ProjectMetaData? retrievedData);
+                if (loadResult.Success && retrievedData != null)
                 {
                     if (retrievedData.ProjectPath != projectPath)
                     {
@@ -196,6 +252,7 @@ namespace DeployAssistant.DataComponent
                 else
                 {
                     CurrentState = MetaDataState.Idle;
+                    MetaDataLoadFailedEventHandler?.Invoke(loadResult);
                     return false;
                 }
             }
@@ -203,6 +260,10 @@ namespace DeployAssistant.DataComponent
             {
                 CurrentState = MetaDataState.Idle;
                 Trace.TraceWarning($"MetaDataManager TryRetrieveProject Error {ex.Message}");
+                MetaDataLoadFailedEventHandler?.Invoke(MetaDataLoadResult.Failed(
+                    MetaDataLoadFailure.Unknown,
+                    $"Could not open the project at '{projectPath}': {ex.Message}",
+                    projectMetaDataPath));
                 return false;
             }
             TryAppendProjParentDirAsProjectFile(MainProjectData, projectPath);
@@ -253,7 +314,7 @@ namespace DeployAssistant.DataComponent
                     ProjectFile newFile = new ProjectFile
                         (
                         ProjectDataType.File,
-                        new FileInfo(filePath).Length,
+                        new FileInfo(PathCompat.ToNetFrameworkLongPath(filePath)).Length,
                         FileVersionInfo.GetVersionInfo(filePath).FileVersion,
                         newProjectData.UpdatedVersion,
                         DateTime.Now,
@@ -363,36 +424,408 @@ namespace DeployAssistant.DataComponent
             return v;
         }
 
-        public bool RequestRevertProject(ProjectData? targetProject)
+        /// <summary>
+        /// Set after a successful version delete. Read-once flag mirroring
+        /// <see cref="LastCheckedOut"/> / <see cref="LastUpdated"/> so a screen can detect
+        /// that the list it is showing just lost an entry.
+        /// </summary>
+        public string? LastDeletedVersion { get; private set; }
+
+        public string? ConsumeLastDeletedVersion()
         {
-            if (targetProject == null)
+            var v = LastDeletedVersion;
+            LastDeletedVersion = null;
+            return v;
+        }
+
+        /// <summary>
+        /// Applies <paramref name="target"/> to the working directory.
+        /// <para>
+        /// <see cref="CheckoutMode.Fast"/> diffs snapshot-to-snapshot;
+        /// <see cref="CheckoutMode.CleanRestore"/> runs a full integrity scan of the
+        /// working directory first, repairing drift that happened outside the app.
+        /// </para>
+        /// Both modes set <see cref="LastCheckedOut"/> and both always raise
+        /// <see cref="CheckoutCompleteEventHandler"/>, so a caller waiting on the event
+        /// never hangs on a silently-rejected request.
+        /// </summary>
+        public bool RequestCheckoutVersion(ProjectData? target, CheckoutMode mode = CheckoutMode.Fast)
+        {
+            List<string> messages = new List<string>();
+
+            if (target == null)
             {
-                Trace.TraceWarning("RequestRevertProject: targetProject is null");
-                return false;
+                messages.Add("No version was selected.");
+                return FailCheckout(null, mode, messages, "RequestCheckoutVersion: target is null");
             }
+            if (MainProjectData == null)
+            {
+                messages.Add("No project is loaded.");
+                return FailCheckout(target, mode, messages, "RequestCheckoutVersion: MainProjectData is null");
+            }
+
+            // Sub-managers drop the state back to Idle when their own step finishes; that
+            // would re-enable ViewModel commands halfway through a checkout. Own the state
+            // machine for the whole operation instead.
+            _suppressSubManagerState = true;
             try
             {
-                List<ChangedFile>? fileDifferences = _fileManager.FindVersionDifferences(targetProject, MainProjectData, true);
+                CurrentState = mode == CheckoutMode.CleanRestore
+                    ? MetaDataState.CleanRestoring
+                    : MetaDataState.Processing;
+
+                List<ChangedFile>? fileDifferences = mode == CheckoutMode.CleanRestore
+                    ? _fileManager.ProjectIntegrityCheck(target)
+                    : _fileManager.FindVersionDifferences(target, MainProjectData, true);
+
                 if (fileDifferences == null)
                 {
-                    Trace.TraceWarning("RequestRevertProject: FindVersionDifferences returned null");
-                    return false;
+                    messages.Add(mode == CheckoutMode.CleanRestore
+                        ? "Clean restore could not compute the file differences."
+                        : "Version comparison could not compute the file differences.");
+                    return FailCheckout(target, mode, messages, "RequestCheckoutVersion: file differences are null");
                 }
-                _backupManager.RevertProject(targetProject, fileDifferences);
-                LastCheckedOut = targetProject;
+
+                CurrentState = MetaDataState.Reverting;
+                _backupManager.RevertProject(target, fileDifferences);
+
+                LastCheckedOut = target;
+                CurrentState = MetaDataState.Idle;
+                CheckoutCompleteEventHandler?.Invoke(
+                    new CheckoutResult(true, target, mode, fileDifferences.Count, messages));
                 return true;
             }
             catch (Exception ex)
             {
-                Trace.TraceError($"RequestRevertProject failed: {ex.Message}");
+                messages.Add($"Checkout failed: {ex.GetType().Name}: {ex.Message}");
+                return FailCheckout(target, mode, messages, $"RequestCheckoutVersion failed: {ex.Message}");
+            }
+            finally
+            {
+                _suppressSubManagerState = false;
+            }
+        }
+
+        /// <summary>Checkout by version tag; resolves against the stored version list.</summary>
+        public bool RequestCheckoutVersion(string versionName, CheckoutMode mode = CheckoutMode.Fast)
+        {
+            ProjectData? target = _backupManager.FindVersion(versionName);
+            if (target == null)
+            {
+                CurrentState = MetaDataState.Idle;
+                CheckoutCompleteEventHandler?.Invoke(new CheckoutResult(false, null, mode, 0,
+                    new List<string> { $"Version '{versionName}' was not found." }));
+                Trace.TraceWarning($"RequestCheckoutVersion: version '{versionName}' not found");
+                return false;
+            }
+            return RequestCheckoutVersion(target, mode);
+        }
+
+        /// <summary>Common checkout failure exit: back to Idle, then report the reason.</summary>
+        private bool FailCheckout(ProjectData? target, CheckoutMode mode, List<string> messages, string traceMessage)
+        {
+            Trace.TraceWarning(traceMessage);
+            CurrentState = MetaDataState.Idle;
+            CheckoutCompleteEventHandler?.Invoke(new CheckoutResult(false, target, mode, 0, messages));
+            return false;
+        }
+
+        [Obsolete("Use RequestCheckoutVersion(target, CheckoutMode.Fast).")]
+        public bool RequestRevertProject(ProjectData? targetProject)
+        {
+            return RequestCheckoutVersion(targetProject, CheckoutMode.Fast);
+        }
+
+        [Obsolete("Use RequestCheckoutVersion(target, CheckoutMode.CleanRestore).")]
+        public void RequestProjectCleanRestore(ProjectData? targetProject)
+        {
+            RequestCheckoutVersion(targetProject, CheckoutMode.CleanRestore);
+        }
+
+        /// <summary>
+        /// Computes — without mutating anything — what deleting <paramref name="target"/>
+        /// would cost and whether it is allowed. Returns <c>null</c> only when no project
+        /// is loaded or no target was supplied.
+        /// </summary>
+        public VersionDeletePlan? RequestVersionDeletePreview(ProjectData? target)
+        {
+            if (target == null)
+            {
+                Trace.TraceWarning("RequestVersionDeletePreview: target is null");
+                return null;
+            }
+            if (_projectMetaData == null)
+            {
+                Trace.TraceWarning("RequestVersionDeletePreview: no project metadata loaded");
+                return null;
+            }
+            VersionDeletePlan plan = BuildDeletePlan(target);
+            VersionDeletePreviewEventHandler?.Invoke(plan);
+            return plan;
+        }
+
+        public VersionDeletePlan? RequestVersionDeletePreview(string versionName)
+        {
+            return RequestVersionDeletePreview(_backupManager.FindVersion(versionName));
+        }
+
+        /// <summary>
+        /// Deletes one version: its exclusive backup blobs, its list entry and its backup
+        /// folder.  Refuses on the current main, on the last remaining version, on an
+        /// unknown version and while the manager is busy.  Always raises
+        /// <see cref="VersionDeleteCompleteEventHandler"/> and always ends on
+        /// <see cref="MetaDataState.Idle"/>.
+        /// </summary>
+        /// <param name="confirmed">Skip the interactive confirmation (CLI <c>--yes</c>, tests).</param>
+        public bool RequestDeleteVersion(ProjectData? target, bool confirmed = false)
+        {
+            if (target == null)
+            {
+                Trace.TraceWarning("RequestDeleteVersion: target is null");
+                RaiseDeleteBlocked("", new List<string> { "No version was selected." });
+                return false;
+            }
+            if (_projectMetaData == null)
+            {
+                RaiseDeleteBlocked(target.UpdatedVersion, new List<string> { "No project is loaded." });
+                return false;
+            }
+
+            VersionDeletePlan plan = BuildDeletePlan(target);
+            if (!plan.CanDelete)
+            {
+                // Reported straight from here: routing a blocked plan through BackupManager
+                // would push the state back to Idle even when the blocker IS a busy manager.
+                RaiseDeleteBlocked(plan.VersionName, new List<string>(plan.Blockers));
+                return false;
+            }
+
+            if (!confirmed)
+            {
+                bool proceed = _dialogService.Confirm("Delete Version",
+                    $"Delete version '{plan.VersionName}'? " +
+                    $"{plan.ExclusiveHashes.Count} backup file(s) will be removed permanently.") == DialogChoice.Yes;
+                if (!proceed)
+                {
+                    RaiseDeleteBlocked(plan.VersionName, new List<string> { "Deletion cancelled." });
+                    return false;
+                }
+            }
+
+            try
+            {
+                CurrentState = MetaDataState.Deleting;
+                VersionDeleteResult result = _backupManager.DeleteVersion(plan);
+                if (result.Success) LastDeletedVersion = result.VersionName;
+                CurrentState = MetaDataState.Idle;
+                VersionDeleteCompleteEventHandler?.Invoke(result);
+                return result.Success;
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError($"RequestDeleteVersion failed: {ex.Message}");
+                CurrentState = MetaDataState.Idle;
+                VersionDeleteCompleteEventHandler?.Invoke(new VersionDeleteResult(
+                    VersionDeleteOutcome.Failed, plan.VersionName,
+                    messages: new List<string> { $"Deletion failed: {ex.GetType().Name}: {ex.Message}" }));
                 return false;
             }
         }
 
-        public void RequestProjectCleanRestore(ProjectData? targetProject)
+        public bool RequestDeleteVersion(string versionName, bool confirmed = false)
         {
-            List<ChangedFile>? fileDifferences = _fileManager.ProjectIntegrityCheck(targetProject);
-            _backupManager.RevertProject(targetProject, fileDifferences);
+            ProjectData? target = _backupManager.FindVersion(versionName);
+            if (target == null)
+            {
+                RaiseDeleteBlocked(versionName, new List<string> { $"Version '{versionName}' was not found." });
+                return false;
+            }
+            return RequestDeleteVersion(target, confirmed);
+        }
+
+        /// <summary>
+        /// Re-tags a stored version: a new <c>UpdatedVersion</c> name, a new
+        /// <c>UpdateLog</c>, or both.  Passing <c>null</c> for either leaves it as-is, so
+        /// editing only the log is always allowed.
+        /// <para>
+        /// The version's backup folder is deliberately NOT renamed.  Backup blobs are
+        /// referenced by absolute <c>DataSrcPath</c>, and moving a folder that other
+        /// snapshots' <c>BackupFiles</c> entries point into means rewriting shared state
+        /// with no atomic way to undo a partial move.  Pinning the folder to the original
+        /// version name costs nothing at runtime — <c>GetFileBackupSrcPath</c> is only
+        /// consulted when registering a snapshot that is NOT yet in the version list, and a
+        /// renamed snapshot is by definition already registered.
+        /// </para>
+        /// </summary>
+        public bool RequestRenameVersion(ProjectData? target, string? newVersionName, string? newUpdateLog)
+        {
+            List<string> messages = new List<string>();
+
+            if (target == null)
+            {
+                messages.Add("No version was selected.");
+                return FailRename(null, "", "", messages);
+            }
+            if (_projectMetaData == null)
+            {
+                messages.Add("No project is loaded.");
+                return FailRename(target, target.UpdatedVersion, target.UpdatedVersion, messages);
+            }
+            if (CurrentState != MetaDataState.Idle)
+            {
+                messages.Add($"Manager is busy ({CurrentState}). Try again once the current operation finishes.");
+                return FailRename(target, target.UpdatedVersion, target.UpdatedVersion, messages);
+            }
+
+            ProjectData? listed = _backupManager.FindVersion(target.UpdatedVersion);
+            if (listed == null)
+            {
+                messages.Add($"Version '{target.UpdatedVersion}' is not part of this project's version list.");
+                return FailRename(target, target.UpdatedVersion, target.UpdatedVersion, messages);
+            }
+
+            string previousName = listed.UpdatedVersion;
+            bool renaming = newVersionName != null && newVersionName != previousName;
+
+            if (renaming && !IsValidVersionName(newVersionName!, out string reason))
+            {
+                messages.Add(reason);
+                return FailRename(listed, previousName, previousName, messages);
+            }
+            if (renaming && _backupManager.FindVersion(newVersionName) != null)
+            {
+                // ProjectData.Equals compares UpdatedVersion only — a duplicate tag would
+                // silently merge two versions everywhere the list is searched.
+                messages.Add($"Version '{newVersionName}' already exists.");
+                return FailRename(listed, previousName, previousName, messages);
+            }
+
+            string previousLog = listed.UpdateLog;
+            bool relogging = newUpdateLog != null && newUpdateLog != previousLog;
+            if (!renaming && !relogging)
+            {
+                messages.Add("Nothing to change.");
+                VersionRenameCompleteEventHandler?.Invoke(new VersionRenameResult(
+                    true, listed, previousName, previousName, false, false, messages));
+                return true;
+            }
+
+            ProjectData? main = MainProjectData;
+            bool targetIsMain = main != null && main.UpdatedVersion == previousName;
+
+            try
+            {
+                CurrentState = MetaDataState.Processing;
+
+                if (renaming)
+                {
+                    listed.UpdatedVersion = newVersionName!;
+                    // ProjectMain is stored separately from ProjectDataList; leaving it on the
+                    // old tag would orphan the main pointer (ProjectData.Equals is tag-only).
+                    if (targetIsMain && main != null) main.UpdatedVersion = newVersionName!;
+                    if (targetIsMain && _projectMetaData.ProjectMain != null)
+                        _projectMetaData.ProjectMain.UpdatedVersion = newVersionName!;
+                }
+                if (relogging)
+                {
+                    listed.UpdateLog = newUpdateLog!;
+                    if (targetIsMain && main != null) main.UpdateLog = newUpdateLog!;
+                    if (targetIsMain && _projectMetaData.ProjectMain != null)
+                        _projectMetaData.ProjectMain.UpdateLog = newUpdateLog!;
+                }
+
+                if (!_backupManager.PersistMetaData(takeBackup: true))
+                {
+                    // Roll the in-memory edit back so the store and the file stay in sync.
+                    if (renaming)
+                    {
+                        listed.UpdatedVersion = previousName;
+                        if (targetIsMain && main != null) main.UpdatedVersion = previousName;
+                        if (targetIsMain && _projectMetaData.ProjectMain != null)
+                            _projectMetaData.ProjectMain.UpdatedVersion = previousName;
+                    }
+                    if (relogging)
+                    {
+                        listed.UpdateLog = previousLog;
+                        if (targetIsMain && main != null) main.UpdateLog = previousLog;
+                        if (targetIsMain && _projectMetaData.ProjectMain != null)
+                            _projectMetaData.ProjectMain.UpdateLog = previousLog;
+                    }
+                    messages.Add("Could not save ProjectMetaData.bin; the version was left unchanged.");
+                    return FailRename(listed, previousName, previousName, messages);
+                }
+
+                if (renaming)
+                {
+                    _projectMetaData.SetProjectMain(_projectMetaData.ProjectMain);
+                    messages.Add($"Backup folder stays named 'Backup_{previousName}'; backup contents are unaffected.");
+                }
+
+                CurrentState = MetaDataState.Idle;
+                _backupManager.FetchBackupProjectList();
+                VersionRenameCompleteEventHandler?.Invoke(new VersionRenameResult(
+                    true, listed, previousName, listed.UpdatedVersion, renaming, relogging, messages));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError($"RequestRenameVersion failed: {ex.Message}");
+                messages.Add($"Rename failed: {ex.GetType().Name}: {ex.Message}");
+                return FailRename(listed, previousName, listed.UpdatedVersion, messages);
+            }
+        }
+
+        private bool FailRename(ProjectData? target, string previousName, string currentName, List<string> messages)
+        {
+            CurrentState = MetaDataState.Idle;
+            VersionRenameCompleteEventHandler?.Invoke(new VersionRenameResult(
+                false, target, previousName, currentName, false, false, messages));
+            return false;
+        }
+
+        /// <summary>
+        /// A version tag becomes a directory leaf (<c>Backup_&lt;UpdatedVersion&gt;</c>), so it
+        /// has to survive as a Windows path segment.
+        /// </summary>
+        private static bool IsValidVersionName(string versionName, out string reason)
+        {
+            if (string.IsNullOrWhiteSpace(versionName))
+            {
+                reason = "Version name cannot be empty.";
+                return false;
+            }
+            if (versionName != versionName.Trim())
+            {
+                reason = "Version name cannot start or end with whitespace.";
+                return false;
+            }
+            if (versionName.EndsWith("."))
+            {
+                reason = "Version name cannot end with a period.";
+                return false;
+            }
+            foreach (char invalid in Path.GetInvalidFileNameChars())
+            {
+                if (versionName.IndexOf(invalid) < 0) continue;
+                reason = $"Version name contains an invalid character ({(char.IsControl(invalid) ? "control character" : invalid.ToString())}).";
+                return false;
+            }
+            reason = "";
+            return true;
+        }
+
+        private VersionDeletePlan BuildDeletePlan(ProjectData target)
+        {
+            VersionDeletePlan plan = _backupManager.BuildVersionDeletePlan(target, MainProjectData);
+            if (CurrentState != MetaDataState.Idle)
+                plan.AddBlocker($"Manager is busy ({CurrentState}). Try again once the current operation finishes.");
+            return plan;
+        }
+
+        private void RaiseDeleteBlocked(string versionName, List<string> messages)
+        {
+            VersionDeleteCompleteEventHandler?.Invoke(
+                new VersionDeleteResult(VersionDeleteOutcome.Blocked, versionName, messages: messages));
         }
 
         public bool RequestRevertChange(ProjectFile file)
@@ -681,6 +1114,10 @@ namespace DeployAssistant.DataComponent
 
         private void ManagerStateCallBack(MetaDataState state)
         {
+            // A composite operation (checkout) drives CurrentState itself; a sub-manager
+            // reporting Idle at the end of its own step must not re-enable ViewModel
+            // commands while the write is still in flight.
+            if (_suppressSubManagerState) return;
             CurrentState = state;
         }
         private void SettingManager_SetLastDstProjectCallBack(string dstProjectPath)
@@ -721,8 +1158,8 @@ namespace DeployAssistant.DataComponent
             {
                 string backupPath = $"{projPath}\\Backup_{projName}";
                 string exportPath = $"{projPath}\\Export_{projName}";
-                if (!Directory.Exists(backupPath)) Directory.CreateDirectory(backupPath);
-                if (!Directory.Exists(exportPath)) Directory.CreateDirectory(exportPath);
+                if (!Directory.Exists(PathCompat.ToNetFrameworkLongPath(backupPath))) Directory.CreateDirectory(PathCompat.ToNetFrameworkLongPath(backupPath));
+                if (!Directory.Exists(PathCompat.ToNetFrameworkLongPath(exportPath))) Directory.CreateDirectory(PathCompat.ToNetFrameworkLongPath(exportPath));
                 return true;
             }
             catch (Exception ex)

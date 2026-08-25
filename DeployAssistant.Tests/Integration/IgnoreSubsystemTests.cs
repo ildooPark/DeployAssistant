@@ -714,5 +714,171 @@ namespace DeployAssistant.Tests.Integration
             Assert.True((exportEntry!.IgnoreType & IgnoreType.Initialization) != 0,
                 "Export_<Name> must carry IgnoreType.Initialization after Fix 4");
         }
+
+        // ------------------------------------------------------------------ 3.6.1 compatibility hardening
+
+        /// <summary>
+        /// An unreadable .ignore must never leave the session without an ignore context —
+        /// SettingManager backs the corrupt file up, regenerates defaults, persists them
+        /// and STILL raises IgnoreDataLoadedEventHandler.
+        /// </summary>
+        [Fact]
+        public void SettingManager_UnreadableIgnoreFile_RegeneratesDefaultsAndKeepsContext()
+        {
+            string projDir = Path.Combine(_tempRoot, "GarbageIgnoreProj");
+            Directory.CreateDirectory(projDir);
+            string ignoreFilePath = Path.Combine(projDir, "DeployAssistant.ignore");
+            byte[] garbage = { 0x00, 0x1F, 0x8B, 0x42, 0x7B, 0x22, 0xFF, 0xFE };
+            File.WriteAllBytes(ignoreFilePath, garbage);
+
+            var settingManager = new SettingManager();
+            ProjectIgnoreData? loadedIgnoreData = null;
+            settingManager.IgnoreDataLoadedEventHandler += (meta, ignore) => loadedIgnoreData = ignore;
+
+            settingManager.MetaDataManager_MetaDataLoadedCallBack(new ProjectMetaData("GarbageIgnoreProj", projDir));
+
+            Assert.NotNull(loadedIgnoreData);
+
+            string bakPath = ignoreFilePath + ".bak";
+            Assert.True(File.Exists(bakPath), "the unreadable .ignore must be preserved as .ignore.bak");
+            Assert.Equal(garbage, File.ReadAllBytes(bakPath));
+
+            var fileHandler = new DeployAssistant.Utils.FileHandlerTool();
+            Assert.True(fileHandler.TryDeserializeJsonData(ignoreFilePath, out ProjectIgnoreData? regenerated));
+            Assert.NotNull(regenerated);
+            Assert.Contains(regenerated!.IgnoreFileList, e => e.DataName == "ProjectMetaData.bin");
+        }
+
+        [Fact]
+        public void EnsureDefaultFlags_AppendsShippedThreeSixOneEntries()
+        {
+            var ignoreData = new ProjectIgnoreData
+            {
+                ProjectName = "AppendProj",
+                IgnoreFileList = new List<RecordedFile>
+                {
+                    new RecordedFile("ProjectMetaData.bin", ProjectDataType.File, IgnoreType.All),
+                    new RecordedFile("*.ignore", ProjectDataType.File, IgnoreType.All),
+                }
+            };
+
+            Assert.True(ignoreData.EnsureDefaultFlags());
+
+            foreach (string requiredName in new[] { "ProductionRecord.db", "configfilepath.txt", "msg_format.dat" })
+            {
+                var entry = ignoreData.IgnoreFileList.FirstOrDefault(
+                    e => e.DataType == ProjectDataType.File && e.DataName == requiredName);
+                Assert.NotNull(entry);
+                Assert.Equal(IgnoreType.All, entry!.IgnoreType);
+            }
+
+            Assert.False(ignoreData.EnsureDefaultFlags());
+        }
+
+        /// <summary>
+        /// A .ignore file exactly as the shipped 3.6.1 wrote it (numeric flags: *.deploy=4,
+        /// Backup/Export=2, All entries=-1) must load, keep the user's custom entry, heal
+        /// *.deploy to the current flag set and keep the three shipped file defaults.
+        /// </summary>
+        [Fact]
+        public void SettingManager_Shipped361IgnoreShape_LoadsHealsAndPreservesCustomEntries()
+        {
+            string projDir = Path.Combine(_tempRoot, "Shipped361IgnoreProj");
+            Directory.CreateDirectory(projDir);
+            string ignoreFilePath = Path.Combine(projDir, "DeployAssistant.ignore");
+
+            string shipped361Json = @"{
+              ""ProjectName"": ""Shipped361IgnoreProj"",
+              ""IgnoreFileList"": [
+                { ""DataType"": 0, ""IgnoreType"": -1, ""UpdatedTime"": ""2024-07-23T09:12:44"", ""DataName"": ""ProjectMetaData.bin"" },
+                { ""DataType"": 0, ""IgnoreType"": -1, ""UpdatedTime"": ""2024-07-23T09:12:44"", ""DataName"": ""*.ignore"" },
+                { ""DataType"": 0, ""IgnoreType"": 4, ""UpdatedTime"": ""2024-07-23T09:12:44"", ""DataName"": ""*.deploy"" },
+                { ""DataType"": 0, ""IgnoreType"": -1, ""UpdatedTime"": ""2024-07-23T09:12:44"", ""DataName"": ""*.VersionLog"" },
+                { ""DataType"": 1, ""IgnoreType"": -1, ""UpdatedTime"": ""2024-07-23T09:12:44"", ""DataName"": ""Export_XLSX"" },
+                { ""DataType"": 0, ""IgnoreType"": -1, ""UpdatedTime"": ""2024-07-23T09:12:44"", ""DataName"": ""ProductionRecord.db"" },
+                { ""DataType"": 0, ""IgnoreType"": -1, ""UpdatedTime"": ""2024-07-23T09:12:44"", ""DataName"": ""configfilepath.txt"" },
+                { ""DataType"": 0, ""IgnoreType"": -1, ""UpdatedTime"": ""2024-07-23T09:12:44"", ""DataName"": ""msg_format.dat"" },
+                { ""DataType"": 1, ""IgnoreType"": 2, ""UpdatedTime"": ""2024-07-23T09:12:44"", ""DataName"": ""Backup_Shipped361IgnoreProj"" },
+                { ""DataType"": 1, ""IgnoreType"": 2, ""UpdatedTime"": ""2024-07-23T09:12:44"", ""DataName"": ""Export_Shipped361IgnoreProj"" },
+                { ""DataType"": 0, ""IgnoreType"": -1, ""UpdatedTime"": ""2024-08-01T00:00:00"", ""DataName"": ""MyLineRecipe.cfg"" }
+              ]
+            }";
+            File.WriteAllText(ignoreFilePath, shipped361Json);
+
+            var settingManager = new SettingManager();
+            ProjectIgnoreData? loaded = null;
+            settingManager.IgnoreDataLoadedEventHandler += (meta, ignore) => loaded = ignore;
+
+            settingManager.MetaDataManager_MetaDataLoadedCallBack(new ProjectMetaData("Shipped361IgnoreProj", projDir));
+
+            Assert.NotNull(loaded);
+
+            // Custom user entry preserved.
+            Assert.Contains(loaded!.IgnoreFileList, e => e.DataName == "MyLineRecipe.cfg" && e.IgnoreType == IgnoreType.All);
+
+            // *.deploy healed from bare Deploy (4) to the current default flag set.
+            var deploy = loaded.IgnoreFileList.First(e => e.DataName == "*.deploy");
+            Assert.True((deploy.IgnoreType & IgnoreType.Initialization) != 0);
+            Assert.True((deploy.IgnoreType & IgnoreType.Integration) != 0);
+            Assert.True((deploy.IgnoreType & IgnoreType.Deploy) != 0);
+
+            // The three shipped 3.6.1 file defaults are still present.
+            foreach (string requiredName in new[] { "ProductionRecord.db", "configfilepath.txt", "msg_format.dat" })
+                Assert.Contains(loaded.IgnoreFileList,
+                    e => e.DataType == ProjectDataType.File && e.DataName == requiredName && e.IgnoreType == IgnoreType.All);
+
+            // The heal was re-persisted to disk, not just applied in memory.
+            var fileHandler = new DeployAssistant.Utils.FileHandlerTool();
+            Assert.True(fileHandler.TryDeserializeJsonData(ignoreFilePath, out ProjectIgnoreData? persisted));
+            var persistedDeploy = persisted!.IgnoreFileList.First(e => e.DataName == "*.deploy");
+            Assert.True((persistedDeploy.IgnoreType & (IgnoreType.Initialization | IgnoreType.Integration)) ==
+                (IgnoreType.Initialization | IgnoreType.Integration));
+            Assert.Contains(persisted.IgnoreFileList, e => e.DataName == "MyLineRecipe.cfg");
+        }
+
+        /// <summary>
+        /// A stale ignore context (loaded for a different project path than the current
+        /// destination) must refuse the integrity check AND still fire the completion
+        /// event — MetaDataManager forwards it verbatim as IntegrityCheckCompleteEventHandler,
+        /// so a silent return here would hang the GUI/CLI forever.
+        /// </summary>
+        [Fact]
+        public void FileManager_StaleProjectContext_RefusesAndFiresCompletionEvent()
+        {
+            string currentProjPath = Path.Combine(_tempRoot, "StaleCtx_Current");
+            string staleCtxPath = Path.Combine(_tempRoot, "StaleCtx_Old");
+            Directory.CreateDirectory(currentProjPath);
+
+            var fileManager = new FileManager();
+            var staleMetaData = new ProjectMetaData("StaleCtxProj", staleCtxPath);
+            fileManager.MetaDataManager_MetaDataLoadedCallBack(staleMetaData);
+
+            var ignoreData = new ProjectIgnoreData("StaleCtxProj");
+            ignoreData.ConfigureDefaultIgnore("StaleCtxProj");
+            fileManager.MetaDataManager_ProjectContextLoadedCallBack(ProjectContext.Create(staleMetaData, ignoreData));
+
+            // The loaded destination project lives somewhere else than the context claims.
+            fileManager.MetaDataManager_ProjLoadedCallback(MakeProjectData(currentProjPath));
+
+            string? capturedLog = null;
+            List<ProjectFile>? capturedFiles = null;
+            var fired = new ManualResetEventSlim(false);
+            fileManager.IntegrityCheckEventHandler += (log, files) =>
+            {
+                capturedLog = log;
+                capturedFiles = files;
+                fired.Set();
+            };
+
+            fileManager.MainProjectIntegrityCheck();
+
+            Assert.True(fired.Wait(TimeSpan.FromSeconds(5)),
+                "IntegrityCheckEventHandler did not fire — the stale-context refusal hung silently");
+            Assert.NotNull(capturedLog);
+            Assert.Contains("refused", capturedLog!, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(staleCtxPath, capturedLog!);
+            Assert.NotNull(capturedFiles);
+            Assert.Empty(capturedFiles!);
+        }
     }
 }

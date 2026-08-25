@@ -465,5 +465,53 @@ namespace DeployAssistant.Tests.Utils
         }
 
         #endregion
+
+        #region NetFramework long-path rerouting (PathCompat)
+        // The runtime effect (switch + \\?\ beating the 260-char limit) is process-global and
+        // cannot be exercised under testhost, whose own startup I/O latches the path mode
+        // first. These pin the string transformations the rerouting is built from; the
+        // end-to-end behavior is exercised by the apps, which call
+        // PathCompat.EnableNetFrameworkLongPaths() before any file I/O.
+
+        [Fact]
+        public void ToNetFrameworkLongPath_LeavesRelativeAndEmptyPathsAlone()
+        {
+            Assert.Equal("", PathCompat.ToNetFrameworkLongPath(""));
+            Assert.Equal(@"sub\file.txt", PathCompat.ToNetFrameworkLongPath(@"sub\file.txt"));
+        }
+
+        [Fact]
+        public void ToNetFrameworkLongPath_IsIdempotent()
+        {
+            string once = PathCompat.ToNetFrameworkLongPath(@"C:\CLE\Sealer\a.dll");
+            Assert.Equal(once, PathCompat.ToNetFrameworkLongPath(once));
+        }
+
+        [Fact]
+        public void ToNetFrameworkLongPath_RoundTripsThroughStrip()
+        {
+            foreach (string p in new[] { @"C:\CLE\Sealer\a.dll", @"\\server\share\deploy\b.dll" })
+            {
+                string prefixed = PathCompat.ToNetFrameworkLongPath(p);
+                Assert.Equal(p, PathCompat.StripNetFrameworkLongPathPrefix(prefixed));
+            }
+        }
+
+        [Fact]
+        public void StripNetFrameworkLongPathPrefix_HandlesBothPrefixForms()
+        {
+            Assert.Equal(@"C:\CLE\Sealer\a.dll", PathCompat.StripNetFrameworkLongPathPrefix(@"\\?\C:\CLE\Sealer\a.dll"));
+            Assert.Equal(@"\\server\share\b.dll", PathCompat.StripNetFrameworkLongPathPrefix(@"\\?\UNC\server\share\b.dll"));
+            Assert.Equal(@"C:\plain\c.dll", PathCompat.StripNetFrameworkLongPathPrefix(@"C:\plain\c.dll"));
+        }
+
+        [Fact]
+        public void ToNetFrameworkLongPath_NormalizesDotSegmentsBeforePrefixing()
+        {
+            string result = PathCompat.ToNetFrameworkLongPath(@"C:\CLE\Sealer\..\Sealer\a.dll");
+            Assert.DoesNotContain(@"\..", result);
+            Assert.EndsWith(@"C:\CLE\Sealer\a.dll", result);
+        }
+        #endregion
     }
 }

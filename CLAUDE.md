@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## SDK requirement
 
-The WPF GUI and test project target `net8.0-windows`; the CLI targets `net472`. Builds require the **.NET 8 SDK** plus the **.NET Framework 4.8 Developer Pack** (which ships the 4.7.2 reference assemblies the CLI needs). Install the SDK from <https://aka.ms/dotnet/download> and the Developer Pack from <https://aka.ms/msbuild/developertools>. A machine without the Developer Pack will fail CLI builds with a missing-target-framework error. Default git branch is `master`, not `main`.
+Every app and test project targets `net472` (the runtime is in-box on Windows 10 1803+); `DeployAssistant.Core` stays `netstandard2.0`. Builds require a **.NET SDK (8+)** plus the **.NET Framework 4.8 Developer Pack** (which ships the 4.7.2 reference assemblies). Install the SDK from <https://aka.ms/dotnet/download> and the Developer Pack from <https://aka.ms/msbuild/developertools>. A machine without the Developer Pack will fail every build with a missing-target-framework error. Paths over 260 chars work through `PathCompat.EnableNetFrameworkLongPaths()` (called at both app entry points) plus the `\\?\` rerouting in `PathCompat.ToNetFrameworkLongPath`; new file I/O added to Core must route paths through it. Default git branch is `master`, not `main`.
 
 ## Common commands
 
@@ -33,7 +33,7 @@ xUnit 2.9.2 is the test framework. There is no enforced formatter; `.editorconfi
 
 ## Architecture in one paragraph
 
-DeployAssistant (assembly name `SimpleBinaryVCS`) is a Windows desktop VCS for binary deployment directories. State of a managed folder is captured as `ProjectMetaData` → many `ProjectData` snapshots → many `ProjectFile` entries keyed by `DataRelPath` and hashed via MD5. The whole thing is serialized as JSON into `ProjectMetaData.bin`. Three sibling JSON files coexist: `DeployAssistant.ignore` (per-operation exclusion lists), `DeployAssistant.deploy` (cached file allocation in a source folder), and `DeployAssistant.config` (in `%USERPROFILE%\Documents`, just remembers last opened path). A V1→V2 schema-migration framework lives under `DeployAssistant.Core/Migration/` — use it when changing persisted shapes; do not break V1 metadata silently.
+DeployAssistant is a Windows desktop VCS for binary deployment directories. State of a managed folder is captured as `ProjectMetaData` → many `ProjectData` snapshots → many `ProjectFile` entries keyed by `DataRelPath` and hashed via MD5. The whole thing is serialized as JSON into `ProjectMetaData.bin`. Three sibling JSON files coexist: `DeployAssistant.ignore` (per-operation exclusion lists), `DeployAssistant.deploy` (cached file allocation in a source folder), and `DeployAssistant.config` (in `%USERPROFILE%\Documents`, just remembers last opened path). A V1→V2 schema-migration framework lives under `DeployAssistant.Core/Migration/` — use it when changing persisted shapes; do not break V1 metadata silently.
 
 ## Manager / event-driven flow (the part you must understand)
 
@@ -56,6 +56,10 @@ When adding new code that touches Windows UI, put the implementation in the WPF 
 `DeployAssistant.CLI` (binary `deployassistant`) targets `net472` and uses `Spectre.Console`. It is published framework-dependent: the output folder contains `deployassistant.exe` plus supporting DLLs; the machine must have .NET Framework 4.7.2 installed (default on Windows 10 1803+). Pass `--yes` to auto-confirm all prompts for non-interactive / CI runs.
 
 Literal `[` / `]` in user-facing strings must be escaped by doubling (`[[options]]`); failing to do so crashes startup (PR #19). The CI smoke test asserts: no-args → exit 0 with "DeployAssistant" in output; `--help` → exit 0; unknown command → exit 1.
+
+## Localization
+
+User-visible GUI strings live in `DeployAssistant/View/Strings.ko-KR.xaml` and `Strings.en-US.xaml` (keys `S.*`); default language is Korean. **Add every new key to BOTH files** — a missing `StaticResource` key crashes startup. Grid column headers must use `StaticResource` (WPF limitation), everything else `DynamicResource`; code-composed strings go through `Loc.T(key, englishFallback)`. Korean terms follow the Pro Git ko translation's hybrid style (Checkout/Stage kept English).
 
 ## UI testing
 

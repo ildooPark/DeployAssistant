@@ -1,9 +1,9 @@
-using AvalonDock.Layout.Serialization;
-using DeployAssistant.Model;
+﻿using DeployAssistant.Model;
 using DeployAssistant.ViewModel;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Windows;
 
 namespace DeployAssistant.View
@@ -13,7 +13,7 @@ namespace DeployAssistant.View
     /// </summary>
     public partial class MainWindow : Window
     {
-        private static readonly string LayoutFilePath = Path.Combine(
+        private static readonly string OrphanedLayoutFilePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "DeployAssistant.layout");
 
@@ -21,10 +21,31 @@ namespace DeployAssistant.View
         {
             InitializeComponent();
 
+            ShowVersionInTitle();
+            RemoveOrphanedLayoutFile();
+
             var services = ((App)Application.Current).Services!;
             var mainVM = new MainViewModel(services);
             SubscribeToViewModelEvents(mainVM);
             this.DataContext = mainVM;
+
+            LanguageSelect.SelectedIndex = ((App)Application.Current).CurrentLanguage == "en-US" ? 1 : 0;
+            _languageSelectReady = true;
+
+            mainVM.MetaDataVM.BusyLog.CollectionChanged += (_, _) => BusyLogScroll.ScrollToEnd();
+
+            Loaded += (_, _) => services.MetaDataManager.RequestPreviousProjectRestore();
+        }
+
+        private bool _languageSelectReady;
+
+        private void LanguageSelect_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (!_languageSelectReady) return;
+            if (LanguageSelect.SelectedItem is not System.Windows.Controls.ComboBoxItem item || item.Tag is not string code) return;
+            var app = (App)Application.Current;
+            app.ApplyLanguage(code);
+            app.Services?.MetaDataManager.RequestSaveLanguage(code);
         }
 
         private void SubscribeToViewModelEvents(MainViewModel mainVM)
@@ -43,34 +64,26 @@ namespace DeployAssistant.View
         //  Window lifecycle                                                   //
         // ------------------------------------------------------------------ //
 
-        private void Window_Loaded(object sender, RoutedEventArgs e)
+        /// <summary>Appends the assembly version to the title so the running build is visible.</summary>
+        private void ShowVersionInTitle()
         {
-            if (File.Exists(LayoutFilePath))
-            {
-                try
-                {
-                    var serializer = new XmlLayoutSerializer(DockManager);
-                    serializer.Deserialize(LayoutFilePath);
-                }
-                catch (Exception ex)
-                {
-                    // Layout file is invalid or from a different version; fall back to default.
-                    Debug.WriteLine($"[DeployAssistant] Could not restore docking layout: {ex.Message}");
-                }
-            }
+            Version? version = Assembly.GetExecutingAssembly().GetName().Version;
+            if (version != null) Title = $"Deploy Assistant  v{version.ToString(3)}";
         }
 
-        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        /// <summary>
+        /// The docking layout was dropped; delete the layout file older builds left in Documents.
+        /// </summary>
+        private static void RemoveOrphanedLayoutFile()
         {
             try
             {
-                var serializer = new XmlLayoutSerializer(DockManager);
-                serializer.Serialize(LayoutFilePath);
+                if (File.Exists(OrphanedLayoutFilePath)) File.Delete(OrphanedLayoutFilePath);
             }
             catch (Exception ex)
             {
-                // Best-effort; inform the developer but do not block the close.
-                Debug.WriteLine($"[DeployAssistant] Could not save docking layout: {ex.Message}");
+                // Best-effort cleanup; a leftover file is harmless and must not block startup.
+                Debug.WriteLine($"[DeployAssistant] Could not remove orphaned layout file: {ex.Message}");
             }
         }
 

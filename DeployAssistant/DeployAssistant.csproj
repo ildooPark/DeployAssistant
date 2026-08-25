@@ -2,28 +2,27 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <IncludeSymbols>False</IncludeSymbols>
-    <FileVersion>1.1</FileVersion>
-    <ApplicationIcon>3700468-archive-document-education-exam-file-test_108747.ico</ApplicationIcon>
+    <!-- GUI semver, independent of the CLI's. MainWindow reads AssemblyVersion for its title. -->
+    <Version>4.0.0</Version>
+    <AssemblyVersion>4.0.0.0</AssemblyVersion>
+    <FileVersion>4.0.0.0</FileVersion>
+    <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="3700468-archive-document-education-exam-file-test_108747.ico" />
+    <!-- Resource (not Content): the Window's Icon="/app.ico" pack URI resolves from the assembly,
+         which also keeps it working in the self-contained single-file publish. -->
+    <Resource Include="app.ico" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="..\.editorconfig" Link=".editorconfig" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Dirkster.AvalonDock" Version="4.74.0" />
-    <PackageReference Include="Dirkster.AvalonDock.Themes.VS2013" Version="4.74.0" />
-    <PackageReference Include="Extended.Wpf.Toolkit" Version="4.6.0" />
   </ItemGroup>
 
   <ItemGroup>

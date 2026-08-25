@@ -24,6 +24,9 @@ internal sealed class TopMenuScreen : Screen
         }
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine(TextStyle.Dim("↑↓ move · enter select · esc back"));
+        // Build stamp — the top menu is also the no-project-loaded landing screen,
+        // so it is the only place a fresh user sees the version without --version.
+        AnsiConsole.MarkupLine(TextStyle.Dim(Markup.Escape(CliVersion.Banner)));
     }
 
     public override ScreenAction Handle(ConsoleKeyInfo key)

@@ -12,7 +12,7 @@ namespace DeployAssistant.CLI.Screens;
 internal sealed class RevisionListScreen : Screen
 {
     private readonly MetaDataManager _mgr;
-    private readonly List<ProjectData> _rows;
+    private List<ProjectData> _rows;
     private readonly SelectableList _list;
     private const int ViewportHeight = 12;
 
@@ -21,6 +21,20 @@ internal sealed class RevisionListScreen : Screen
         _mgr = mgr;
         _rows = mgr.ProjectMetaData?.ProjectDataList?.ToList() ?? new List<ProjectData>();
         _list = new SelectableList(_rows.Count, ViewportHeight);
+    }
+
+    /// <summary>
+    /// The rows are a snapshot of ProjectDataList, so a delete performed further down the
+    /// stack (detail → delete gate) would leave a row here pointing at a version that no
+    /// longer exists. OnEnter runs again every time this screen returns to top-of-stack,
+    /// which is exactly when the snapshot has to be retaken.
+    /// </summary>
+    public override void OnEnter() => RebuildRows();
+
+    private void RebuildRows()
+    {
+        _rows = _mgr.ProjectMetaData?.ProjectDataList?.ToList() ?? _rows;
+        _list.SetItemCount(_rows.Count);  // clamps the selection if the list shrank
     }
 
     public override void Render()
@@ -51,7 +65,7 @@ internal sealed class RevisionListScreen : Screen
             AnsiConsole.MarkupLine(line);
         }
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(TextStyle.Dim("↑↓ move · d/u half-page · enter inspect · esc back"));
+        AnsiConsole.MarkupLine(TextStyle.Dim("↑↓ move · d/u half-page · enter inspect (checkout · rename · delete) · esc back"));
     }
 
     public override ScreenAction Handle(ConsoleKeyInfo key)
@@ -71,6 +85,13 @@ internal sealed class RevisionListScreen : Screen
     {
         if (_mgr.ConsumeLastCheckedOut() != null)
             return ScreenAction.PopAction;
+        if (_mgr.ConsumeLastDeletedVersion() != null)
+        {
+            // Belt-and-braces: OnEnter already retook the snapshot on the way back here.
+            // Consuming the flag stops it leaking into a later visit.
+            RebuildRows();
+            return null;
+        }
         return null;
     }
 }

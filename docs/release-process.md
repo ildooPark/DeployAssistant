@@ -3,7 +3,7 @@
 This document describes the manual release routine for DeployAssistant — how to cut a versioned build, drop it on the team's network share, and append a short release-note toggle in Notion. The same routine is encoded as a skill at `.claude/skills/release-deployassistant/SKILL.md` for AI-assisted execution.
 
 > **Trigger phrases that invoke this routine:**
-> - **Dev drop (default):** "cut a release", "ship a release", "drop a build to Y:", "release vX.Y.Z", "publish release notes"
+> - **Dev drop (default):** "cut a release", "ship a release", "drop a build to Y:", "drop a build to the share", "release vX.Y.Z", "publish release notes"
 > - **Official release (배포 channel):** "make it official", "official release", "promote to 배포", "make it an official release"
 
 ---
@@ -24,8 +24,8 @@ The script never writes to `배포` without the explicit `-Official` switch.
 A release produces, **per component**, in order:
 
 1. **A versioned `.zip`** dropped at:
-   - GUI: `Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\<channel>\<GuiVersion>\` — matches the historical `3.4 / 3.5 / 3.6 / 3.6.1` layout (GUI sits directly under the channel folder; no `gui/` subfolder).
-   - CLI: `Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\<channel>\cli\<CliVersion>\` — under the `cli/` subfolder that already exists on the share.
+   - GUI: `G:\공유 드라이브\SW\Applications\Utility\DeployAssistant\<channel>\<GuiVersion>\` — matches the historical `3.4 / 3.5 / 3.6 / 3.6.1` layout (GUI sits directly under the channel folder; no `gui/` subfolder).
+   - CLI: `G:\공유 드라이브\SW\Applications\Utility\DeployAssistant\<channel>\cli\<CliVersion>\` — under the `cli/` subfolder that already exists on the share.
 2. **Extraction is opt-in** via `-Extract`. Default is zip-only, which matches the share's existing entries.
 3. **A short release-note toggle** appended to the appropriate Notion page (see "Notion pages" below).
 
@@ -42,15 +42,13 @@ The GitHub Actions `release.yml` workflow already publishes source + binary zips
 Contents (files land at the zip root — extract one folder deep):
 
 ```
-DeployAssistant.exe              # self-contained single-file (no runtime install needed)
-framework-dependent\             # only with -IncludeFrameworkDependentGui
-    DeployAssistant.exe
-    <DLLs>
+DeployAssistant.exe              # net472
+<DLLs>
 README.txt
 ```
 
-- **Runtime requirement on the target:** none for the single-file build (bundled .NET 8 Desktop Runtime). The optional framework-dependent flavor needs the .NET 8 Desktop Runtime installed.
-- Source: `dotnet publish DeployAssistant\DeployAssistant.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true`
+- **Runtime requirement on the target:** .NET Framework 4.7.2, an OS component that is in-box on Windows 10 1803 and later — no install, no check.
+- Source: `dotnet publish DeployAssistant\DeployAssistant.csproj -c Release`
 
 ### CLI zip — `DeployAssistant-CLI_v<X.Y.Z>_<YYYYMMDD>_<sha>.zip`
 
@@ -87,7 +85,7 @@ Append directly under the existing `### 🆙 Updates` heading. Match the page's 
 	- <one-line highlight 1>
 	- <one-line highlight 2>
 	- <one-line highlight 3>
-	**Build:** `<shortSha>` · **Drop:** `Y:\...\배포\<X.Y.Z>\` (GUI) or `Y:\...\배포\cli\<X.Y.Z>\` (CLI)
+	**Build:** `<shortSha>` · **Drop:** `G:\...\배포\<X.Y.Z>\` (GUI) or `G:\...\배포\cli\<X.Y.Z>\` (CLI)
 ```
 
 **Watch for `**`/inline-code collisions** — `**`.ignore` parity**` (bold with inline code inside) gets rendered as `**`.ignore`**** parity**` by Notion's markdown processor and looks broken. Either drop the bold around inline-code spans or fix the rendering with a follow-up replacement after the first append.
@@ -122,7 +120,7 @@ The first formal release on this drive is **v1.0.0** (target date TBD).
 - Git working tree clean, on `master` (or a branch about to be merged).
 - .NET 8 SDK on PATH (`dotnet --list-sdks` shows `8.x`).
 - .NET Framework 4.8 Developer Pack installed (for CLI's net472 target — see `CLAUDE.md`).
-- Network access to `Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\`.
+- Network access to `G:\공유 드라이브\SW\Applications\Utility\DeployAssistant\`.
 - Notion MCP available (for the release-note step).
 - No `DeployAssistant.exe` or `deployassistant.exe` processes running locally (they hold file locks on the build output — the script also force-kills them defensively).
 
@@ -157,7 +155,7 @@ All must pass. Capture the count for the release note.
 
 ### 4. Determine the version
 
-Look at the diff against the previous release tag (or the previous `v*` folder on Y: drive `배포\`). Pick MAJOR / MINOR / PATCH per the rules above. State the chosen version explicitly before packaging.
+Look at the diff against the previous release tag (or the previous `v*` folder on G: share `배포\`). Pick MAJOR / MINOR / PATCH per the rules above. State the chosen version explicitly before packaging.
 
 ```powershell
 git log --oneline <previous-release-sha>..HEAD
@@ -175,11 +173,11 @@ GUI and CLI track independent semver. Pass either or both. At least one is requi
 ./scripts/release.ps1 -CliVersion <X.Y.Z>
 ```
 
-This builds, packages, and drops into `Y:\...\DeployAssistant\개발\<GuiVersion>\` (GUI sits directly under the channel folder — matches the historical `3.4`, `3.5`, `3.6.1` layout) and `Y:\...\DeployAssistant\개발\cli\<CliVersion>\`. **No `-Official` flag**. The drop is for validation only — no announcement.
+This builds, packages, and drops into `G:\...\DeployAssistant\개발\<GuiVersion>\` (GUI sits directly under the channel folder — matches the historical `3.4`, `3.5`, `3.6.1` layout) and `G:\...\DeployAssistant\개발\cli\<CliVersion>\`. **No `-Official` flag**. The drop is for validation only — no announcement.
 
 Other useful flags:
-- `-DryRun` — skip the Y: copy entirely (local zip only).
-- `-Extract` — also extract each zip alongside it on Y:. Default is zip-only (matches the historical share entries).
+- `-DryRun` — skip the share copy entirely (local zip only).
+- `-Extract` — also extract each zip alongside it on the share. Default is zip-only (matches the historical share entries).
 - `-IncludeFrameworkDependentGui` — bundle the framework-dependent GUI flavor inside a `framework-dependent\` subfolder of the GUI zip.
 - `-SkipBuild` — skip the `dotnet build` sanity check.
 
@@ -187,7 +185,7 @@ Other useful flags:
 
 ```powershell
 # CLI: extract the zip locally and check --help (mirrors cli-smoke-test.yml in CI)
-Expand-Archive "Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\개발\cli\<CliVersion>\DeployAssistant-CLI_v<CliVersion>_*.zip" "$env:TEMP\cli-smoke" -Force
+Expand-Archive "G:\공유 드라이브\SW\Applications\Utility\DeployAssistant\개발\cli\<CliVersion>\DeployAssistant-CLI_v<CliVersion>_*.zip" "$env:TEMP\cli-smoke" -Force
 & "$env:TEMP\cli-smoke\deployassistant.exe" --help
 
 # GUI: extract the zip and double-click DeployAssistant.exe
@@ -208,7 +206,7 @@ Same outputs, but written to `배포\<GuiVersion>\` and `배포\cli\<CliVersion>
 ### 8. Verify the drop
 
 ```powershell
-Get-ChildItem "Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\배포" -Recurse -Depth 1 |
+Get-ChildItem "G:\공유 드라이브\SW\Applications\Utility\DeployAssistant\배포" -Recurse -Depth 1 |
     Sort-Object FullName | Format-Table FullName, LastWriteTime
 ```
 
@@ -223,7 +221,7 @@ For each component shipped, append (do **not** replace prior content):
 	- <highlight 1>
 	- <highlight 2>
 	- <highlight 3>
-	**Build:** `<shortSha>` · **Drop:** `Y:\...\배포\<gui|cli>\v<X.Y.Z>_<YYYYMMDD>\`
+	**Build:** `<shortSha>` · **Drop:** `G:\...\배포\<gui|cli>\v<X.Y.Z>_<YYYYMMDD>\`
 ```
 
 Newest version at the top of the section's children. 3–6 bullets max. The full skill template is at `.claude/skills/release-deployassistant/SKILL.md`.

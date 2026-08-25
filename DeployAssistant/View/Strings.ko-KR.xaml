@@ -1,0 +1,237 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!-- 용어는 Pro Git 한국어판(git-scm.com/book/ko/v2)의 하이브리드 표기를 따른다:
+         Checkout·Merge·Staging Area는 영문 유지, 커밋·히스토리·버전은 음차, 되돌리기는 순우리말. -->
+
+    <!-- Toolbar -->
+    <sys:String x:Key="S.SetSourceDir">소스 폴더 선택</sys:String>
+    <sys:String x:Key="S.SetDestDir">대상 폴더 선택</sys:String>
+    <sys:String x:Key="S.IntegrityCheck">무결성 검사</sys:String>
+    <sys:String x:Key="S.Checkout">Checkout</sys:String>
+    <sys:String x:Key="S.Safe">안전 모드</sys:String>
+    <sys:String x:Key="S.SafeTooltip">안전 모드: 전체 디렉터리를 스냅샷과 대조해 재해시합니다. 해제하면 기록된 변경분만 적용하는 빠른 Checkout입니다.</sys:String>
+    <sys:String x:Key="S.CheckoutTooltip">버전 히스토리에서 선택한 버전으로 프로젝트를 되돌립니다</sys:String>
+    <sys:String x:Key="S.ProjectLabel">프로젝트: </sys:String>
+    <sys:String x:Key="S.VersionLabel">버전: </sys:String>
+
+    <!-- Panels / tabs -->
+    <sys:String x:Key="S.VersionHistory">버전 히스토리</sys:String>
+    <sys:String x:Key="S.RefreshHistoryTooltip">버전 히스토리 새로고침</sys:String>
+    <sys:String x:Key="S.VersionLog">버전 로그</sys:String>
+    <sys:String x:Key="S.ProjectFiles">프로젝트 파일</sys:String>
+    <sys:String x:Key="S.MetafileCompare">메타파일 비교</sys:String>
+    <sys:String x:Key="S.StagedChanges">Staging Area</sys:String>
+    <sys:String x:Key="S.Actions">작업</sys:String>
+
+    <!-- Actions panel -->
+    <sys:String x:Key="S.Updater">작성자</sys:String>
+    <sys:String x:Key="S.Log">커밋 메시지</sys:String>
+    <sys:String x:Key="S.Clear">비우기</sys:String>
+    <sys:String x:Key="S.Refresh">새로고침</sys:String>
+    <sys:String x:Key="S.Stage">Stage</sys:String>
+    <sys:String x:Key="S.Deploy">배포</sys:String>
+
+    <!-- Row / menu actions -->
+    <sys:String x:Key="S.Restore">복원</sys:String>
+    <sys:String x:Key="S.Revert">되돌리기</sys:String>
+    <sys:String x:Key="S.RevertAll">모두 되돌리기</sys:String>
+    <sys:String x:Key="S.ExportFullVersion">전체 버전 내보내기</sys:String>
+    <sys:String x:Key="S.ExportVersionLog">버전 로그 내보내기</sys:String>
+    <sys:String x:Key="S.CompareWithMain">현재 버전과 비교</sys:String>
+    <sys:String x:Key="S.CompareSrcWithMain">소스를 현재 버전과 비교</sys:String>
+    <sys:String x:Key="S.FullLog">전체 로그</sys:String>
+    <sys:String x:Key="S.SrcFullLog">소스 전체 로그</sys:String>
+    <sys:String x:Key="S.SrcVersionSimilarities">소스 버전 유사도</sys:String>
+    <sys:String x:Key="S.RenameRetag">이름·태그 변경…</sys:String>
+    <sys:String x:Key="S.DeleteVersion">버전 삭제…</sys:String>
+
+    <!-- Metafile Compare tab -->
+    <sys:String x:Key="S.Browse">찾아보기…</sys:String>
+    <sys:String x:Key="S.ExportSyncPackage">동기화 패키지 내보내기</sys:String>
+    <sys:String x:Key="S.ImportSelected">선택 항목 가져오기</sys:String>
+    <sys:String x:Key="S.SelectChanged">✓ 변경 항목 선택</sys:String>
+    <sys:String x:Key="S.DeselectAll">☐ 전체 해제</sys:String>
+    <sys:String x:Key="S.DropVersionLogHere">.VersionLog 파일을 여기에 끌어다 놓으세요</sys:String>
+    <sys:String x:Key="S.OrUseBrowse">또는 위의 찾아보기 버튼을 사용하세요</sys:String>
+
+    <!-- Column headers -->
+    <sys:String x:Key="S.ColRev">Rev</sys:String>
+    <sys:String x:Key="S.ColVersion">버전</sys:String>
+    <sys:String x:Key="S.ColDate">날짜</sys:String>
+    <sys:String x:Key="S.ColBy">작성자</sys:String>
+    <sys:String x:Key="S.ColFilename">파일명</sys:String>
+    <sys:String x:Key="S.ColRelativePath">상대 경로</sys:String>
+    <sys:String x:Key="S.ColBuildV">빌드 버전</sys:String>
+    <sys:String x:Key="S.ColPrevV">이전 버전</sys:String>
+    <sys:String x:Key="S.ColProjectV">프로젝트 버전</sys:String>
+    <sys:String x:Key="S.ColDeployedV">배포 버전</sys:String>
+    <sys:String x:Key="S.ColUpdated">수정 시각</sys:String>
+    <sys:String x:Key="S.ColHash">해시</sys:String>
+    <sys:String x:Key="S.ColState">상태</sys:String>
+    <sys:String x:Key="S.ColName">이름</sys:String>
+    <sys:String x:Key="S.ColPath">경로</sys:String>
+    <sys:String x:Key="S.ColCurrentBuild">현재 빌드</sys:String>
+    <sys:String x:Key="S.ColCurrentHash">현재 해시</sys:String>
+    <sys:String x:Key="S.ColMetafileBuild">메타파일 빌드</sys:String>
+    <sys:String x:Key="S.ColMetafileHash">메타파일 해시</sys:String>
+
+    <!-- Misc -->
+    <sys:String x:Key="S.ByPrefix">작성자: </sys:String>
+
+    <!-- Common (secondary windows) -->
+    <sys:String x:Key="S.Cancel">취소</sys:String>
+    <sys:String x:Key="S.Apply">적용</sys:String>
+    <sys:String x:Key="S.Confirm">확인</sys:String>
+    <sys:String x:Key="S.CopyToClipboard">클립보드에 복사</sys:String>
+    <sys:String x:Key="S.SafeCheckout">안전 Checkout</sys:String>
+    <sys:String x:Key="S.Unnamed">(이름 없음)</sys:String>
+    <sys:String x:Key="S.Unknown">(알 수 없음)</sys:String>
+    <sys:String x:Key="S.Undefined">정의되지 않음</sys:String>
+    <sys:String x:Key="S.IntegrityChecking">무결성 검사 중</sys:String>
+    <sys:String x:Key="S.Filter">필터…</sys:String>
+    <sys:String x:Key="S.FilterFiles">파일 필터…</sys:String>
+    <sys:String x:Key="S.ChangeLog">변경 로그</sys:String>
+    <sys:String x:Key="S.UpdateLog">업데이트 로그</sys:String>
+    <sys:String x:Key="S.VersionInfo">버전 정보</sys:String>
+    <sys:String x:Key="S.SrcPrefix">소스: </sys:String>
+    <sys:String x:Key="S.DstPrefix">대상: </sys:String>
+    <sys:String x:Key="S.SelectedPrefix">선택: </sys:String>
+    <sys:String x:Key="S.ExportDiff">비교 결과 내보내기</sys:String>
+    <sys:String x:Key="S.ExportToXLSX">XLSX로 내보내기</sys:String>
+
+    <!-- Window titles -->
+    <sys:String x:Key="S.Win.CheckoutGate">버전 Checkout</sys:String>
+    <sys:String x:Key="S.Win.DeleteVersion">버전 삭제</sys:String>
+    <sys:String x:Key="S.Win.RenameVersion">버전 이름·태그 변경</sys:String>
+    <sys:String x:Key="S.Win.VersionDiff">버전 비교</sys:String>
+    <sys:String x:Key="S.Win.IntegrityLog">무결성 검사 로그</sys:String>
+    <sys:String x:Key="S.Win.OverlapFile">파일 대상 경로 지정</sys:String>
+    <sys:String x:Key="S.Win.ErrorLog">오류 로그</sys:String>
+    <sys:String x:Key="S.Win.VersionCompatibility">버전 호환성</sys:String>
+
+    <!-- Checkout gate window -->
+    <sys:String x:Key="S.Gate.HeadlineClean">'{1}' 버전으로 {0} 하시겠습니까?</sys:String>
+    <sys:String x:Key="S.Gate.HeadlineDirty">로컬 변경이 감지되었습니다 — '{1}' 버전으로 {0} 하시겠습니까?</sys:String>
+    <sys:String x:Key="S.Gate.UpdatedBy">업데이트: {0:yyyy-MM-dd HH:mm}, 작성자: {1}</sys:String>
+    <sys:String x:Key="S.Gate.CleanDetail">작업 디렉터리가 현재 버전과 일치합니다. 손실되는 내용이 없습니다.</sys:String>
+    <sys:String x:Key="S.Gate.DirtyDetail">작업 디렉터리의 커밋되지 않은 변경 {0}개가 폐기되며 복구할 수 없습니다. 유지하려면 먼저 Stage 후 배포하세요.</sys:String>
+    <sys:String x:Key="S.Gate.NoLocalMods">로컬 변경이 감지되지 않았습니다.</sys:String>
+    <sys:String x:Key="S.Gate.DiscardAndCheckout">로컬 변경을 폐기하고 Checkout</sys:String>
+
+    <!-- Delete window -->
+    <sys:String x:Key="S.Del.Headline">'{0}' 버전을 삭제할까요?</sys:String>
+    <sys:String x:Key="S.Del.Warning">이 작업은 버전을 히스토리에서 영구히 제거하고, 이 버전만 참조하는 백업 파일을 삭제합니다. 되돌릴 수 없습니다.</sys:String>
+    <sys:String x:Key="S.Del.DiskReclaimed">확보되는 디스크 공간</sys:String>
+    <sys:String x:Key="S.Del.BackupRemoved">삭제되는 백업 파일</sys:String>
+    <sys:String x:Key="S.Del.Relocated">먼저 재배치되는 파일</sys:String>
+    <sys:String x:Key="S.Del.SharedKept">유지되는 공유 파일</sys:String>
+    <sys:String x:Key="S.Del.BackupFolder">백업 폴더</sys:String>
+    <sys:String x:Key="S.Del.CannotDelete">이 버전은 삭제할 수 없습니다:</sys:String>
+    <sys:String x:Key="S.Del.FileCount">파일 {0}개</sys:String>
+    <sys:String x:Key="S.Del.RelocationCount">남는 버전과 공유 중인 파일 {0}개</sys:String>
+    <sys:String x:Key="S.Del.FolderKept">{0} (유지됨)</sys:String>
+    <sys:String x:Key="S.Del.DeleteButton">버전 삭제</sys:String>
+
+    <!-- Rename window -->
+    <sys:String x:Key="S.Ren.Headline">'{0}' 이름·태그 변경</sys:String>
+    <sys:String x:Key="S.Ren.Explain">태그를 변경하면 버전이 목록에 표시되고 참조되는 방식이 바뀝니다. 백업 폴더 이름은 그대로 유지됩니다 — 백업 파일은 절대 경로로 저장되며 다른 버전과 공유됩니다.</sys:String>
+    <sys:String x:Key="S.Ren.VersionName">버전 이름</sys:String>
+
+    <!-- Version diff / compatibility windows -->
+    <sys:String x:Key="S.Fmt.FilesChanged">변경된 파일 {0}개</sys:String>
+    <sys:String x:Key="S.Fmt.Added">추가 {0}</sys:String>
+    <sys:String x:Key="S.Fmt.Modified">수정 {0}</sys:String>
+    <sys:String x:Key="S.Fmt.Deleted">삭제 {0}</sys:String>
+    <sys:String x:Key="S.ColSourceFile">소스 파일</sys:String>
+    <sys:String x:Key="S.ColSrcBuildV">소스 빌드 버전</sys:String>
+    <sys:String x:Key="S.ColSrcHash">소스 해시</sys:String>
+    <sys:String x:Key="S.ColDestFile">대상 파일</sys:String>
+    <sys:String x:Key="S.ColDstBuildV">대상 빌드 버전</sys:String>
+    <sys:String x:Key="S.ColDstHash">대상 해시</sys:String>
+    <sys:String x:Key="S.ColSizeSrcDst">크기 (소스→대상)</sys:String>
+    <sys:String x:Key="S.ColFilePath">파일 경로</sys:String>
+    <sys:String x:Key="S.ColSizeB">크기 (B)</sys:String>
+    <sys:String x:Key="S.Cmp.SnapshotHeader">스냅샷 히스토리 — 버전을 선택하면 차이를 확인할 수 있습니다</sys:String>
+    <sys:String x:Key="S.ColDeltaSig">Δ 유의</sys:String>
+    <sys:String x:Key="S.ColDeltaRes">Δ 리소스</sys:String>
+    <sys:String x:Key="S.Tip.DeltaSig">유의미한 차이: 통합 무시 목록(en-US, ko-KR, Resources…) 밖의 파일 수입니다.&#x0a;0 = 소스가 이 스냅샷과 기능적으로 완전히 일치합니다.</sys:String>
+    <sys:String x:Key="S.Tip.DeltaRes">리소스 전용 파일(en-US, ko-KR, Resources)을 포함한 전체 차이 수입니다.&#x0a;리소스 전용 변경이 없으면 Δ 유의와 같습니다.</sys:String>
+
+    <!-- Overlap window -->
+    <sys:String x:Key="S.Ovl.Header">파일 대상 경로 지정</sys:String>
+    <sys:String x:Key="S.Ovl.Explain">일부 소스 파일이 프로젝트의 여러 하위 디렉터리에서 발견되었습니다. 각 파일에 대해 드롭다운에서 올바른 대상 경로를 선택하세요. 일치하는 프로젝트 경로가 없는 새 최상위 파일도 대상 폴더를 지정해야 합니다.</sys:String>
+    <sys:String x:Key="S.Ovl.AmbiguousHeader">중복 파일 — 파일마다 대상 경로 하나를 선택하세요</sys:String>
+    <sys:String x:Key="S.Ovl.NewFilesHeader">새 파일 — 대상 폴더를 선택하세요</sys:String>
+    <sys:String x:Key="S.ColDestPath">대상 경로</sys:String>
+    <sys:String x:Key="S.ColNewFile">새 파일</sys:String>
+    <sys:String x:Key="S.ColDestFolder">대상 폴더</sys:String>
+
+    <!-- Metafile Compare (view model) -->
+    <sys:String x:Key="S.Meta.DropZoneDefault">여기에 .VersionLog 파일을 끌어다 놓거나 위의 찾아보기를 사용하세요</sys:String>
+    <sys:String x:Key="S.Meta.FileNotFound">파일을 찾을 수 없습니다: {0}</sys:String>
+    <sys:String x:Key="S.Meta.OnlyVersionLog">.VersionLog 파일만 지원합니다</sys:String>
+    <sys:String x:Key="S.Meta.SelectMetafile">VersionLog 메타파일 선택</sys:String>
+    <sys:String x:Key="S.Meta.FileFilter">Version Log 파일 (*.VersionLog)|*.VersionLog|모든 파일 (*.*)|*.*</sys:String>
+    <sys:String x:Key="S.Meta.ParseFailed">메타파일을 해석할 수 없습니다: {0}</sys:String>
+    <sys:String x:Key="S.Meta.Loaded">로드됨: {0}  ({1})</sys:String>
+    <sys:String x:Key="S.Meta.OpenProjectFirst"> — 차이를 계산하려면 먼저 프로젝트를 여세요</sys:String>
+    <sys:String x:Key="S.Meta.DiffFailed"> — 차이 계산에 실패했습니다</sys:String>
+
+    <!-- Dialogs -->
+    <sys:String x:Key="S.Dlg.ViewLogTitle">로그 보기</sys:String>
+    <sys:String x:Key="S.Dlg.ViewLogNull">선택된 항목이 없어 로그를 가져올 수 없습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.MustSelectVersion">Checkout할 버전을 선택하세요.</sys:String>
+    <sys:String x:Key="S.Dlg.CheckoutPending">'{0}' Checkout이 아직 무결성 검사를 기다리고 있습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.MustSelectDelete">삭제할 버전을 선택하세요.</sys:String>
+    <sys:String x:Key="S.Dlg.DeletePreviewFailed">'{0}' 삭제 시 제거될 항목을 계산할 수 없습니다. 프로젝트 메타데이터가 로드되지 않았습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.RenameTitle">버전 이름 변경</sys:String>
+    <sys:String x:Key="S.Dlg.MustSelectRename">이름을 변경할 버전을 선택하세요.</sys:String>
+    <sys:String x:Key="S.Dlg.ExportTitle">내보내기</sys:String>
+    <sys:String x:Key="S.Dlg.MustSelectBackup">먼저 백업 버전을 선택하세요.</sys:String>
+    <sys:String x:Key="S.Dlg.ExtractVersionLogTitle">버전 로그 추출</sys:String>
+    <sys:String x:Key="S.Dlg.ExportOpenFailed">{0} 경로가 존재하지 않습니다. 오류: {1}</sys:String>
+    <sys:String x:Key="S.Dlg.CheckoutAborted">중단됨: 로컬 변경 {0}개를 폐기하지 못했습니다(백업이 없을 수 있습니다).</sys:String>
+    <sys:String x:Key="S.Dlg.CheckoutComplete">'{1}' 버전으로 {0} 완료. 파일 변경 {2}개가 적용되었습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.CheckoutFailedTitle">{0} 실패</sys:String>
+    <sys:String x:Key="S.Dlg.CheckoutFailed">'{1}' 버전으로 {0}을 실행하지 못했습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.DeleteComplete">'{0}' 삭제 완료. 백업 항목 {1}개 제거, 파일 {2}개 재배치, {3} 확보.</sys:String>
+    <sys:String x:Key="S.Dlg.DeleteBlocked">'{0}'은(는) 삭제되지 않았습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.DeleteFailed">'{0}' 삭제에 실패했습니다. 버전 목록과 백업은 변경되지 않았습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.RenameFailed">'{0}'의 이름이 변경되지 않았습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.RenameUnchanged">'{0}'은(는) 변경되지 않았습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.RenameDone">'{0}'이(가) '{1}'(으)로 변경되었습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.UpdateLogSaved">'{0}'의 업데이트 로그가 저장되었습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.ErrorTitle">오류</sys:String>
+    <sys:String x:Key="S.Dlg.PickSrcFolder">배포 소스 폴더 선택</sys:String>
+    <sys:String x:Key="S.Dlg.SetSrcPath">먼저 소스 배포 경로를 설정하세요.</sys:String>
+    <sys:String x:Key="S.Dlg.RevertAllConfirm">무결성 검사에서 감지된 변경 {0}개를 모두 현재 버전으로 되돌릴까요?</sys:String>
+    <sys:String x:Key="S.Dlg.RevertChangeTitle">변경 되돌리기</sys:String>
+    <sys:String x:Key="S.Dlg.RevertOnlyIntegrity">무결성 검사에서 감지된 파일에만 적용할 수 있습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.ChangedListEmpty">모델 바인딩 문제: 변경 목록이 비어 있습니다.</sys:String>
+    <sys:String x:Key="S.Dlg.ValidationTitle">입력 확인</sys:String>
+    <sys:String x:Key="S.Dlg.NeedVersionAndUpdater">커밋 메시지와 작성자 이름을 모두 입력하세요.</sys:String>
+    <sys:String x:Key="S.Dlg.OpenProjectFolder">관리 프로젝트 열기</sys:String>
+    <sys:String x:Key="S.Dlg.ImportProjectTitle">프로젝트 가져오기</sys:String>
+    <sys:String x:Key="S.Dlg.InitNewProject">{0}&#x0a;VersionLog 파일을 찾을 수 없습니다.&#x0a;새 프로젝트를 초기화할까요?</sys:String>
+    <sys:String x:Key="S.Dlg.SelectAnotherPath">다른 프로젝트 경로를 선택하세요.</sys:String>
+    <sys:String x:Key="S.Dlg.ImportSyncTitle">가져오기 / 동기화</sys:String>
+    <sys:String x:Key="S.Dlg.ImportSyncConfirm">버전 {1}에 맞추어 파일 변경 {0}개를 Stage하려고 합니다.&#x0a;&#x0a;계속할까요?</sys:String>
+
+    <!-- Busy overlay -->
+    <sys:String x:Key="S.Ovl.Integrity">무결성 검사 중…</sys:String>
+    <sys:String x:Key="S.Ovl.Checkout">Checkout 진행 중…</sys:String>
+    <sys:String x:Key="S.Ovl.Deploying">새 버전 배포 중…</sys:String>
+    <sys:String x:Key="S.Ovl.Deleting">버전 삭제 중…</sys:String>
+    <sys:String x:Key="S.Ovl.Exporting">내보내는 중…</sys:String>
+    <sys:String x:Key="S.Ovl.Working">처리 중…</sys:String>
+    <sys:String x:Key="S.Ovl.Files">{0:N0} / {1:N0} 파일</sys:String>
+    <sys:String x:Key="S.Ovl.Disabled">작업이 끝날 때까지 모든 조작이 비활성화됩니다.</sys:String>
+    <sys:String x:Key="S.Ovl.OutChecked">검사됨</sys:String>
+    <sys:String x:Key="S.Ovl.OutModified">변경됨</sys:String>
+    <sys:String x:Key="S.Ovl.OutAdded">추가됨</sys:String>
+    <sys:String x:Key="S.Ovl.OutDeleted">삭제됨</sys:String>
+    <sys:String x:Key="S.Ovl.OutHashFailed">해시 실패</sys:String>
+    <sys:String x:Key="S.Ovl.OutMetadata">메타데이터 검증</sys:String>
+</ResourceDictionary>

@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DeployAssistant.View"
         mc:Ignorable="d"
-        Title="Version Diff"
+        Title="{DynamicResource S.Win.VersionDiff}"
         Height="560" Width="940"
         MinHeight="400" MinWidth="700"
         WindowStartupLocation="CenterOwner"
@@ -27,19 +27,19 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Foreground="#BBBBBB" FontSize="13" VerticalAlignment="Center">
-                        <Run Text="Src: "/>
+                        <Run Text="{DynamicResource S.SrcPrefix}"/>
                         <Run Text="{Binding SrcProject.UpdatedVersion, FallbackValue='—'}"
                              FontWeight="Bold" Foreground="#4EC9B0"/>
                     </TextBlock>
                     <TextBlock Foreground="#777777" FontSize="13" Margin="10,0" VerticalAlignment="Center" Text="→"/>
                     <TextBlock Foreground="#BBBBBB" FontSize="13" VerticalAlignment="Center">
-                        <Run Text="Dst: "/>
+                        <Run Text="{DynamicResource S.DstPrefix}"/>
                         <Run Text="{Binding DstProject.UpdatedVersion, FallbackValue='—'}"
                              FontWeight="Bold" Foreground="White"/>
                     </TextBlock>
                 </StackPanel>
                 <Button Grid.Column="1"
-                        Content="Export Diff"
+                        Content="{DynamicResource S.ExportDiff}"
                         Padding="10,4" FontSize="12"
                         Command="{Binding ExportDiffFiles}"
                         Style="{StaticResource ToolbarButtonStyle}"/>
@@ -49,13 +49,13 @@
         <!-- ── Summary bar ── -->
         <Border Grid.Row="1" Background="#F5F5F5" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1" Padding="10,4">
             <TextBlock FontSize="12" Foreground="#555555">
-                <Run Text="{Binding TotalCount,  StringFormat='{}{0} files changed', Mode=OneWay}"/>
+                <Run Text="{Binding TotalCount,  StringFormat={StaticResource S.Fmt.FilesChanged}, Mode=OneWay}"/>
                 <Run Text=" — "/>
-                <Run Text="{Binding AddedCount,   StringFormat='{}{0} added',    Mode=OneWay}" Foreground="#388E3C" FontWeight="SemiBold"/>
+                <Run Text="{Binding AddedCount,   StringFormat={StaticResource S.Fmt.Added},    Mode=OneWay}" Foreground="#388E3C" FontWeight="SemiBold"/>
                 <Run Text=" · "/>
-                <Run Text="{Binding ModifiedCount, StringFormat='{}{0} modified', Mode=OneWay}" Foreground="#F57F17" FontWeight="SemiBold"/>
+                <Run Text="{Binding ModifiedCount, StringFormat={StaticResource S.Fmt.Modified}, Mode=OneWay}" Foreground="#F57F17" FontWeight="SemiBold"/>
                 <Run Text=" · "/>
-                <Run Text="{Binding DeletedCount,  StringFormat='{}{0} deleted',  Mode=OneWay}" Foreground="#C62828" FontWeight="SemiBold"/>
+                <Run Text="{Binding DeletedCount,  StringFormat={StaticResource S.Fmt.Deleted},  Mode=OneWay}" Foreground="#C62828" FontWeight="SemiBold"/>
             </TextBlock>
         </Border>
 
@@ -64,7 +64,7 @@
             <TextBox x:Name="FilterDiffInput"
                      Style="{StaticResource FilterBoxStyle}"
                      TextChanged="FileFilterKeyword_TextChanged"/>
-            <TextBlock Text="Filter files…">
+            <TextBlock Text="{DynamicResource S.FilterFiles}">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock" BasedOn="{StaticResource PlaceholderStyle}">
                         <Style.Triggers>
@@ -134,13 +134,13 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn Header="Source File"
+                    <GridViewColumn Header="{StaticResource S.ColSourceFile}"
                                     DisplayMemberBinding="{Binding SrcFile.DataRelPath}"
                                     Width="200"/>
-                    <GridViewColumn Header="Src Build V"
+                    <GridViewColumn Header="{StaticResource S.ColSrcBuildV}"
                                     DisplayMemberBinding="{Binding SrcFile.BuildVersion}"
                                     Width="90"/>
-                    <GridViewColumn Header="Src Hash"
+                    <GridViewColumn Header="{StaticResource S.ColSrcHash}"
                                     Width="75">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
@@ -152,13 +152,13 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn Header="Destination File"
+                    <GridViewColumn Header="{StaticResource S.ColDestFile}"
                                     DisplayMemberBinding="{Binding DstFile.DataRelPath}"
                                     Width="200"/>
-                    <GridViewColumn Header="Dst Build V"
+                    <GridViewColumn Header="{StaticResource S.ColDstBuildV}"
                                     DisplayMemberBinding="{Binding DstFile.BuildVersion}"
                                     Width="90"/>
-                    <GridViewColumn Header="Dst Hash"
+                    <GridViewColumn Header="{StaticResource S.ColDstHash}"
                                     Width="75">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
@@ -170,7 +170,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn Header="Size (src→dst)" Width="110">
+                    <GridViewColumn Header="{StaticResource S.ColSizeSrcDst}" Width="110">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock FontSize="11">

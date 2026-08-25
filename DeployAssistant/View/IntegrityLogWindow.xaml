@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DeployAssistant.View"
         mc:Ignorable="d"
-        Title="Integrity Log"
+        Title="{DynamicResource S.Win.IntegrityLog}"
         Height="640" Width="1300"
         MinHeight="480" MinWidth="900"
         WindowStartupLocation="CenterOwner"
@@ -28,7 +28,7 @@
             </Grid.RowDefinitions>
 
             <!-- Metadata key/value pairs -->
-            <TextBlock Grid.Row="0" Style="{StaticResource HeaderLabelStyle}" Text="Version info"/>
+            <TextBlock Grid.Row="0" Style="{StaticResource HeaderLabelStyle}" Text="{DynamicResource S.VersionInfo}"/>
             <Border Grid.Row="1" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="3">
                 <ItemsControl ItemsSource="{Binding ProjectDataReview}" Margin="4">
                     <ItemsControl.ItemTemplate>
@@ -56,7 +56,7 @@
             </Border>
 
             <!-- ChangeLog -->
-            <TextBlock Grid.Row="2" Style="{StaticResource HeaderLabelStyle}" Text="Change log"/>
+            <TextBlock Grid.Row="2" Style="{StaticResource HeaderLabelStyle}" Text="{DynamicResource S.ChangeLog}"/>
             <TextBox Grid.Row="3"
                      x:Name="ChangeLog"
                      IsReadOnly="True"
@@ -68,7 +68,7 @@
                      ScrollViewer.CanContentScroll="True"/>
 
             <!-- UpdateLog -->
-            <TextBlock Grid.Row="4" Style="{StaticResource HeaderLabelStyle}" Text="Update log"/>
+            <TextBlock Grid.Row="4" Style="{StaticResource HeaderLabelStyle}" Text="{DynamicResource S.UpdateLog}"/>
             <TextBox Grid.Row="5"
                      x:Name="UpdateLog"
                      IsReadOnly="True"
@@ -97,7 +97,7 @@
                     <TextBox x:Name="FileFilterKeyword"
                              TextChanged="FileFilterKeyword_TextChanged"
                              Style="{StaticResource FilterBoxStyle}"/>
-                    <TextBlock Text="Filter files…">
+                    <TextBlock Text="{DynamicResource S.FilterFiles}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock" BasedOn="{StaticResource PlaceholderStyle}">
                                 <Style.Triggers>
@@ -115,7 +115,7 @@
                 </Grid>
                 <Button Grid.Column="1"
                         x:Name="ExportXLSX"
-                        Content="Export to XLSX"
+                        Content="{DynamicResource S.ExportToXLSX}"
                         Padding="10,5" FontSize="13"
                         Command="{Binding ExportToXLSX}"
                         Style="{StaticResource ActionButtonStyle}"/>
@@ -136,7 +136,7 @@
                       AutoGenerateColumns="False">
                 <DataGrid.Columns>
                     <!-- State pill -->
-                    <DataGridTemplateColumn Header="State" Width="56">
+                    <DataGridTemplateColumn Header="{StaticResource S.ColState}" Width="56">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <Border CornerRadius="3" Padding="4,1" Margin="2,1" HorizontalAlignment="Center">
@@ -163,11 +163,11 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="Filename"    Binding="{Binding DataName}"                Width="90"/>
-                    <DataGridTextColumn Header="Build V"     Binding="{Binding BuildVersion}"            Width="100"/>
-                    <DataGridTextColumn Header="File Path"   Binding="{Binding DataRelPath}"             Width="3*"/>
+                    <DataGridTextColumn Header="{StaticResource S.ColFilename}"    Binding="{Binding DataName}"                Width="90"/>
+                    <DataGridTextColumn Header="{StaticResource S.ColBuildV}"      Binding="{Binding BuildVersion}"            Width="100"/>
+                    <DataGridTextColumn Header="{StaticResource S.ColFilePath}"    Binding="{Binding DataRelPath}"             Width="3*"/>
                     <!-- Hash: truncated with full value in tooltip -->
-                    <DataGridTemplateColumn Header="Hash" Width="70">
+                    <DataGridTemplateColumn Header="{StaticResource S.ColHash}" Width="70">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding DataHash}"
@@ -177,9 +177,9 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="Updated"     Binding="{Binding UpdatedTime, StringFormat={}{0:yyyy-MM-dd}}"  Width="85"/>
-                    <DataGridTextColumn Header="Deployed V"  Binding="{Binding DeployedProjectVersion}"  Width="130"/>
-                    <DataGridTextColumn Header="Size (B)"    Binding="{Binding DataSize, StringFormat={}{0:N0}}"   Width="70"/>
+                    <DataGridTextColumn Header="{StaticResource S.ColUpdated}"     Binding="{Binding UpdatedTime, StringFormat={}{0:yyyy-MM-dd}}"  Width="85"/>
+                    <DataGridTextColumn Header="{StaticResource S.ColDeployedV}"   Binding="{Binding DeployedProjectVersion}"  Width="130"/>
+                    <DataGridTextColumn Header="{StaticResource S.ColSizeB}"       Binding="{Binding DataSize, StringFormat={}{0:N0}}"   Width="70"/>
                 </DataGrid.Columns>
             </DataGrid>
         </Grid>

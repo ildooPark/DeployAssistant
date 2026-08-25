@@ -9,6 +9,8 @@ namespace DeployAssistant.CLI
     {
         private static int Main(string[] args)
         {
+            DeployAssistant.Utils.PathCompat.EnableNetFrameworkLongPaths();
+
             // Argument handling: --help / --version short-circuit before launching the TUI.
             // Unknown arguments exit 1 (caught by the CI smoke test); the no-args path
             // falls through to App.Run which either renders the TUI in an interactive
@@ -62,8 +64,30 @@ namespace DeployAssistant.CLI
 
         private static void PrintVersion()
         {
-            var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
-            Console.WriteLine($"DeployAssistant CLI {version}");
+            Console.WriteLine(CliVersion.Banner);
+        }
+    }
+
+    /// <summary>
+    /// Single source of truth for the CLI version string. The assembly version comes from
+    /// &lt;AssemblyVersion&gt; in the csproj, which tracks the CLI's own semver line — the GUI
+    /// versions independently (see docs/release-process.md).
+    /// </summary>
+    internal static class CliVersion
+    {
+        /// <summary>Bare semver ("1.1.0"), or "0.0.0" when the assembly carries no version.</summary>
+        public static string Display { get; } = Resolve();
+
+        /// <summary>Version prefixed with the product name, as printed by --version.</summary>
+        public static string Banner => $"DeployAssistant CLI {Display}";
+
+        private static string Resolve()
+        {
+            // GetName().Version is always 4-part ("1.1.0.0"); trim the revision so the
+            // string matches the semver used for release folders and zip names.
+            var v = Assembly.GetExecutingAssembly().GetName().Version;
+            if (v is null) return "0.0.0";
+            return $"{v.Major}.{v.Minor}.{(v.Build < 0 ? 0 : v.Build)}";
         }
     }
 }

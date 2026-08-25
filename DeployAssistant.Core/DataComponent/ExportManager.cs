@@ -34,7 +34,7 @@ namespace DeployAssistant.DataComponent
             bool exportResult = false;
             while (!exportResult)
             {
-                if (!Directory.Exists(exportDstPath)) Directory.CreateDirectory(exportDstPath);
+                if (!Directory.Exists(PathCompat.ToNetFrameworkLongPath(exportDstPath))) Directory.CreateDirectory(PathCompat.ToNetFrameworkLongPath(exportDstPath));
                 exportResult = _fileHandlerTool.TrySerializeProjectData(projectData, exportVersionLogPath);
                 if (!exportResult)
                 {
@@ -331,8 +331,8 @@ namespace DeployAssistant.DataComponent
                 string exportLogPath  = Path.Combine(exportDstPath, $"{currentProject.UpdatedVersion}.VersionLog");
 
                 // Start with a clean staging directory.
-                if (Directory.Exists(exportDstPath)) Directory.Delete(exportDstPath, true);
-                Directory.CreateDirectory(exportDstPath);
+                if (Directory.Exists(PathCompat.ToNetFrameworkLongPath(exportDstPath))) Directory.Delete(PathCompat.ToNetFrameworkLongPath(exportDstPath), true);
+                Directory.CreateDirectory(PathCompat.ToNetFrameworkLongPath(exportDstPath));
 
                 int exportCount = 0;
                 foreach (ChangedFile diff in selectedDiff)
@@ -383,13 +383,13 @@ namespace DeployAssistant.DataComponent
                 // A diff package that only contains deletions may legitimately have no copied files,
                 // so success must depend on creating the VersionLog rather than exportCount.
                 bool versionLogSerialized = _fileHandlerTool.TrySerializeProjectData(currentProject, exportLogPath);
-                if (!versionLogSerialized || !File.Exists(exportLogPath))
+                if (!versionLogSerialized || !File.Exists(PathCompat.ToNetFrameworkLongPath(exportLogPath)))
                 {
                     exportPath = null;
                     return false;
                 }
 
-                if (File.Exists(exportZipPath)) File.Delete(exportZipPath);
+                if (File.Exists(PathCompat.ToNetFrameworkLongPath(exportZipPath))) File.Delete(PathCompat.ToNetFrameworkLongPath(exportZipPath));
                 ZipFile.CreateFromDirectory(exportDstPath, exportZipPath);
 
                 exportPath = Directory.GetParent(exportDstPath)?.ToString();

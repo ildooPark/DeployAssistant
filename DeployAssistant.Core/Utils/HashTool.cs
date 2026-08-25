@@ -33,11 +33,11 @@ namespace DeployAssistant.Utils
                 result = (null, null);
                 return false;
             }
-            using (var srcStream = File.OpenRead(srcFile))
+            using (var srcStream = File.OpenRead(PathCompat.ToNetFrameworkLongPath(srcFile)))
             {
                 srcHashBytes = md5.ComputeHash(srcStream);
             }
-            using (var dstStream = File.OpenRead(dstFile))
+            using (var dstStream = File.OpenRead(PathCompat.ToNetFrameworkLongPath(dstFile)))
             {
                 dstHashBytes = md5.ComputeHash(dstStream);
             }
@@ -75,7 +75,7 @@ namespace DeployAssistant.Utils
                         Trace.TraceError($"Failed to Initialize MD5 for file {srcFileRelPath}");
                         return "";
                     }
-                    using (var srcStream = File.OpenRead(srcFileFullPath))
+                    using (var srcStream = File.OpenRead(PathCompat.ToNetFrameworkLongPath(srcFileFullPath)))
                     {
                         srcHashBytes = md5.ComputeHash(srcStream);
                     }
@@ -108,7 +108,7 @@ namespace DeployAssistant.Utils
                     Trace.TraceError("Failed to Initialize MD5 Async");
                     return;
                 }
-                using (var srcStream = File.OpenRead(file.DataAbsPath))
+                using (var srcStream = File.OpenRead(PathCompat.ToNetFrameworkLongPath(file.DataAbsPath)))
                 {
                     srcHashBytes = await Task.Run(() => md5.ComputeHash(srcStream));
                 }
@@ -148,7 +148,7 @@ namespace DeployAssistant.Utils
                         Trace.TraceError("Failed to Initialize MD5");
                         return;
                     }
-                    using (var srcStream = File.OpenRead(file.DataAbsPath))
+                    using (var srcStream = File.OpenRead(PathCompat.ToNetFrameworkLongPath(file.DataAbsPath)))
                     {
                         srcHashBytes = md5.ComputeHash(srcStream);
                     }
@@ -181,7 +181,7 @@ namespace DeployAssistant.Utils
                     Trace.TraceError("Failed to Initialize MD5 Async");
                     return null;
                 }
-                using (var srcStream = File.OpenRead(fileFullPath))
+                using (var srcStream = File.OpenRead(PathCompat.ToNetFrameworkLongPath(fileFullPath)))
                 {
                     srcHashBytes = await Task.Run(() => md5.ComputeHash(srcStream));
                 }

@@ -1,0 +1,599 @@
+<title>net48로 내려갈 것인가</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --paper:#F4F5F2;
+  --raised:#FBFCFA;
+  --sunk:#EAECE7;
+  --ink:#1A1D23;
+  --ink-2:#4A505C;
+  --ink-3:#767D8B;
+  --rule:#D6D9D2;
+  --rule-soft:#E3E6E0;
+
+  --measure:#0E6E78;
+  --measure-bg:#E2EFF0;
+  --warn:#9C5A0B;
+  --warn-bg:#F5EADA;
+  --hazard:#A02F2F;
+  --hazard-bg:#F6E3E1;
+  --same:#5A6470;
+  --same-bg:#E6E8E4;
+
+  --net8:#2E5C8A;
+  --net48:#8A5A2E;
+
+  --shadow:0 1px 2px rgba(26,29,35,.06),0 4px 14px rgba(26,29,35,.05);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#15171A;
+    --raised:#1D2024;
+    --sunk:#101215;
+    --ink:#E7E9E3;
+    --ink-2:#AFB5BD;
+    --ink-3:#7D848F;
+    --rule:#31363C;
+    --rule-soft:#262A2F;
+
+    --measure:#5FBDC7;
+    --measure-bg:#12312F;
+    --warn:#D69A4E;
+    --warn-bg:#312614;
+    --hazard:#E58179;
+    --hazard-bg:#3A1E1C;
+    --same:#8A929C;
+    --same-bg:#23262A;
+
+    --net8:#7FAEDC;
+    --net48:#D9A273;
+
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.28);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#15171A;
+  --raised:#1D2024;
+  --sunk:#101215;
+  --ink:#E7E9E3;
+  --ink-2:#AFB5BD;
+  --ink-3:#7D848F;
+  --rule:#31363C;
+  --rule-soft:#262A2F;
+
+  --measure:#5FBDC7;
+  --measure-bg:#12312F;
+  --warn:#D69A4E;
+  --warn-bg:#312614;
+  --hazard:#E58179;
+  --hazard-bg:#3A1E1C;
+  --same:#8A929C;
+  --same-bg:#23262A;
+
+  --net8:#7FAEDC;
+  --net48:#D9A273;
+
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.28);
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;
+  font-weight:400;
+  line-height:1.72;
+  font-size:16px;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px 120px;}
+
+/* ---------- masthead ---------- */
+.mast{padding:72px 0 40px;border-bottom:2px solid var(--ink);margin-bottom:44px;}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-3);margin:0 0 20px;
+}
+h1{
+  font-size:clamp(34px,6vw,60px);line-height:1.08;font-weight:600;letter-spacing:-.02em;
+  margin:0 0 22px;text-wrap:balance;
+}
+.standfirst{font-size:clamp(17px,2.2vw,20px);color:var(--ink-2);max-width:62ch;margin:0 0 28px;font-weight:300;}
+.standfirst strong{font-weight:600;color:var(--ink);}
+.mastmeta{
+  display:flex;flex-wrap:wrap;gap:8px 22px;
+  font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-3);
+}
+
+/* ---------- verdict ---------- */
+.verdict{
+  background:var(--raised);border:1px solid var(--rule);border-left:4px solid var(--hazard);
+  border-radius:3px;padding:26px 28px;margin:0 0 48px;box-shadow:var(--shadow);
+}
+.verdict h2{margin:0 0 12px;font-size:20px;font-weight:600;letter-spacing:-.01em;}
+.verdict p{margin:0 0 12px;color:var(--ink-2);max-width:66ch;}
+.verdict p:last-child{margin-bottom:0;}
+.verdict strong{color:var(--ink);font-weight:600;}
+
+/* ---------- stat row ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin:0 0 52px;}
+.stat{background:var(--raised);border:1px solid var(--rule);border-radius:3px;padding:18px 20px;}
+.stat .k{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink-3);margin:0 0 8px;
+}
+.stat .v{
+  font-family:"IBM Plex Mono",monospace;font-size:27px;font-weight:600;line-height:1.1;
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin:0 0 6px;
+}
+.stat .n{font-size:13px;color:var(--ink-2);line-height:1.5;}
+.stat.good .v{color:var(--measure);}
+.stat.bad .v{color:var(--hazard);}
+.stat.mid .v{color:var(--warn);}
+
+/* ---------- sections ---------- */
+section{margin:0 0 62px;scroll-margin-top:24px;}
+h2.sec{
+  font-size:13px;font-family:"IBM Plex Mono",monospace;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 10px;padding-bottom:10px;border-bottom:1px solid var(--rule);
+}
+h3{font-size:25px;font-weight:600;letter-spacing:-.015em;margin:0 0 16px;text-wrap:balance;line-height:1.25;}
+h4{font-size:17px;font-weight:600;margin:32px 0 12px;letter-spacing:-.005em;}
+p{margin:0 0 16px;max-width:68ch;color:var(--ink-2);}
+p strong,li strong{color:var(--ink);font-weight:600;}
+ul{margin:0 0 18px;padding-left:20px;max-width:68ch;color:var(--ink-2);}
+li{margin-bottom:8px;}
+code{
+  font-family:"IBM Plex Mono",monospace;font-size:.875em;
+  background:var(--sunk);border:1px solid var(--rule-soft);border-radius:2px;
+  padding:1px 5px;color:var(--ink);white-space:nowrap;
+}
+
+/* ---------- chips ---------- */
+.chip{
+  display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:10px;
+  letter-spacing:.09em;text-transform:uppercase;font-weight:600;
+  padding:2px 7px;border-radius:2px;white-space:nowrap;vertical-align:middle;
+}
+.chip.m{background:var(--measure-bg);color:var(--measure);}
+.chip.e{background:var(--warn-bg);color:var(--warn);}
+.chip.h{background:var(--hazard-bg);color:var(--hazard);}
+.chip.s{background:var(--same-bg);color:var(--same);}
+
+/* ---------- diff rows ---------- */
+.diffs{display:flex;flex-direction:column;gap:10px;margin:0 0 26px;}
+.diff{
+  display:grid;grid-template-columns:1.5fr 1fr 1fr 1.1fr;gap:0;
+  background:var(--raised);border:1px solid var(--rule);border-radius:3px;
+  border-left:4px solid var(--same);overflow:hidden;
+}
+.diff.same{border-left-color:var(--same);}
+.diff.slower{border-left-color:var(--warn);}
+.diff.behav{border-left-color:var(--net48);}
+.diff.hazard{border-left-color:var(--hazard);}
+.diff > div{padding:13px 16px;border-right:1px solid var(--rule-soft);}
+.diff > div:last-child{border-right:none;}
+.diff .lbl{font-weight:500;color:var(--ink);font-size:14.5px;line-height:1.45;}
+.diff .lbl small{display:block;font-weight:400;color:var(--ink-3);font-size:12px;margin-top:3px;line-height:1.4;}
+.diff .val{
+  font-family:"IBM Plex Mono",monospace;font-size:14px;font-variant-numeric:tabular-nums;
+  color:var(--ink-2);
+}
+.diff .val em{display:block;font-style:normal;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px;}
+.diff .v8 em{color:var(--net8);}
+.diff .v48 em{color:var(--net48);}
+.diff .vd{font-size:13px;color:var(--ink-2);line-height:1.45;}
+.diffhead{
+  display:grid;grid-template-columns:1.5fr 1fr 1fr 1.1fr;gap:0;
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);padding:0 0 8px;border-left:4px solid transparent;
+}
+.diffhead > div{padding:0 16px;}
+@media(max-width:760px){
+  .diff,.diffhead{grid-template-columns:1fr 1fr;}
+  .diff > div{border-right:none;border-bottom:1px solid var(--rule-soft);}
+  .diff .lbl{grid-column:1/-1;}
+  .diffhead{display:none;}
+}
+
+/* ---------- failure flow ---------- */
+.flow{
+  display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin:0 0 22px;
+  background:var(--raised);border:1px solid var(--rule);border-radius:3px;padding:22px 20px;
+  overflow-x:auto;
+}
+.fstep{
+  flex:1 1 150px;min-width:150px;padding:0 16px;position:relative;
+  border-left:2px solid var(--rule-soft);
+}
+.fstep:first-child{border-left:none;}
+.fstep .fn{
+  font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.12em;
+  color:var(--ink-3);margin-bottom:7px;
+}
+.fstep .ft{font-size:13.5px;line-height:1.5;color:var(--ink-2);}
+.fstep .ft b{color:var(--ink);font-weight:600;display:block;margin-bottom:4px;}
+.fstep.end{border-left-color:var(--hazard);}
+.fstep.end .ft b{color:var(--hazard);}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;margin:0 0 22px;border:1px solid var(--rule);border-radius:3px;background:var(--raised);}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:520px;}
+th{
+  text-align:left;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--ink-3);font-weight:500;
+  padding:12px 16px;border-bottom:1px solid var(--rule);white-space:nowrap;
+}
+td{padding:11px 16px;border-bottom:1px solid var(--rule-soft);color:var(--ink-2);vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+td.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap;}
+td.win{color:var(--measure);font-weight:500;}
+td.lose{color:var(--hazard);font-weight:500;}
+th.r,td.r{text-align:right;}
+
+/* ---------- console ---------- */
+.console{
+  background:var(--sunk);border:1px solid var(--rule);border-radius:3px;
+  font-family:"IBM Plex Mono",monospace;font-size:12.5px;line-height:1.65;
+  padding:16px 18px;overflow-x:auto;margin:0 0 22px;color:var(--ink-2);
+  white-space:pre;
+}
+.console .cap{
+  display:block;white-space:normal;font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--rule-soft);
+}
+.console b{color:var(--hazard);font-weight:600;}
+.console i{color:var(--measure);font-style:normal;font-weight:600;}
+
+/* ---------- callout ---------- */
+.call{
+  border:1px solid var(--rule);border-left:4px solid var(--warn);background:var(--raised);
+  border-radius:3px;padding:18px 22px;margin:0 0 24px;
+}
+.call.hz{border-left-color:var(--hazard);}
+.call.ok{border-left-color:var(--measure);}
+.call p{margin:0;max-width:70ch;}
+.call p + p{margin-top:10px;}
+.call .ct{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 8px;display:block;
+}
+
+/* ---------- work items ---------- */
+.work{display:flex;flex-direction:column;gap:8px;margin:0 0 24px;}
+.wi{
+  display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:start;
+  background:var(--raised);border:1px solid var(--rule);border-radius:3px;padding:14px 18px;
+}
+.wi .no{
+  font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-3);
+  font-variant-numeric:tabular-nums;padding-top:2px;
+}
+.wi .wt{font-size:14.5px;color:var(--ink);line-height:1.5;}
+.wi .wt small{display:block;color:var(--ink-3);font-size:12.5px;margin-top:3px;font-weight:400;}
+@media(max-width:600px){.wi{grid-template-columns:auto 1fr;}.wi .chip{grid-column:2;justify-self:start;}}
+
+.foot{border-top:1px solid var(--rule);padding-top:22px;margin-top:60px;
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-3);line-height:1.9;}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">DeployAssistant · 이전 영향 분석</p>
+  <h1>net48로 내려갈 것인가</h1>
+  <p class="standfirst">추정하지 않고 <strong>실제로 다운그레이드해서 측정했다.</strong> 컴파일 비용은 예상보다 훨씬 싸다 — shim 파일 하나, LangVersion 두 줄, TFM 다섯 개. 하지만 그 대가로 무결성 도구가 <strong>260자 넘는 경로에서 조용히 틀린 답을 내게 된다.</strong></p>
+  <div class="mastmeta">
+    <span>측정일 2026-08-20</span>
+    <span>GUI 3.8.0 · CLI 1.2.0</span>
+    <span>Windows 11 26200</span>
+    <span>LongPathsEnabled = 0</span>
+  </div>
+</header>
+
+<div class="verdict">
+  <h2>결론</h2>
+  <p><strong>이전 자체는 값싸다. 문제는 이전이 무엇을 잃게 하느냐다.</strong> 전체 솔루션을 net48로 돌렸을 때 컴파일 에러는 <strong>단 3개, 모두 같은 원인</strong>(<code>OpenFolderDialog</code>)이었고, shim 하나로 해결됐다. 테스트 478개 전부 통과, GUI 정상 실행, CLI 스모크 통과.</p>
+  <p>그런데 <strong>net48을 정당화하던 근거가 이번 측정에서 사라졌다.</strong> 페이로드 절감이 이유였는데, AvalonDock·Xceed를 걷어낸 지금 net48(zip 2.18 MB)은 <strong>net8 framework-dependent(1.88 MB)보다 오히려 크다.</strong> 패키지 자산 논쟁도 대상이 없어졌다.</p>
+  <p>남은 순이득은 시작 70 ms와 유휴 메모리 50 MB다. 잃는 것은 긴 경로 처리 능력, 1.4배 느린 파일 열거, 2–3배 느린 JSON, 그리고 직접 관리해야 하는 COM 폴더 선택기다.</p>
+</div>
+
+<div class="stats">
+  <div class="stat good">
+    <p class="k">컴파일 비용</p>
+    <p class="v">3</p>
+    <p class="n">에러 전부가 <code>OpenFolderDialog</code> 하나. shim 145줄로 해결, 호출부 수정 0</p>
+  </div>
+  <div class="stat good">
+    <p class="k">net48 테스트</p>
+    <p class="v">478/478</p>
+    <p class="n">실패 0, skip 0. xUnit·SDK 버전 변경 없이 그대로 통과</p>
+  </div>
+  <div class="stat bad">
+    <p class="k">긴 경로</p>
+    <p class="v">1 / 2</p>
+    <p class="n">370자 경로에서 파일 2개 중 1개만 열거. <strong>예외 없음</strong></p>
+  </div>
+  <div class="stat mid">
+    <p class="k">페이로드 (zip)</p>
+    <p class="v">2.18</p>
+    <p class="n">MB. net8 FDD 1.88 MB보다 <strong>큼</strong> — 절감 논거 소멸</p>
+  </div>
+</div>
+
+<section>
+  <h2 class="sec">01 — 이전 비용</h2>
+  <h3>실제로 해봤고, 거의 공짜였다</h3>
+  <p>스크래치 사본에서 5개 프로젝트의 TFM을 전부 <code>net48</code>로 바꾸고 빌드했다. 감시 목록에 올려둔 위험 API는 <strong>단 하나도 걸리지 않았다.</strong></p>
+  <p>이유는 명확하다. <code>DeployAssistant.Core</code>가 <code>netstandard2.0</code>을 타깃하고 있고, 이건 net48 표면의 진부분집합이다. 즉 <strong>코드베이스는 이미 오래전부터 모던 BCL API를 쓸 수 없는 상태였다.</strong> <code>Path.GetRelativePath</code>와 <code>Dictionary.TryAdd</code>는 이미 <code>CompatHelper.cs</code>에 폴리필돼 있고, <code>IsExternalInit</code> shim도 Core와 CLI에 이미 있다.</p>
+
+  <div class="console"><span class="cap">유일한 컴파일 에러 — 3곳, 동일 원인</span>DeployAssistant\Services\WpfDialogService.cs(32,27):    <b>error CS0246</b>: 'OpenFolderDialog' 을(를) 찾을 수 없습니다
+DeployAssistant\ViewModel\FileTrackViewModel.cs(144,41): <b>error CS0246</b>: ...
+DeployAssistant\ViewModel\MetaDataViewModel.cs(155,30):  <b>error CS0246</b>: ...</div>
+
+  <p><code>Microsoft.Win32.OpenFolderDialog</code>는 .NET 8 WPF 전용이다. PR #20에서 WinForms를 걷어내며 <code>FolderBrowserDialog</code>를 대체한 그 API다. Win32 <code>IFileOpenDialog</code> + <code>FOS_PICKFOLDERS</code>로 약 145줄짜리 shim을 만들면 <strong>호출부는 한 줄도 안 바꿔도 된다</strong> — .NET 8이 내부적으로 하는 것과 같은 일이다.</p>
+
+  <div class="console"><span class="cap">shim 적용 후 최종 빌드</span>    1031 Warning(s)
+    <i>0 Error(s)</i>
+
+Time Elapsed 00:00:01.81
+
+<i>Passed!</i> - Failed: 0, Passed: 356, Skipped: 0, Total: 356 - DeployAssistant.Tests.dll (net48)
+<i>Passed!</i> - Failed: 0, Passed: 122, Skipped: 0, Total: 122 - DeployAssistant.CLI.Tests.dll (net48)
+
+GUI: HasExited=False  MainWindowTitle=[Deploy Assistant  v3.8.0]  Responding=True
+CLI: --help EXITCODE=0 · no-args EXITCODE=0 · unknown EXITCODE=1</div>
+
+  <p>경고는 net8 대조군 대비 <strong>+2개뿐</strong>이고, 그 2개마저 전부 shim에서 나온 <code>CS8601</code>(nullable 대입)이다. 릴리즈 게이트가 "V1-obsolete 외 신규 경고에서 중단"이므로 이건 고치고 넘어가야 한다.</p>
+
+  <div class="call">
+    <span class="ct">숨은 취약점 <span class="chip m">실측</span></span>
+    <p>GUI의 4곳이 <code>string.Contains(string, StringComparison)</code>를 쓴다. <strong>이 오버로드는 net48에 없다</strong>(단독 프로브에서 <code>CS1501</code> 확인). 그런데도 컴파일되는 이유는 <code>System.Memory</code> 4.5.5가 확장 메서드로 공급하기 때문이고, GUI는 그 패키지를 <strong>직접 참조하지 않는다</strong> — <code>Core → System.Text.Json → System.Memory</code>로 전이돼 온다.</p>
+    <p>즉 <strong>선언하지도 않은 의존성의 전이 패키지에 컴파일이 걸려 있다.</strong> 나중에 Core에서 <code>System.Text.Json</code>을 걷어내면 전혀 무관한 UI 파일 4개가 알 수 없는 <code>CS1501</code>로 깨진다. net48로 간다면 <code>System.Memory</code>를 명시적으로 참조해야 한다.</p>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec">02 — CLI</h2>
+  <h3>CLI는 아무것도 안 바뀐다. 이미 net48에서 돌고 있으니까</h3>
+  <p>CLI는 이미 <code>net472</code>이고 Core는 <code>netstandard2.0</code>이다. netstandard2.0은 <strong>참조 전용 계약</strong>이라 런타임에는 <code>mscorlib</code>로 그대로 타입 포워딩된다 — netstandard BCL 구현체 같은 건 없다. 그래서 CLI의 <code>File.*</code>, <code>Directory.*</code>, <code>MD5.*</code>는 <strong>오늘 이미 .NET Framework BCL에서 실행되고 있다.</strong></p>
+  <p>프로브가 직접 확인해준다. net472 앱이 보고하는 <code>RuntimeVersion</code>은 이미 <strong>4.8</strong>이다. net472와 net48의 차이는 컴파일 타임 참조 어셈블리와 <code>TargetFrameworkAttribute</code>일 뿐이고, 머신은 어느 쪽이든 in-place 4.8 런타임 하나를 돌린다.</p>
+
+  <div class="console"><span class="cap">동일 프로브 · 동일 Core · 동일 코퍼스 — (A) 오늘의 CLI vs (C) Core까지 net48</span>### (A) net472  = 오늘 출하 중인 CLI (Core=netstandard2.0)
+  File.Exists(deep)                                       : False
+  HashTool.GetFileMD5CheckSum(root, DEEPrel)              : ""
+  Directory.GetFiles(root,*,AllDirectories).Length        : 1
+  ProjectScanner.EnumerateFiles(root).Count()             : 1
+
+### (C) net48   (Core도 net48로 전환)
+  File.Exists(deep)                                       : False
+  HashTool.GetFileMD5CheckSum(root, DEEPrel)              : ""
+  Directory.GetFiles(root,*,AllDirectories).Length        : 1
+  ProjectScanner.EnumerateFiles(root).Count()             : 1</div>
+
+  <p><strong>한 줄도 다르지 않다.</strong> 패키지 자산도 전부 동일하게 해결된다. CLI에 관한 한 net472 → net48은 <strong>완전한 no-op</strong>이며, 달라지는 건 요구 런타임 최소치가 4.7.2에서 4.8로 올라가는 것뿐이다.</p>
+  <p><code>Spectre.Console</code> 0.49.1은 <code>lib/</code>에 <code>net6.0 · net7.0 · net8.0 · netstandard2.0</code>만 있고 net4x 자산이 없다. 양쪽 다 <code>netstandard2.0</code>으로 떨어져 <strong>동일</strong>하다 — 교체 불필요.</p>
+
+  <div class="call hz">
+    <span class="ct">그런데 이게 좋은 소식이 아니다 <span class="chip h">중요</span></span>
+    <p>"CLI는 안 바뀐다"는 말은 곧 <strong>긴 경로 버그가 CLI에는 이미 오늘 존재한다</strong>는 뜻이다. 미래의 위험이 아니라 출하 중인 net472 빌드의 현재 상태다.</p>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec">03 — 위험</h2>
+  <h3>260자를 넘으면 조용히 틀린 답을 낸다</h3>
+  <p>370자 경로에 파일을 두고 <strong>실제 <code>DeployAssistant.Core</code></strong>(<code>HashTool</code>, <code>ProjectScanner</code>, <code>FileHandlerTool</code>, <code>ProjectFile</code>)로 양쪽 런타임에서 돌렸다.</p>
+
+  <div class="diffhead">
+    <div>동작</div><div>.NET 8</div><div>net48</div><div>판정</div>
+  </div>
+  <div class="diffs">
+    <div class="diff hazard">
+      <div class="lbl">파일 열거<small>Directory.GetFiles(AllDirectories)</small></div>
+      <div class="val v8"><em>net8</em>2개 중 2개</div>
+      <div class="val v48"><em>net48</em>2개 중 <strong>1개</strong></div>
+      <div class="vd"><span class="chip h">조용한 오답</span> 예외 없음</div>
+    </div>
+    <div class="diff hazard">
+      <div class="lbl">디렉터리 열거<small>ProjectScanner.EnumerateDirectories</small></div>
+      <div class="val v8"><em>net8</em>8개 중 8개</div>
+      <div class="val v48"><em>net48</em>8개 중 <strong>6개</strong></div>
+      <div class="vd"><span class="chip h">조용한 오답</span> 예외 없음</div>
+    </div>
+    <div class="diff hazard">
+      <div class="lbl">파일 존재 확인<small>File.Exists</small></div>
+      <div class="val v8"><em>net8</em>True</div>
+      <div class="val v48"><em>net48</em><strong>False</strong></div>
+      <div class="vd"><span class="chip h">조용한 오답</span> 실재하는 파일</div>
+    </div>
+    <div class="diff hazard">
+      <div class="lbl">최종 수정 시각<small>File.GetLastWriteTime</small></div>
+      <div class="val v8"><em>net8</em>2026-08-20</div>
+      <div class="val v48"><em>net48</em><strong>1601-01-01</strong></div>
+      <div class="vd"><span class="chip h">조용한 오답</span> 센티넬 값</div>
+    </div>
+    <div class="diff behav">
+      <div class="lbl">MD5 해시<small>HashTool.GetFileMD5CheckSum</small></div>
+      <div class="val v8"><em>net8</em>0CCC3D96…</div>
+      <div class="val v48"><em>net48</em><code>""</code></div>
+      <div class="vd"><span class="chip e">예외 삼킴</span> 빈 센티넬</div>
+    </div>
+    <div class="diff behav">
+      <div class="lbl">메타데이터 저장<small>TrySerializeProjectMetaData</small></div>
+      <div class="val v8"><em>net8</em>True</div>
+      <div class="val v48"><em>net48</em><strong>False</strong></div>
+      <div class="vd"><span class="chip e">예외 삼킴</span> 실패 반환</div>
+    </div>
+  </div>
+
+  <h4>매니페스트로도 못 고친다</h4>
+  <p><code>longPathAware</code> 애플리케이션 매니페스트와 <code>AppContext</code> 스위치(<code>UseLegacyPathHandling=false</code>, <code>BlockLongPaths=false</code>)를 붙인 변형(B)을 따로 빌드해 돌렸다. 결과는 <strong>순수 net472와 완전히 동일</strong>했다. <code>LongPathsEnabled=0</code>이면 OS가 여전히 <code>MAX_PATH</code>를 강제하기 때문이다.</p>
+  <p>.NET Core/8은 내부적으로 <code>\\?\</code>를 붙여 이 전부를 우회한다. <strong>긴 경로 지원은 net472 대 net48의 문제가 아니라 .NET 플레이버 자체의 속성이다.</strong> GUI를 net48로 내리는 것은 곧 <strong>GUI에게 CLI가 이미 가진 버그를 넘겨주는 일</strong>이다.</p>
+
+  <h4>그리고 실제 피해는 "조용함"보다 나쁘다</h4>
+  <p>깊은 경로의 파일은 애초에 열거되지 않으므로 <code>intersectFiles</code>에 들어가지 못한다. 즉 <strong>메타데이터 폴백 검증에 도달조차 못 한다.</strong> 그 다음에 무슨 일이 일어나는지는 스냅샷을 누가 만들었느냐에 갈린다.</p>
+
+  <div class="flow">
+    <div class="fstep">
+      <div class="fn">1</div>
+      <div class="ft"><b>GUI(net8)가 스냅샷 생성</b>370자 파일이 정상적으로 기록됨</div>
+    </div>
+    <div class="fstep">
+      <div class="fn">2</div>
+      <div class="ft"><b>CLI(net472)가 무결성 검사</b>디스크 열거에서 그 파일이 안 보임</div>
+    </div>
+    <div class="fstep">
+      <div class="fn">3</div>
+      <div class="ft"><b>집합 연산</b><code>deletedFiles</code>에 편입 — 메타데이터엔 있는데 디스크엔 없으니까</div>
+    </div>
+    <div class="fstep end">
+      <div class="fn">4</div>
+      <div class="ft"><b>"has been Deleted" 로그</b>디스크에 멀쩡히 있는 파일이 <strong>삭제됨으로 스테이징</strong>된다</div>
+    </div>
+  </div>
+
+  <p>이건 침묵이 아니라 <strong>적극적인 오보</strong>다. 사용자가 그 변경 기록을 보고 조치할 수 있다. CLI로 만든 스냅샷을 CLI로 검사하는 경우엔 반대로 <strong>완전한 침묵</strong>이다 — 초기화 때도 안 보였으니 어느 목록에도 없고, 해시된 적도 백업된 적도 배포된 적도 없으며 어떤 로그에도 나오지 않는다.</p>
+
+  <div class="call ok">
+    <span class="ct">공정하게 짚을 점 <span class="chip m">실측</span></span>
+    <p>해시가 <code>""</code>로 실패하는 <em>일반적인</em> 경우(잠긴 파일 등)는 설계가 제대로 돼 있다. <code>FileManager.cs:237-240</code>이 파일을 의도적으로 유지하고, <code>:266-272</code>가 <code>VerifyByMetadata</code>로 폴백하며, <code>:1451</code>이 <strong>"verified by metadata only"</strong> 로그를 남긴다. 이 경고는 GUI 로그 창과 CLI 화면에 실제로 도달한다.</p>
+    <p>문제는 긴 경로가 <strong>이 안전망 앞단에서 사라진다는</strong> 점이다. 폴백은 잘 만들어져 있는데, 그 코드까지 가지를 못한다.</p>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec">04 — 성능</h2>
+  <h3>해싱은 그대로, 열거와 JSON은 느려진다</h3>
+  <p>이 앱의 지배적 비용은 해싱인데, <strong>거기서는 차이가 없다.</strong> MD5에는 CPU 명령어 가속이 없고(SHA-NI는 SHA-1/256만), 두 런타임 모두 Windows 네이티브 크립토를 쓴다 — net4x는 CAPI, net8은 CNG.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>측정 항목</th><th class="r">net48</th><th class="r">.NET 8</th><th>판정</th></tr></thead>
+    <tbody>
+      <tr><td>MD5 12-way 동시 <small>(핫패스)</small></td><td class="num r">552 ms</td><td class="num r">546 ms</td><td><span class="chip s">동일</span></td></tr>
+      <tr><td>MD5 코어 처리량</td><td class="num r">775 MB/s</td><td class="num r">760 MB/s</td><td><span class="chip s">동일</span></td></tr>
+      <tr><td>SHA-256 코어 처리량</td><td class="num r">2,500 MB/s</td><td class="num r">2,523 MB/s</td><td><span class="chip s">동일</span></td></tr>
+      <tr><td>파일 3,000개 열거+stat</td><td class="num r lose">136–186 ms</td><td class="num r">95–122 ms</td><td><span class="chip e">1.4× 느림</span></td></tr>
+      <tr><td>JSON 직렬화 <small>(16.2 MB)</small></td><td class="num r lose">84–117 ms</td><td class="num r">41–74 ms</td><td><span class="chip e">2× 느림</span></td></tr>
+      <tr><td>JSON 역직렬화</td><td class="num r lose">154–157 ms</td><td class="num r">49–162 ms</td><td><span class="chip e">최대 3× 느림</span></td></tr>
+      <tr><td>gen0 GC 횟수</td><td class="num r lose">97</td><td class="num r">23</td><td><span class="chip e">4× 많음</span></td></tr>
+      <tr><td>GUI 시작 <small>(warm, 6회 평균)</small></td><td class="num r win">694 ms</td><td class="num r">764 ms</td><td><span class="chip m">9% 빠름</span></td></tr>
+      <tr><td>유휴 peak WS <small>(프로젝트 미로드)</small></td><td class="num r win">131.4 MB</td><td class="num r">181.7 MB</td><td><span class="chip m">28% 낮음</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>느려지는 두 항목 — <strong>파일 열거와 JSON</strong> — 이 하필 이 앱이 해싱 다음으로 가장 많이 하는 일이다. 프로젝트를 열 때 큰 <code>ProjectMetaData.bin</code>을 역직렬화하는 비용이 16 MB당 약 +100 ms 늘어난다.</p>
+
+  <div class="call">
+    <span class="ct">이전 측정과 방향이 뒤집힌 항목</span>
+    <p>메모리는 이전 조사에서 net48이 <strong>더 높게</strong>(340 vs 299 MB) 나왔는데 이번엔 <strong>더 낮게</strong>(131 vs 182 MB) 나왔다. 같은 측정이 아니다 — 이번 것은 <strong>프로젝트를 로드하지 않은 갓 열린 창</strong>이고, 이전 것은 3,000파일 코퍼스 부하 상태였을 가능성이 높다. 그 상태에선 net8 GC가 더 큰 gen0 예산으로 메모리를 써서 4배 적은 수집 횟수를 산다.</p>
+    <p>둘 다 참일 수 있다: <strong>net48은 가볍게 시작하고, net8은 부하에서 더 잘 확장된다.</strong> 부하 상태 메모리는 이번에 재측정하지 않았다.</p>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec">05 — 도달 범위</h2>
+  <h3>어떤 기계에서 실제로 돌아가는가</h3>
+  <p>"net48은 in-box"라는 말은 조건부로만 참이다. 마이크로소프트 공식 표 기준 <span class="chip m">확인</span>:</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Windows</th><th>기본 탑재</th><th>4.8 설치 가능?</th></tr></thead>
+    <tbody>
+      <tr><td>Windows 8 <small>(RTM)</small></td><td class="num">4.5</td><td class="lose"><strong>불가</strong> — 지원 목록에 없음</td></tr>
+      <tr><td>Windows 8.1</td><td class="num">4.5.1</td><td>가능 <small>(설치 필요)</small></td></tr>
+      <tr><td>Windows 10 1809</td><td class="num">4.7.2</td><td>가능 <small>(설치 필요)</small></td></tr>
+      <tr><td>Windows 10 1903 ~ 22H2</td><td class="num win">4.8</td><td class="win">기본 탑재</td></tr>
+      <tr><td>Windows 11 21H2</td><td class="num win">4.8</td><td class="win">기본 탑재</td></tr>
+      <tr><td>Windows 11 22H2 이상</td><td class="num win">4.8.1</td><td class="win">기본 탑재</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>즉 <strong>4.8이 진짜 기본 탑재되는 건 Windows 10 1903부터</strong>다. 1809 이하 기계에서는 net48 앱도 런타임 설치가 필요하고, <strong>Windows 8 RTM에서는 설치조차 불가능하다.</strong> Windows 8은 2016년 1월, 8.1은 2023년 1월에 지원이 끝났다.</p>
+
+  <div class="call">
+    <span class="ct">Core를 netstandard2.0로 두는 이유 <span class="chip m">확인</span></span>
+    <p>netstandard2.0의 공식 최소치는 4.6.1이지만, <strong>4.6.1은 netstandard2.0이 설계되기 전에 나온 버전</strong>이라 필요한 파일이 빠져 있어 추가 배포가 필요하고 알려진 문제가 있다. 추가 의존성 없이 온전히 지원하는 첫 버전은 <strong>4.7.2</strong>이며 MS 권장도 4.7.2+다. 게다가 4.6.1은 2022년 4월에 지원이 끝났다.</p>
+    <p>따라서 현실적인 범위는 <strong>4.7.2 ~ 4.8</strong>이다. CLI가 이미 net472이므로 그것이 곧 현재의 하한이기도 하다.</p>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec">06 — 페이로드</h2>
+  <h3>net48을 정당화하던 근거가 사라졌다</h3>
+  <p>전송 크기가 이유였다면, 이번 측정이 그 논거를 무너뜨린다.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>형태</th><th class="r">원본 MB</th><th class="r">zip MB</th><th class="r">이전</th><th>필요 런타임</th></tr></thead>
+    <tbody>
+      <tr><td><strong>net8 self-contained 단일파일</strong> <small>— 현재 릴리즈</small></td><td class="num r">161.06</td><td class="num r lose">64.42</td><td class="num r">64.4</td><td>없음</td></tr>
+      <tr><td><strong>net8 framework-dependent</strong></td><td class="num r">7.23</td><td class="num r win">1.88</td><td class="num r">1.9</td><td>.NET 8 Desktop Runtime</td></tr>
+      <tr><td><strong>net48</strong> <small>— 다운그레이드</small></td><td class="num r">7.99</td><td class="num r">2.18</td><td class="num r">3.0</td><td>.NET FW 4.8 (in-box)</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>AvalonDock·Xceed 제거로 net48 zip이 <strong>0.82 MB(−27%)</strong> 줄었다. 그런데 그러고도 <strong>net8 framework-dependent가 더 작다.</strong> 즉 다운그레이드는 전송 크기 문제의 최선책이 아니라 차선책이다.</p>
+  <p>패키지 자산 논쟁도 끝났다. 이전에 net472를 피해야 했던 이유는 AvalonDock이 <code>net40</code> 자산으로 떨어지기 때문이었는데, <strong>AvalonDock이 사라진 지금 그래프의 모든 패키지가 net472와 net48에서 동일한 자산으로 해결된다.</strong> 논쟁의 대상 자체가 없다.</p>
+
+  <div class="call">
+    <span class="ct">진짜 범인은 따로 있다 <span class="chip m">실측</span></span>
+    <p>net8 FDD 페이로드는 파일이 8개뿐인데, 그중 <code>DocumentFormat.OpenXml.dll</code> 하나가 <strong>6.04 MB — 전체의 83.4%</strong>다. 동반 어셈블리까지 합치면 <strong>89.6%</strong>. 앱 자체 어셈블리 3개를 다 합쳐야 0.62 MB(8.5%)다.</p>
+    <p>용도는 <code>ExportManager.cs:158</code>과 <code>:227</code> 두 줄, XLSX 내보내기 하나뿐이다. 다른 모든 <code>.cs</code>를 뒤져도 OpenXml 타입은 <strong>0건</strong>. 그리고 이 DLL은 net35부터 netstandard2.0까지 <em>모든</em> 자산에서 6 MB대라 <strong>TFM을 바꿔서 줄일 수 있는 게 아니다.</strong></p>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec">07 — 작업 항목</h2>
+  <h3>net48로 간다면</h3>
+  <div class="work">
+    <div class="wi"><span class="no">01</span><span class="wt">앱 4개의 TFM을 <code>net48</code>로 — <strong>Core는 <code>netstandard2.0</code> 유지</strong> <small>Core까지 net48로 뒤집은 변형(C)을 측정했으나 출력이 한 줄도 안 달랐다. 이득 0. 유지하면 나중에 모던 .NET으로 되돌릴 선택지가 공짜로 남는다</small></span><span class="chip s">S · 낮음</span></div>
+    <div class="wi"><span class="no">02</span><span class="wt"><code>&lt;LangVersion&gt;latest&lt;/LangVersion&gt;</code> 추가 <small>GUI·Tests 두 곳에만 없음. 없으면 <code>Nullable=enable</code>이 CS8630으로 깨짐</small></span><span class="chip s">S · 낮음</span></div>
+    <div class="wi"><span class="no">03</span><span class="wt"><code>OpenFolderDialog</code> shim <small><code>IFileOpenDialog</code> + <code>FOS_PICKFOLDERS</code>, 약 145줄. 호출부 수정 0. WinForms 재도입 금지</small></span><span class="chip e">M · 중간</span></div>
+    <div class="wi"><span class="no">04</span><span class="wt"><strong>긴 경로를 시끄럽게 실패시키기</strong> <small>릴리즈 블로커. 최소한 경로 길이를 사전 검사해 명시적으로 보고할 것 — 조용한 오답은 무결성 도구에서 최악의 실패 형태</small></span><span class="chip h">L · 높음</span></div>
+    <div class="wi"><span class="no">05</span><span class="wt"><code>System.Memory</code> 명시적 참조 <small>지금은 전이 의존에 우연히 걸려 있음</small></span><span class="chip s">S · 낮음</span></div>
+    <div class="wi"><span class="no">06</span><span class="wt">shim의 <code>CS8601</code> 경고 제거 <small>릴리즈 게이트가 신규 비-obsolete 경고에서 중단됨</small></span><span class="chip s">S · 낮음</span></div>
+    <div class="wi"><span class="no">07</span><span class="wt">릴리즈 파이프라인 정리 <small><code>release.ps1</code> 2곳 + <code>release.yml</code> 2곳의 self-contained/single-file 플래그</small></span><span class="chip e">M · 낮음</span></div>
+    <div class="wi"><span class="no">08</span><span class="wt">MAJOR 버전 <small>자체 규칙상 TFM 변경은 MAJOR — GUI 4.0.0 / CLI 2.0.0</small></span><span class="chip s">S · 낮음</span></div>
+  </div>
+  <p>주의: <code>robocopy /E</code>로 이 리포를 복사하면 멈춘다. Visual Studio가 <code>.vs\…\*.vsidx</code>를 잠그고 있고 기본 재시도가 <code>/R:1000000 /W:30</code>이다. <code>/XD .vs /R:1 /W:1</code>이 필요하다.</p>
+</section>
+
+<section>
+  <h2 class="sec">08 — 대안</h2>
+  <h3>더 나은 수가 두 개 있다</h3>
+  <p>둘 다 이번에 실측했고, TFM을 건드리지 않으며, 다운그레이드보다 효과가 크다.</p>
+  <div class="work">
+    <div class="wi"><span class="no">A</span><span class="wt"><strong>self-contained 단일파일을 버리고 framework-dependent로 출하</strong> <small>zip 64.42 → 1.88 MB (<strong>−97%</strong>), 콜드 스타트 2,077 → 920 ms. <code>release.ps1:159-162</code>에서 플래그 두 개 삭제. 코드 변경 0, 긴 경로 지원 유지. 대가는 사이트당 1회 .NET 8 Desktop Runtime 설치</small></span><span class="chip m">−97%</span></div>
+    <div class="wi"><span class="no">B</span><span class="wt"><strong><code>DocumentFormat.OpenXml</code> 대체</strong> <small>페이로드의 83.4%가 XLSX 내보내기 한 기능을 위해 존재. CSV나 최소 XLSX 작성기로 대체하면 회수됨. 어떤 선택지를 고르든 똑같이 이득</small></span><span class="chip m">−83%</span></div>
+  </div>
+  <div class="call">
+    <span class="ct">참고</span>
+    <p>현재 릴리즈 형태(self-contained 단일파일)의 <strong>콜드 스타트가 2,077 ms</strong>다. FDD의 2.7배, net48의 2.9배 — 153 MB 실행 파일을 풀어내는 비용이다. 이번 조사에서 측정된 가장 큰 시작 시간 차이이고, <strong>TFM이 아니라 패키징 선택의 문제</strong>다.</p>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec">09 — 부수 발견</h2>
+  <h3>이전 여부와 무관하게 고칠 것</h3>
+  <ul>
+    <li><strong><code>FileHandlerTool.cs:496</code>의 정리 누락.</strong> 임시 파일 삭제를 <code>if (File.Exists(tempPath))</code>로 가드하는데, net4x에서 260자 초과 경로면 실재하는 파일에도 <code>false</code>가 나온다. 그래서 <code>ProjectMetaData.bin.tmp</code>가 영영 안 지워진다. 지금은 쓰기 자체가 먼저 실패해서 드러나지 않을 뿐이다.</li>
+    <li><strong><code>CLAUDE.md</code>의 어셈블리 이름이 낡았다.</strong> "assembly name <code>SimpleBinaryVCS</code>"라고 돼 있는데 csproj에 <code>&lt;AssemblyName&gt;</code>이 없어서 실제 산출물은 <code>DeployAssistant.exe</code>다.</li>
+    <li><strong><code>File.Replace</code>는 안전하다.</strong> net48에 존재하고(FX 2.0+), 동작이 바이트 단위로 동일하며, <strong>Google Drive 마운트와 SMB 공유 양쪽에서 실측 통과</strong>했다. 볼륨을 넘으면 <code>IOException</code>이 나지만, 백업 경로가 항상 <code>ProjectPath</code> 하위라 프로덕션에서는 도달 불가능하다.</li>
+  </ul>
+</section>
+
+<div class="foot">
+  실측 환경 · Windows 11 Pro 26200 · SDK 9.0.317 / 10.0.204 · Microsoft.NETCore.App 8.0.30 · LongPathsEnabled=0<br>
+  스크래치 사본에서 수행 · 리포 미변경 확인 · <span class="chip m">실측</span> 직접 실행해 측정 · <span class="chip e">추정</span> 근거 기반 추론
+</div>
+
+</div>

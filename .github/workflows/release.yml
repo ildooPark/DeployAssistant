@@ -51,26 +51,13 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore DeployAssistant.sln
 
-      # WPF GUI ships in two flavors:
-      #   - framework-dependent: small .exe + DLLs, requires .NET 8 Desktop Runtime on target.
-      #   - self-contained: bundles the runtime, larger but runs on machines with no .NET installed.
-      - name: Publish WPF app (framework-dependent, win-x64)
+      # net472: the runtime is an OS component (in-box on Windows 10 1803+), so there is
+      # no self-contained publish mode and none is needed.
+      - name: Publish WPF app (net472)
         run: |
           dotnet publish DeployAssistant/DeployAssistant.csproj `
             -c Release `
-            -r win-x64 `
-            --self-contained false `
-            -p:PublishSingleFile=false `
-            -o ./publish/DeployAssistant-fd
-
-      - name: Publish WPF app (self-contained, win-x64, single-file)
-        run: |
-          dotnet publish DeployAssistant/DeployAssistant.csproj `
-            -c Release `
-            -r win-x64 `
-            --self-contained true `
-            -p:PublishSingleFile=true `
-            -o ./publish/DeployAssistant-sc
+            -o ./publish/DeployAssistant
 
       - name: Publish CLI (net472 framework-dependent)
         run: |
@@ -78,17 +65,11 @@ jobs:
             -c Release `
             -o ./publish/DeployAssistant.CLI
 
-      - name: Zip WPF framework-dependent build output
+      - name: Zip WPF build output
         shell: pwsh
         run: |
-          Compress-Archive -Path ./publish/DeployAssistant-fd/* `
-            -DestinationPath DeployAssistant-build-fd.zip -Force
-
-      - name: Zip WPF self-contained build output
-        shell: pwsh
-        run: |
-          Compress-Archive -Path ./publish/DeployAssistant-sc/* `
-            -DestinationPath DeployAssistant-build-sc.zip -Force
+          Compress-Archive -Path ./publish/DeployAssistant/* `
+            -DestinationPath DeployAssistant-build.zip -Force
 
       - name: Zip CLI build output
         shell: pwsh
@@ -99,7 +80,7 @@ jobs:
       - name: Zip source code
         shell: pwsh
         run: |
-          $exclude = @('.git', 'publish', 'DeployAssistant-build-fd.zip', 'DeployAssistant-build-sc.zip', 'DeployAssistant-CLI-build.zip')
+          $exclude = @('.git', 'publish', 'DeployAssistant-build.zip', 'DeployAssistant-CLI-build.zip')
           $items = Get-ChildItem -Path . -Exclude $exclude
           Compress-Archive -Path $items -DestinationPath DeployAssistant-src.zip -Force
 
@@ -109,8 +90,7 @@ jobs:
           name: DeployAssistant-builds
           path: |
             DeployAssistant-src.zip
-            DeployAssistant-build-fd.zip
-            DeployAssistant-build-sc.zip
+            DeployAssistant-build.zip
             DeployAssistant-CLI-build.zip
 
   release:
@@ -258,6 +238,5 @@ jobs:
           body_path: release_notes.md
           files: |
             DeployAssistant-src.zip
-            DeployAssistant-build-fd.zip
-            DeployAssistant-build-sc.zip
+            DeployAssistant-build.zip
             DeployAssistant-CLI-build.zip

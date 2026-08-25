@@ -1,18 +1,18 @@
 ---
 name: release-deployassistant
-description: Use when the user asks to cut a release, ship a build, drop a build to Y:, publish release notes, or any phrasing involving "release vX.Y.Z" / "release X.Y.Z" / "make it official" / "promote to 배포" of DeployAssistant. Builds the WPF GUI (self-contained single-file) and the CLI as separate zips, uploads to the 개발 (dev) channel by default or 배포 (production) on -Official, and appends a short version toggle to the appropriate Notion page.
+description: Use when the user asks to cut a release, ship a build, drop a build to Y: or the Google Drive share, publish release notes, or any phrasing involving "release vX.Y.Z" / "release X.Y.Z" / "make it official" / "promote to 배포" of DeployAssistant. Builds the WPF GUI (net472) and the CLI as separate zips, uploads to the 개발 (dev) channel by default or 배포 (production) on -Official, and appends a short version toggle to the appropriate Notion page.
 ---
 
 # Release DeployAssistant
 
-This skill executes the formal release routine documented in `docs/release-process.md`. It produces, per component (GUI and CLI), a versioned zip + extracted folder on the team's Y: drive, and a short toggle in the component's Notion page.
+This skill executes the formal release routine documented in `docs/release-process.md`. It produces, per component (GUI and CLI), a versioned zip + extracted folder on the team's G: share, and a short toggle in the component's Notion page.
 
 ## Two channels
 
-| Channel | Trigger | Path on Y: |
+| Channel | Trigger | Path on the share |
 |---|---|---|
-| `개발` (dev) | Default — no flag | `Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\개발\<gui\|cli>\v<X.Y.Z>_<YYYYMMDD>\` |
-| `배포` (production) | `-Official` switch | `Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\배포\<gui\|cli>\v<X.Y.Z>_<YYYYMMDD>\` |
+| `개발` (dev) | Default — no flag | `G:\공유 드라이브\SW\Applications\Utility\DeployAssistant\개발\<gui\|cli>\v<X.Y.Z>_<YYYYMMDD>\` |
+| `배포` (production) | `-Official` switch | `G:\공유 드라이브\SW\Applications\Utility\DeployAssistant\배포\<gui\|cli>\v<X.Y.Z>_<YYYYMMDD>\` |
 
 **Never write to 배포 without the user explicitly saying "official release" / "make it official" / "promote to 배포" / similar.** Default is always 개발 for validation drops.
 
@@ -20,7 +20,7 @@ This skill executes the formal release routine documented in `docs/release-proce
 
 **For a dev drop (개발 channel — default):**
 - "cut a release", "ship a release", "release vX.Y.Z"
-- "drop a build to Y:", "drop the latest build", "package the release"
+- "drop a build to Y:", "drop a build to the share", "drop the latest build", "package the release"
 - "publish release notes", "write the release note for vX.Y.Z"
 
 **For an official release (배포 channel — requires `-Official`):**
@@ -34,10 +34,10 @@ If the user says only "build", that does NOT fire this skill — they want a loc
 
 Before the first action of this skill, confirm with the user:
 
-1. **The version numbers** — GUI and CLI track independently. Ask the user explicitly: "GUI version?" and "CLI version?" Each is optional, but at least one is required. Check the share before proposing — `Get-ChildItem Y:\...\DeployAssistant\배포` for the latest GUI version, `Get-ChildItem Y:\...\DeployAssistant\배포\cli` for the latest CLI version. The two histories diverge (GUI was at 3.6.1, CLI started at 1.0.x — don't assume a single shared version applies to both).
+1. **The version numbers** — GUI and CLI track independently. Ask the user explicitly: "GUI version?" and "CLI version?" Each is optional, but at least one is required. Check the share before proposing — `Get-ChildItem G:\...\DeployAssistant\배포` for the latest GUI version, `Get-ChildItem G:\...\DeployAssistant\배포\cli` for the latest CLI version. The two histories diverge (GUI was at 3.6.1, CLI started at 1.0.x — don't assume a single shared version applies to both).
 2. **The channel** — dev (개발, default) or official (배포). If a previous dev drop with the same version already exists, suggest promoting it with `-Official` rather than rebuilding.
 3. **That the working tree is clean and on `master`** (or about-to-merge).
-4. **Network connectivity to Y: drive**.
+4. **Network connectivity to G: share**.
 
 If any of these fail, stop and report back — don't half-execute.
 
@@ -87,15 +87,15 @@ All must pass. Capture the count (e.g. "285/285") for the release note.
 ./scripts/release.ps1 -CliVersion 1.1.1 -Official
 ```
 
-The script publishes the GUI self-contained single-file and/or the CLI net472, packages each into its own zip, and drops them at:
-- GUI: `Y:\...\DeployAssistant\<channel>\<GuiVersion>\` (e.g. `배포\3.7.0\`)
-- CLI: `Y:\...\DeployAssistant\<channel>\cli\<CliVersion>\` (e.g. `배포\cli\1.1.0\`)
+The script publishes the GUI and/or the CLI (both net472, framework-dependent — the runtime is in-box on Windows 10 1803+), packages each into its own zip, and drops them at:
+- GUI: `G:\...\DeployAssistant\<channel>\<GuiVersion>\` (e.g. `배포\3.7.0\`)
+- CLI: `G:\...\DeployAssistant\<channel>\cli\<CliVersion>\` (e.g. `배포\cli\1.1.0\`)
 
 Re-running with the same version + channel fails (versions are immutable) — this is intentional.
 
 Useful flags:
-- `-DryRun` — skip the Y: drive copy (local zip only). Use for the very first run on a fresh checkout to validate the script before touching the share.
-- `-Extract` — also extract each zip alongside it on Y:. Default is zip-only (matches the share's existing entries).
+- `-DryRun` — skip the share copy (local zip only). Use for the very first run on a fresh checkout to validate the script before touching the share.
+- `-Extract` — also extract each zip alongside it on the share. Default is zip-only (matches the share's existing entries).
 - `-IncludeFrameworkDependentGui` — bundle the framework-dependent GUI flavor inside a `framework-dependent\` subfolder of the GUI zip.
 - `-SkipBuild` — skip the `dotnet build` sanity check (still runs the per-project publishes).
 
@@ -105,7 +105,7 @@ Capture the script's final output (zip paths, drop paths, sha) — you'll paste 
 
 ```powershell
 # CLI: extract the published zip and check --help
-Expand-Archive "Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\<channel>\cli\<CliVersion>\DeployAssistant-CLI_v<CliVersion>_*.zip" "$env:TEMP\cli-smoke" -Force
+Expand-Archive "G:\공유 드라이브\SW\Applications\Utility\DeployAssistant\<channel>\cli\<CliVersion>\DeployAssistant-CLI_v<CliVersion>_*.zip" "$env:TEMP\cli-smoke" -Force
 & "$env:TEMP\cli-smoke\deployassistant.exe" --help
 ```
 
@@ -137,7 +137,7 @@ Use `notion-update-page` with `command: update_content`. **Do NOT use `replace_c
 	- <user-visible highlight 1 — one line>
 	- <user-visible highlight 2 — one line>
 	- <user-visible highlight 3 — one line>
-	**Build:** `<shortSha>` · **Drop:** `Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant\<배포|개발>\<X.Y.Z>\` (GUI) or `Y:\...\<배포|개발>\cli\<X.Y.Z>\` (CLI)
+	**Build:** `<shortSha>` · **Drop:** `G:\공유 드라이브\SW\Applications\Utility\DeployAssistant\<배포|개발>\<X.Y.Z>\` (GUI) or `G:\...\<배포|개발>\cli\<X.Y.Z>\` (CLI)
 ```
 
 **Notion gotchas (observed during v3.7.0/v1.1.0 ship):**
@@ -157,7 +157,7 @@ Print to the user:
 - Channel (개발 / 배포)
 - Version + sha
 - Test count (passed / total)
-- Drop locations on Y: (one line per component shipped)
+- Drop locations on the share (one line per component shipped)
 - Notion page URL(s) updated
 - Zip sizes
 
@@ -169,7 +169,7 @@ Stop and ask the user before continuing if any of:
 
 - Build emits a **new** warning (not the V1-obsolescence ones tracked in issue #23)
 - Any test fails
-- Y: drive is unreachable
+- G: share is unreachable
 - The target version folder already exists in the requested channel (prior drop with the same version in the same channel — bump patch or move aside)
 - The Notion page returns an error or its `### 🆙 Updates` section can't be located
 - Working tree has uncommitted changes that look like real work (not just `publish*/`, `.serena/project.yml`, or other known-untracked artifacts)
@@ -180,6 +180,6 @@ Stop and ask the user before continuing if any of:
 - Bump version numbers automatically — always ask the user.
 - Promote to 배포 implicitly — the `-Official` switch must be set explicitly, after the user says so.
 - Push git tags or create GitHub releases (the `release.yml` workflow does the GitHub Release automatically on master push).
-- Deploy to anywhere except the Y: drive paths defined above.
-- Modify the source tree (the routine is read-only against the repo — `scripts/release.ps1` only writes to `publish/`, `$env:TEMP`, and Y:).
+- Deploy to anywhere except the G: share paths defined above.
+- Modify the source tree (the routine is read-only against the repo — `scripts/release.ps1` only writes to `publish/`, `$env:TEMP`, and the share).
 - Write to anywhere on Notion except the two pages listed above, and only by appending under their existing `### 🆙 Updates` sections.

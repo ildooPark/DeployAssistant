@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using DeployAssistant.CLI.Engine;
 using DeployAssistant.CLI.Screens;
 using DeployAssistant.DataComponent;
@@ -167,6 +168,49 @@ public class CheckoutGateScreenTests
         var action = screen.Handle(Key(ConsoleKey.Enter));
 
         Assert.IsType<ScreenAction.Pop>(action);
+    }
+
+    // ------------------------------------------------------------------ IntegrityTimeout_YieldsErrorPhase_NotClean
+
+    /// <summary>
+    /// A pre-checkout integrity check that never reports back must land the screen in
+    /// Error — never in Clean, which would let the checkout proceed unverified.  The
+    /// manager is made mute by severing FileManager's event backing fields, so neither
+    /// completion nor an Idle state transition ever reaches the screen.
+    /// </summary>
+    [Fact]
+    public void IntegrityTimeout_YieldsErrorPhase_NotClean()
+    {
+        var mgr = BuildManager();
+        var fileManager = typeof(MetaDataManager)
+            .GetField("_fileManager", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(mgr)!;
+        foreach (var eventName in new[] { "IntegrityCheckEventHandler", "ManagerStateEventHandler", "IntegrityProgressEventHandler" })
+        {
+            var backingField = fileManager.GetType().GetField(eventName, BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.NotNull(backingField); // seam broke: FileManager event renamed
+            backingField!.SetValue(fileManager, null);
+        }
+
+        var screen = new CheckoutGateScreen(mgr, MakeRevision("7.0"));
+        var originalTimeout = CheckoutGateScreen.IntegrityWaitTimeout;
+        try
+        {
+            CheckoutGateScreen.IntegrityWaitTimeout = TimeSpan.FromMilliseconds(50);
+            screen.OnEnter();
+        }
+        finally
+        {
+            CheckoutGateScreen.IntegrityWaitTimeout = originalTimeout;
+        }
+
+        var phase = (CheckoutGateScreen.Phase)typeof(CheckoutGateScreen)
+            .GetField("_phase", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(screen)!;
+        Assert.Equal(CheckoutGateScreen.Phase.Error, phase);
+
+        // Behavioral proof it is Error, not Clean: only Error pops on an arbitrary key.
+        Assert.IsType<ScreenAction.Pop>(screen.Handle(Key(ConsoleKey.Enter)));
     }
 }
 

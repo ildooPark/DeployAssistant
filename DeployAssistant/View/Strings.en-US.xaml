@@ -1,0 +1,234 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!-- Toolbar -->
+    <sys:String x:Key="S.SetSourceDir">Set Source Dir</sys:String>
+    <sys:String x:Key="S.SetDestDir">Set Dest Dir</sys:String>
+    <sys:String x:Key="S.IntegrityCheck">Integrity Check</sys:String>
+    <sys:String x:Key="S.Checkout">Checkout</sys:String>
+    <sys:String x:Key="S.Safe">Safe</sys:String>
+    <sys:String x:Key="S.SafeTooltip">Safe: checkout re-hashes the whole directory against the snapshot. Off: fast diff-based checkout.</sys:String>
+    <sys:String x:Key="S.CheckoutTooltip">Restore the project to the version selected in Version History</sys:String>
+    <sys:String x:Key="S.ProjectLabel">Project: </sys:String>
+    <sys:String x:Key="S.VersionLabel">Version: </sys:String>
+
+    <!-- Panels / tabs -->
+    <sys:String x:Key="S.VersionHistory">Version History</sys:String>
+    <sys:String x:Key="S.RefreshHistoryTooltip">Refresh version history</sys:String>
+    <sys:String x:Key="S.VersionLog">Version Log</sys:String>
+    <sys:String x:Key="S.ProjectFiles">Project Files</sys:String>
+    <sys:String x:Key="S.MetafileCompare">Metafile Compare</sys:String>
+    <sys:String x:Key="S.StagedChanges">Staged Changes</sys:String>
+    <sys:String x:Key="S.Actions">Actions</sys:String>
+
+    <!-- Actions panel -->
+    <sys:String x:Key="S.Updater">Updater</sys:String>
+    <sys:String x:Key="S.Log">Log</sys:String>
+    <sys:String x:Key="S.Clear">Clear</sys:String>
+    <sys:String x:Key="S.Refresh">Refresh</sys:String>
+    <sys:String x:Key="S.Stage">Stage</sys:String>
+    <sys:String x:Key="S.Deploy">Deploy</sys:String>
+
+    <!-- Row / menu actions -->
+    <sys:String x:Key="S.Restore">Restore</sys:String>
+    <sys:String x:Key="S.Revert">Revert</sys:String>
+    <sys:String x:Key="S.RevertAll">Revert All</sys:String>
+    <sys:String x:Key="S.ExportFullVersion">Export Full Version</sys:String>
+    <sys:String x:Key="S.ExportVersionLog">Export Version Log</sys:String>
+    <sys:String x:Key="S.CompareWithMain">Compare With Main</sys:String>
+    <sys:String x:Key="S.CompareSrcWithMain">Compare Src With Main</sys:String>
+    <sys:String x:Key="S.FullLog">Full Log</sys:String>
+    <sys:String x:Key="S.SrcFullLog">Src Full Log</sys:String>
+    <sys:String x:Key="S.SrcVersionSimilarities">Src Version Similarities</sys:String>
+    <sys:String x:Key="S.RenameRetag">Rename / Re-tag…</sys:String>
+    <sys:String x:Key="S.DeleteVersion">Delete Version…</sys:String>
+
+    <!-- Metafile Compare tab -->
+    <sys:String x:Key="S.Browse">Browse…</sys:String>
+    <sys:String x:Key="S.ExportSyncPackage">Export Sync Package</sys:String>
+    <sys:String x:Key="S.ImportSelected">Import Selected</sys:String>
+    <sys:String x:Key="S.SelectChanged">✓ Select Changed</sys:String>
+    <sys:String x:Key="S.DeselectAll">☐ Deselect All</sys:String>
+    <sys:String x:Key="S.DropVersionLogHere">Drop a .VersionLog file here</sys:String>
+    <sys:String x:Key="S.OrUseBrowse">or use the Browse button above</sys:String>
+
+    <!-- Column headers -->
+    <sys:String x:Key="S.ColRev">Rev</sys:String>
+    <sys:String x:Key="S.ColVersion">Version</sys:String>
+    <sys:String x:Key="S.ColDate">Date</sys:String>
+    <sys:String x:Key="S.ColBy">By</sys:String>
+    <sys:String x:Key="S.ColFilename">Filename</sys:String>
+    <sys:String x:Key="S.ColRelativePath">Relative Path</sys:String>
+    <sys:String x:Key="S.ColBuildV">Build V</sys:String>
+    <sys:String x:Key="S.ColPrevV">Prev V</sys:String>
+    <sys:String x:Key="S.ColProjectV">Project V</sys:String>
+    <sys:String x:Key="S.ColDeployedV">Deployed V</sys:String>
+    <sys:String x:Key="S.ColUpdated">Updated</sys:String>
+    <sys:String x:Key="S.ColHash">Hash</sys:String>
+    <sys:String x:Key="S.ColState">State</sys:String>
+    <sys:String x:Key="S.ColName">Name</sys:String>
+    <sys:String x:Key="S.ColPath">Path</sys:String>
+    <sys:String x:Key="S.ColCurrentBuild">Current Build</sys:String>
+    <sys:String x:Key="S.ColCurrentHash">Current Hash</sys:String>
+    <sys:String x:Key="S.ColMetafileBuild">Metafile Build</sys:String>
+    <sys:String x:Key="S.ColMetafileHash">Metafile Hash</sys:String>
+
+    <!-- Misc -->
+    <sys:String x:Key="S.ByPrefix">by </sys:String>
+
+    <!-- Common (secondary windows) -->
+    <sys:String x:Key="S.Cancel">Cancel</sys:String>
+    <sys:String x:Key="S.Apply">Apply</sys:String>
+    <sys:String x:Key="S.Confirm">Confirm</sys:String>
+    <sys:String x:Key="S.CopyToClipboard">Copy to Clipboard</sys:String>
+    <sys:String x:Key="S.SafeCheckout">Safe Checkout</sys:String>
+    <sys:String x:Key="S.Unnamed">(unnamed)</sys:String>
+    <sys:String x:Key="S.Unknown">(unknown)</sys:String>
+    <sys:String x:Key="S.Undefined">Undefined</sys:String>
+    <sys:String x:Key="S.IntegrityChecking">Integrity Checking</sys:String>
+    <sys:String x:Key="S.Filter">Filter…</sys:String>
+    <sys:String x:Key="S.FilterFiles">Filter files…</sys:String>
+    <sys:String x:Key="S.ChangeLog">Change log</sys:String>
+    <sys:String x:Key="S.UpdateLog">Update log</sys:String>
+    <sys:String x:Key="S.VersionInfo">Version info</sys:String>
+    <sys:String x:Key="S.SrcPrefix">Src: </sys:String>
+    <sys:String x:Key="S.DstPrefix">Dst: </sys:String>
+    <sys:String x:Key="S.SelectedPrefix">Selected: </sys:String>
+    <sys:String x:Key="S.ExportDiff">Export Diff</sys:String>
+    <sys:String x:Key="S.ExportToXLSX">Export to XLSX</sys:String>
+
+    <!-- Window titles -->
+    <sys:String x:Key="S.Win.CheckoutGate">Checkout Version</sys:String>
+    <sys:String x:Key="S.Win.DeleteVersion">Delete Version</sys:String>
+    <sys:String x:Key="S.Win.RenameVersion">Rename / Re-tag Version</sys:String>
+    <sys:String x:Key="S.Win.VersionDiff">Version Diff</sys:String>
+    <sys:String x:Key="S.Win.IntegrityLog">Integrity Log</sys:String>
+    <sys:String x:Key="S.Win.OverlapFile">Resolve File Destinations</sys:String>
+    <sys:String x:Key="S.Win.ErrorLog">Error Log</sys:String>
+    <sys:String x:Key="S.Win.VersionCompatibility">Version Compatibility</sys:String>
+
+    <!-- Checkout gate window -->
+    <sys:String x:Key="S.Gate.HeadlineClean">{0} to '{1}'?</sys:String>
+    <sys:String x:Key="S.Gate.HeadlineDirty">Local modifications detected — {0} to '{1}'?</sys:String>
+    <sys:String x:Key="S.Gate.UpdatedBy">Updated {0:yyyy-MM-dd HH:mm} by {1}.</sys:String>
+    <sys:String x:Key="S.Gate.CleanDetail">The working directory matches the current version — nothing will be lost.</sys:String>
+    <sys:String x:Key="S.Gate.DirtyDetail">{0} uncommitted change(s) in the working directory will be DISCARDED and cannot be recovered. Stage and deploy them first if you want to keep them.</sys:String>
+    <sys:String x:Key="S.Gate.NoLocalMods">No local modifications detected.</sys:String>
+    <sys:String x:Key="S.Gate.DiscardAndCheckout">Discard Local Changes and Check Out</sys:String>
+
+    <!-- Delete window -->
+    <sys:String x:Key="S.Del.Headline">Delete version '{0}'?</sys:String>
+    <sys:String x:Key="S.Del.Warning">This permanently removes the version from the history and deletes the backup files only it references. It cannot be undone.</sys:String>
+    <sys:String x:Key="S.Del.DiskReclaimed">Disk space reclaimed</sys:String>
+    <sys:String x:Key="S.Del.BackupRemoved">Backup files removed</sys:String>
+    <sys:String x:Key="S.Del.Relocated">Files relocated first</sys:String>
+    <sys:String x:Key="S.Del.SharedKept">Shared files kept</sys:String>
+    <sys:String x:Key="S.Del.BackupFolder">Backup folder</sys:String>
+    <sys:String x:Key="S.Del.CannotDelete">This version cannot be deleted:</sys:String>
+    <sys:String x:Key="S.Del.FileCount">{0} file(s)</sys:String>
+    <sys:String x:Key="S.Del.RelocationCount">{0} file(s) shared with a surviving version</sys:String>
+    <sys:String x:Key="S.Del.FolderKept">{0} (kept)</sys:String>
+    <sys:String x:Key="S.Del.DeleteButton">Delete Version</sys:String>
+
+    <!-- Rename window -->
+    <sys:String x:Key="S.Ren.Headline">Rename / re-tag '{0}'</sys:String>
+    <sys:String x:Key="S.Ren.Explain">Re-tagging changes how the version is listed and referenced. The backup folder keeps its original name — backup files are stored by absolute path and are shared with other versions.</sys:String>
+    <sys:String x:Key="S.Ren.VersionName">Version name</sys:String>
+
+    <!-- Version diff / compatibility windows -->
+    <sys:String x:Key="S.Fmt.FilesChanged">{0} files changed</sys:String>
+    <sys:String x:Key="S.Fmt.Added">{0} added</sys:String>
+    <sys:String x:Key="S.Fmt.Modified">{0} modified</sys:String>
+    <sys:String x:Key="S.Fmt.Deleted">{0} deleted</sys:String>
+    <sys:String x:Key="S.ColSourceFile">Source File</sys:String>
+    <sys:String x:Key="S.ColSrcBuildV">Src Build V</sys:String>
+    <sys:String x:Key="S.ColSrcHash">Src Hash</sys:String>
+    <sys:String x:Key="S.ColDestFile">Destination File</sys:String>
+    <sys:String x:Key="S.ColDstBuildV">Dst Build V</sys:String>
+    <sys:String x:Key="S.ColDstHash">Dst Hash</sys:String>
+    <sys:String x:Key="S.ColSizeSrcDst">Size (src→dst)</sys:String>
+    <sys:String x:Key="S.ColFilePath">File Path</sys:String>
+    <sys:String x:Key="S.ColSizeB">Size (B)</sys:String>
+    <sys:String x:Key="S.Cmp.SnapshotHeader">Snapshot history — select a version to inspect its diff</sys:String>
+    <sys:String x:Key="S.ColDeltaSig">Δ Sig.</sys:String>
+    <sys:String x:Key="S.ColDeltaRes">Δ Resource</sys:String>
+    <sys:String x:Key="S.Tip.DeltaSig">Significant differences: files outside the integration-ignore list (en-US, ko-KR, Resources…).&#x0a;0 = source is an exact functional match for this snapshot.</sys:String>
+    <sys:String x:Key="S.Tip.DeltaRes">Total differences including resource-only files (en-US, ko-KR, Resources).&#x0a;Equals Δ Sig. when there are no resource-only changes.</sys:String>
+
+    <!-- Overlap window -->
+    <sys:String x:Key="S.Ovl.Header">Resolve file destinations</sys:String>
+    <sys:String x:Key="S.Ovl.Explain">Some source files were found in multiple subdirectories of the project. For each ambiguous file, select the correct destination path from the drop-down. New top-level files without a matching project path also need a destination folder.</sys:String>
+    <sys:String x:Key="S.Ovl.AmbiguousHeader">Ambiguous files — pick one destination per file</sys:String>
+    <sys:String x:Key="S.Ovl.NewFilesHeader">New files — choose a destination folder</sys:String>
+    <sys:String x:Key="S.ColDestPath">Destination path</sys:String>
+    <sys:String x:Key="S.ColNewFile">New file</sys:String>
+    <sys:String x:Key="S.ColDestFolder">Destination folder</sys:String>
+
+    <!-- Metafile Compare (view model) -->
+    <sys:String x:Key="S.Meta.DropZoneDefault">Drop a .VersionLog file here, or use Browse above</sys:String>
+    <sys:String x:Key="S.Meta.FileNotFound">File not found: {0}</sys:String>
+    <sys:String x:Key="S.Meta.OnlyVersionLog">Only .VersionLog files are supported</sys:String>
+    <sys:String x:Key="S.Meta.SelectMetafile">Select a .VersionLog Metafile</sys:String>
+    <sys:String x:Key="S.Meta.FileFilter">Version Log files (*.VersionLog)|*.VersionLog|All files (*.*)|*.*</sys:String>
+    <sys:String x:Key="S.Meta.ParseFailed">Could not parse metafile: {0}</sys:String>
+    <sys:String x:Key="S.Meta.Loaded">Loaded: {0}  ({1})</sys:String>
+    <sys:String x:Key="S.Meta.OpenProjectFirst"> — open a project first to compute the diff</sys:String>
+    <sys:String x:Key="S.Meta.DiffFailed"> — diff computation failed</sys:String>
+
+    <!-- Dialogs -->
+    <sys:String x:Key="S.Dlg.ViewLogTitle">View Log</sys:String>
+    <sys:String x:Key="S.Dlg.ViewLogNull">Couldn't get the log — the selected item is null.</sys:String>
+    <sys:String x:Key="S.Dlg.MustSelectVersion">Must select a version to check out.</sys:String>
+    <sys:String x:Key="S.Dlg.CheckoutPending">A checkout of '{0}' is still waiting on its integrity check.</sys:String>
+    <sys:String x:Key="S.Dlg.MustSelectDelete">Must select a version to delete.</sys:String>
+    <sys:String x:Key="S.Dlg.DeletePreviewFailed">Could not work out what deleting '{0}' would remove. No project metadata is loaded.</sys:String>
+    <sys:String x:Key="S.Dlg.RenameTitle">Rename Version</sys:String>
+    <sys:String x:Key="S.Dlg.MustSelectRename">Must select a version to rename.</sys:String>
+    <sys:String x:Key="S.Dlg.ExportTitle">Export</sys:String>
+    <sys:String x:Key="S.Dlg.MustSelectBackup">Must select a backup version first.</sys:String>
+    <sys:String x:Key="S.Dlg.ExtractVersionLogTitle">Extract Version Log</sys:String>
+    <sys:String x:Key="S.Dlg.ExportOpenFailed">{0} does not exist. Error: {1}</sys:String>
+    <sys:String x:Key="S.Dlg.CheckoutAborted">Aborted: {0} local change(s) could not be discarded (their backups may be missing).</sys:String>
+    <sys:String x:Key="S.Dlg.CheckoutComplete">{0} to '{1}' complete. {2} file change(s) applied.</sys:String>
+    <sys:String x:Key="S.Dlg.CheckoutFailedTitle">{0} Failed</sys:String>
+    <sys:String x:Key="S.Dlg.CheckoutFailed">{0} to '{1}' did not run.</sys:String>
+    <sys:String x:Key="S.Dlg.DeleteComplete">Deleted '{0}'. {1} backup entry(ies) removed, {2} file(s) relocated, {3} reclaimed.</sys:String>
+    <sys:String x:Key="S.Dlg.DeleteBlocked">'{0}' was not deleted.</sys:String>
+    <sys:String x:Key="S.Dlg.DeleteFailed">Deleting '{0}' failed. The version list and the backups were left unchanged.</sys:String>
+    <sys:String x:Key="S.Dlg.RenameFailed">'{0}' was not renamed.</sys:String>
+    <sys:String x:Key="S.Dlg.RenameUnchanged">'{0}' is unchanged.</sys:String>
+    <sys:String x:Key="S.Dlg.RenameDone">'{0}' is now '{1}'.</sys:String>
+    <sys:String x:Key="S.Dlg.UpdateLogSaved">Update log of '{0}' saved.</sys:String>
+    <sys:String x:Key="S.Dlg.ErrorTitle">Error</sys:String>
+    <sys:String x:Key="S.Dlg.PickSrcFolder">Set Deploy Source Directory</sys:String>
+    <sys:String x:Key="S.Dlg.SetSrcPath">Please set the source deploy path first.</sys:String>
+    <sys:String x:Key="S.Dlg.RevertAllConfirm">Revert all {0} integrity-detected change(s) back to the current version?</sys:String>
+    <sys:String x:Key="S.Dlg.RevertChangeTitle">Revert Change</sys:String>
+    <sys:String x:Key="S.Dlg.RevertOnlyIntegrity">Only applicable to files flagged by the integrity check.</sys:String>
+    <sys:String x:Key="S.Dlg.ChangedListEmpty">Model binding issue: the changed list is empty.</sys:String>
+    <sys:String x:Key="S.Dlg.ValidationTitle">Validation</sys:String>
+    <sys:String x:Key="S.Dlg.NeedVersionAndUpdater">Must have both a commit message and an updater name.</sys:String>
+    <sys:String x:Key="S.Dlg.OpenProjectFolder">Open Managed Project</sys:String>
+    <sys:String x:Key="S.Dlg.ImportProjectTitle">Import Project</sys:String>
+    <sys:String x:Key="S.Dlg.InitNewProject">{0}&#x0a;VersionLog file not found.&#x0a;Initialize a new project?</sys:String>
+    <sys:String x:Key="S.Dlg.SelectAnotherPath">Please select another project path.</sys:String>
+    <sys:String x:Key="S.Dlg.ImportSyncTitle">Import / Sync</sys:String>
+    <sys:String x:Key="S.Dlg.ImportSyncConfirm">You are about to stage {0} file change(s) to match version {1}.&#x0a;&#x0a;Continue?</sys:String>
+
+    <!-- Busy overlay -->
+    <sys:String x:Key="S.Ovl.Integrity">Integrity check running…</sys:String>
+    <sys:String x:Key="S.Ovl.Checkout">Checkout in progress…</sys:String>
+    <sys:String x:Key="S.Ovl.Deploying">Deploying new version…</sys:String>
+    <sys:String x:Key="S.Ovl.Deleting">Deleting version…</sys:String>
+    <sys:String x:Key="S.Ovl.Exporting">Exporting…</sys:String>
+    <sys:String x:Key="S.Ovl.Working">Working…</sys:String>
+    <sys:String x:Key="S.Ovl.Files">{0:N0} / {1:N0} files</sys:String>
+    <sys:String x:Key="S.Ovl.Disabled">All controls are disabled until this operation finishes.</sys:String>
+    <sys:String x:Key="S.Ovl.OutChecked">checked</sys:String>
+    <sys:String x:Key="S.Ovl.OutModified">modified</sys:String>
+    <sys:String x:Key="S.Ovl.OutAdded">added</sys:String>
+    <sys:String x:Key="S.Ovl.OutDeleted">deleted</sys:String>
+    <sys:String x:Key="S.Ovl.OutHashFailed">hash failed</sys:String>
+    <sys:String x:Key="S.Ovl.OutMetadata">metadata check</sys:String>
+</ResourceDictionary>

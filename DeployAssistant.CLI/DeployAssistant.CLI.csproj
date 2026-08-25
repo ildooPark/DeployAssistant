@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -7,7 +7,18 @@
     <Nullable>enable</Nullable>
     <AssemblyName>deployassistant</AssemblyName>
     <RootNamespace>DeployAssistant.CLI</RootNamespace>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <!-- The CLI carries its own semver line, independent of the GUI's
+         (see docs/release-process.md). Bump alongside the -CliVersion passed to
+         scripts/release.ps1, and update CliVersionTests to match. -->
+    <Version>2.0.0</Version>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="app.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Spectre.Console" Version="0.49.1" />

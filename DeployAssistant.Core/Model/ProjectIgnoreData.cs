@@ -37,6 +37,11 @@ namespace DeployAssistant.Model
                 new RecordedFile("*.deploy" , ProjectDataType.File, IgnoreType.Deploy | IgnoreType.Initialization | IgnoreType.Integration),
                 new RecordedFile("*.VersionLog", ProjectDataType.File, IgnoreType.All),
                 new RecordedFile("Export_XLSX", ProjectDataType.Directory, IgnoreType.All),
+                // Shipped 3.6.1 defaults (built from a diverged source tree): live production
+                // files on the vision lines that must never be staged or reverted.
+                new RecordedFile("ProductionRecord.db", ProjectDataType.File, IgnoreType.All),
+                new RecordedFile("configfilepath.txt", ProjectDataType.File, IgnoreType.All),
+                new RecordedFile("msg_format.dat", ProjectDataType.File, IgnoreType.All),
                 new RecordedFile("en-US", ProjectDataType.Directory, IgnoreType.Integration),
                 new RecordedFile("ko-KR", ProjectDataType.Directory, IgnoreType.Integration),
                 new RecordedFile("Resources", ProjectDataType.Directory, IgnoreType.Integration)
@@ -79,6 +84,21 @@ namespace DeployAssistant.Model
                 if ((entry.IgnoreType & expected) == expected) continue;
                 entry.IgnoreType |= expected;
                 changed = true;
+            }
+
+            // Ignore files created by builds that predate these entries (the repo lineage
+            // never had them; the shipped 3.6.1 always did) get them appended on load, so
+            // a mixed 3.6.1 + current fleet keeps identical exclusions.
+            foreach (string requiredName in new[] { "ProductionRecord.db", "configfilepath.txt", "msg_format.dat" })
+            {
+                bool present = false;
+                foreach (RecordedFile entry in IgnoreFileList)
+                    if (entry.DataType == ProjectDataType.File && entry.DataName == requiredName) { present = true; break; }
+                if (!present)
+                {
+                    IgnoreFileList.Add(new RecordedFile(requiredName, ProjectDataType.File, IgnoreType.All));
+                    changed = true;
+                }
             }
             return changed;
         }

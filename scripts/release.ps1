@@ -1,23 +1,23 @@
-#requires -Version 5.0
+﻿#requires -Version 5.0
 <#
 .SYNOPSIS
   Package and upload a DeployAssistant release to the team network share.
 
 .DESCRIPTION
-  Publishes the WPF GUI (self-contained single-file) and/or the .NET
+  Publishes the WPF GUI (net472) and/or the .NET
   Framework CLI as separate zips, and drops each into a versioned subfolder
   under either:
 
     개발 (dev, default)  — for testing, no announcement
     배포 (production)    — only with -Official, after the dev drop is verified
 
-  Layout produced on Y:
+  Layout produced on the share
 
-    Y:\...\DeployAssistant\<개발|배포>\<GuiVersion>\
+    G:\...\DeployAssistant\<개발|배포>\<GuiVersion>\
         DeployAssistant_v<GuiVersion>_<date>_<sha>.zip
         (extracted alongside if -Extract)
 
-    Y:\...\DeployAssistant\<개발|배포>\cli\<CliVersion>\
+    G:\...\DeployAssistant\<개발|배포>\cli\<CliVersion>\
         DeployAssistant-CLI_v<CliVersion>_<date>_<sha>.zip
         (extracted alongside if -Extract)
 
@@ -35,16 +35,11 @@
   land in 개발 (dev) and are not considered an announced release.
 
 .PARAMETER Extract
-  Also extract each zip alongside it on Y:. Default is zip-only, matching
+  Also extract each zip alongside it on the share. Default is zip-only, matching
   most of the share's existing entries.
 
-.PARAMETER IncludeFrameworkDependentGui
-  Bundle the framework-dependent GUI flavor next to the single-file build
-  (under a `framework-dependent\` subfolder inside the GUI zip). Default
-  is single-file self-contained only.
-
 .PARAMETER DryRun
-  Stage and zip locally, but skip the Y: drive copy.
+  Stage and zip locally, but skip the share copy.
 
 .PARAMETER SkipBuild
   Skip the `dotnet build` sanity check (still runs the per-project
@@ -52,9 +47,11 @@
   this shell.
 
 .PARAMETER Destination
-  Override the Y: drive parent. Default is the team share. The
-  channel subfolder (개발 or 배포) is appended automatically based on
-  -Official.
+  Override the share parent. Default is the team Google Drive share,
+  mounted by Google Drive for desktop (G: on most machines). Because the
+  mount letter is per-machine, set DA_RELEASE_DEST to override the default
+  without passing this parameter every time. The channel subfolder
+  (개발 or 배포) is appended automatically based on -Official.
 
 .EXAMPLE
   # Dev drop, CLI only
@@ -83,10 +80,16 @@ param(
 
     [switch]$Official,
     [switch]$Extract,
-    [switch]$IncludeFrameworkDependentGui,
     [switch]$DryRun,
     [switch]$SkipBuild,
-    [string]$Destination = 'Y:\21 Dev(SW)\02_Applications\02_Utility\DeployAssistant'
+    # The team share lives on Google Drive ("공유 드라이브" = Shared drives), mounted
+    # by Google Drive for desktop. The mount letter is per-machine, so DA_RELEASE_DEST
+    # wins when set. The channel subfolder (개발/배포) is appended below, so this path
+    # must stop at DeployAssistant.
+    [string]$Destination = $(
+        if ($env:DA_RELEASE_DEST) { $env:DA_RELEASE_DEST }
+        else { 'G:\공유 드라이브\SW\Applications\Utility\DeployAssistant' }
+    )
 )
 
 $ErrorActionPreference = 'Stop'
@@ -139,28 +142,19 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { throw "dotnet build failed." }
 }
 
-$pubGuiSc = Join-Path $publishRoot 'DeployAssistant-sc'
-$pubGuiFd = Join-Path $publishRoot 'DeployAssistant-fd'
-$pubCli   = Join-Path $publishRoot 'DeployAssistant.CLI'
+$pubGui = Join-Path $publishRoot 'DeployAssistant'
+$pubCli = Join-Path $publishRoot 'DeployAssistant.CLI'
 
 if ($GuiVersion) {
-    foreach ($p in @($pubGuiSc, $pubGuiFd)) { if (Test-Path $p) { Remove-Item $p -Recurse -Force } }
+    if (Test-Path $pubGui) { Remove-Item $pubGui -Recurse -Force }
 
-    Write-Host "Publishing WPF GUI (self-contained, single-file, win-x64)..." -ForegroundColor Cyan
+    # net472: the runtime is part of Windows (4.7.2+ in-box since Windows 10 1803),
+    # so there is no self-contained publish mode and none is needed.
+    Write-Host "Publishing WPF GUI (net472)..." -ForegroundColor Cyan
     & dotnet publish (Join-Path $repoRoot 'DeployAssistant\DeployAssistant.csproj') `
-        -c Release -r win-x64 --self-contained true `
-        -p:PublishSingleFile=true `
-        -o $pubGuiSc
-    if ($LASTEXITCODE -ne 0) { throw "GUI self-contained publish failed." }
-
-    if ($IncludeFrameworkDependentGui) {
-        Write-Host "Publishing WPF GUI (framework-dependent, win-x64)..." -ForegroundColor Cyan
-        & dotnet publish (Join-Path $repoRoot 'DeployAssistant\DeployAssistant.csproj') `
-            -c Release -r win-x64 --self-contained false `
-            -p:PublishSingleFile=false `
-            -o $pubGuiFd
-        if ($LASTEXITCODE -ne 0) { throw "GUI framework-dependent publish failed." }
-    }
+        -c Release `
+        -o $pubGui
+    if ($LASTEXITCODE -ne 0) { throw "GUI publish failed." }
 }
 
 if ($CliVersion) {
@@ -212,7 +206,7 @@ DeployAssistant GUI v$Version  ($date, commit $gitSha)
 
 Double-click DeployAssistant.exe to launch.
 
-Self-contained: no .NET runtime install required.
+Runs on the OS-provided .NET Framework - Windows 10 1803 or later needs no install.
 
 Documentation
 -------------
@@ -254,11 +248,8 @@ GitHub: https://github.com/ildooPark/DeployAssistant
 $builtZips = @()
 
 if ($GuiVersion) {
-    $extras = @{}
-    if ($IncludeFrameworkDependentGui) { $extras['framework-dependent'] = $pubGuiFd }
-    $builtZips += New-ReleaseZip -Kind 'GUI' -SourceDir $pubGuiSc -Version $GuiVersion `
-        -ZipFileName "DeployAssistant_v${GuiVersion}_${date}_${gitSha}.zip" `
-        -ExtraDirs $extras
+    $builtZips += New-ReleaseZip -Kind 'GUI' -SourceDir $pubGui -Version $GuiVersion `
+        -ZipFileName "DeployAssistant_v${GuiVersion}_${date}_${gitSha}.zip"
 }
 
 if ($CliVersion) {
@@ -280,7 +271,7 @@ foreach ($z in $builtZips) {
 
 if ($DryRun) {
     Write-Host ""
-    Write-Host "[DryRun] Skipped Y: drive copy. Zips remain in `$env:TEMP." -ForegroundColor Yellow
+    Write-Host "[DryRun] Skipped share copy. Zips remain in `$env:TEMP." -ForegroundColor Yellow
     foreach ($z in $builtZips) {
         Remove-Item $z.StagingRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -288,7 +279,21 @@ if ($DryRun) {
 }
 
 if (-not (Test-Path $Destination)) {
-    throw "Destination not reachable: $Destination. Connect to the network share and retry, or use -DryRun."
+    throw @"
+Destination not reachable: $Destination
+
+The team share is on Google Drive ("공유 드라이브"), mounted by Google Drive for
+desktop. Check that it is running and signed in, then confirm the mount letter --
+it is per-machine and may not be G: on yours.
+
+Fixes, in order of preference:
+  1. Set the override once:  `$env:DA_RELEASE_DEST = '<letter>:\공유 드라이브\SW\Applications\Utility\DeployAssistant'
+  2. Pass it explicitly:     -Destination '<letter>:\공유 드라이브\SW\Applications\Utility\DeployAssistant'
+  3. Local zip only:         -DryRun
+
+The path must stop at DeployAssistant -- the 개발/배포 channel folder is appended
+automatically based on -Official.
+"@
 }
 
 foreach ($z in $builtZips) {
