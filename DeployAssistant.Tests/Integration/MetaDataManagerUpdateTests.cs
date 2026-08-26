@@ -4,7 +4,9 @@ using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.Services;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -180,6 +182,79 @@ namespace DeployAssistant.Tests.Integration
             // Second read returns null — read-once semantics
             Assert.Null(mgr.LastUpdated);
             Assert.Null(mgr.ConsumeLastUpdated());
+        }
+
+        [Fact]
+        public async Task RequestStageChanges_QueuedFileRestore_StaysInStagedList()
+        {
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            // Commit v2 so the newest version's diff log holds a v1 SrcFile to restore.
+            File.WriteAllText(Path.Combine(_projectDir, "app.dll"), "MODIFIED content v2");
+            await IntegrityCheckThenStageAndWaitAsync(mgr);
+            Assert.True(mgr.RequestProjectUpdate("tester", "v2 update", _projectDir));
+
+            ChangedFile? change = mgr.MainProjectData?.ChangedFiles
+                .FirstOrDefault(c => c.SrcFile != null && c.SrcFile.DataName == "app.dll");
+            Assert.NotNull(change);
+
+            object? stagedPayload = null;
+            mgr.StagedChangesEventHandler += payload => stagedPayload = payload;
+
+            // The Diff Log restore button path (FileTrackViewModel.RestoreFile),
+            // followed directly by the Stage button (no integrity check between).
+            mgr.RequestFileRestore(change!.SrcFile!, DataState.Restored);
+
+            var stageTcs = new TaskCompletionSource<bool>();
+            bool stagingStarted = false;
+            mgr.ManagerStateEventHandler += state =>
+            {
+                if (state == MetaDataState.Processing) stagingStarted = true;
+                if (stagingStarted && state == MetaDataState.Idle) stageTcs.TrySetResult(true);
+            };
+            mgr.RequestStageChanges();
+            await Task.Delay(100);
+            if (!stagingStarted && mgr.CurrentState == MetaDataState.Idle) stageTcs.TrySetResult(true);
+            using (var cts = new System.Threading.CancellationTokenSource(10_000))
+            {
+                cts.Token.Register(() => stageTcs.TrySetCanceled());
+                await stageTcs.Task;
+            }
+
+            var staged = Assert.IsAssignableFrom<List<ChangedFile>>(stagedPayload);
+            Assert.Contains(staged, c =>
+                (c.DstFile?.DataName ?? c.SrcFile?.DataName) == "app.dll" &&
+                (c.DataState & DataState.Restored) != 0);
+        }
+
+        [Fact]
+        public async Task RequestStageChanges_IntegrityCheckBetweenRestoreAndStage_KeepsQueuedRestore()
+        {
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            File.WriteAllText(Path.Combine(_projectDir, "app.dll"), "MODIFIED content v2");
+            await IntegrityCheckThenStageAndWaitAsync(mgr);
+            Assert.True(mgr.RequestProjectUpdate("tester", "v2 update", _projectDir));
+
+            ChangedFile? change = mgr.MainProjectData?.ChangedFiles
+                .FirstOrDefault(c => c.SrcFile != null && c.SrcFile.DataName == "app.dll");
+            Assert.NotNull(change);
+
+            object? stagedPayload = null;
+            mgr.StagedChangesEventHandler += payload => stagedPayload = payload;
+
+            // Queue the restore, then run an integrity check (checkout gates and the
+            // toolbar button both do this) before pressing Stage. The queued restore
+            // must survive the check.
+            mgr.RequestFileRestore(change!.SrcFile!, DataState.Restored);
+            await IntegrityCheckThenStageAndWaitAsync(mgr);
+
+            var staged = Assert.IsAssignableFrom<List<ChangedFile>>(stagedPayload);
+            Assert.Contains(staged, c =>
+                (c.DstFile?.DataName ?? c.SrcFile?.DataName) == "app.dll" &&
+                (c.DataState & DataState.Restored) != 0);
         }
     }
 }

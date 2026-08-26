@@ -117,7 +117,9 @@ namespace DeployAssistant.DataComponent
                 IntegrityCheckEventHandler?.Invoke(reason, new List<ProjectFile>());
                 return;
             }
-            _preStagedFilesDict.Clear();
+            // _preStagedFilesDict is deliberately left alone: it holds user-queued intent
+            // (file restores, scanned deploy sources) that an integrity run — including the
+            // ones checkout gates trigger — must not silently discard.
             // Entries from earlier integrity runs would otherwise accumulate for the whole
             // session (TryAdd lets stale state win) and ride into the next update.
             foreach (string staleKey in _registeredChangesDict
