@@ -897,19 +897,8 @@ namespace DeployAssistant.DataComponent
         }
         private void RegisterNewData(string srcDirPath)
         {
-            if (TryGetDeployMetaFile(srcDirPath, out DeployData? deployData))
-            {
-                if (TryValidateDeployMetaFile(srcDirPath, deployData))
-                {
-                    RegisterFilesFromDeployData(srcDirPath, deployData);
-                    RegisterFilesUnderSubDirectory(srcDirPath);
-                    return;
-                }
-                else
-                {
-                    Trace.TraceWarning("Failed to Allocate src files using previous settings. Allocate Manually");
-                }
-            }
+            // DeployAssistant.deploy sidecars are deprecated as of 4.x: never consulted,
+            // never written. Leftovers (incl. ones 3.6.1 still writes) stay scan-ignored.
             try
             {
                 RegisterAllSrcFiles(srcDirPath);
@@ -1216,14 +1205,18 @@ namespace DeployAssistant.DataComponent
                         srcPath,
                         PathCompat.GetRelativePath(srcPath, topDirFilePaths[i])
                         );
-                    foreach (ProjectFile projDir in _projDirFileList)
+                    // Computed fresh: the ProjLoaded-time _projDirFileList snapshot predates
+                    // the root ("") directory entry, which is appended after that event.
+                    foreach (ProjectFile projDir in _dstProjectData.ProjectDirFileList)
                     {
                         ChangedFile potentialNew = new ChangedFile(newFile, projDir, DataState.Overlapped);
                         registeredNewList.Add(potentialNew);
                     }
                 }
             }
-            if (registeredOverlapsList.Count >= 1)
+            // New-only batches must open the destination picker too — an overlap is not
+            // required for the user to have an allocation decision to make.
+            if (registeredOverlapsList.Count >= 1 || registeredNewList.Count >= 1)
             {
                 OverlappedFileFoundEventHandler?.Invoke(registeredOverlapsList, registeredNewList);
             }
@@ -1241,7 +1234,6 @@ namespace DeployAssistant.DataComponent
         }
         public void RegisterAbnormalFiles(List<ChangedFile> sortedOverlaps, List<ChangedFile> sortedNew)
         {
-            Dictionary<string, ProjectFile> newlyAllocatedFiles = []; 
             foreach (ChangedFile overlappedFile in sortedOverlaps)
             {
                 if (overlappedFile.DstFile.IsDstFile)
@@ -1251,7 +1243,6 @@ namespace DeployAssistant.DataComponent
                     _fileHandlerTool.HandleFile(overlappedFile.SrcFile.DataAbsPath, newSrcFilePath, DataState.PreStaged);
                     ProjectFile newPreStagedFile = new ProjectFile(overlappedFile.SrcFile, DataState.PreStaged);
                     newPreStagedFile.DataRelPath = overlappedFile.DstFile.DataRelPath;
-                    newlyAllocatedFiles.TryAdd(newPreStagedFile.DataRelPath, newPreStagedFile); 
                     _preStagedFilesDict.TryAdd(newPreStagedFile.DataRelPath, newPreStagedFile);
                 }
             }
@@ -1267,55 +1258,49 @@ namespace DeployAssistant.DataComponent
                     ProjectFile newPreStagedFile = new ProjectFile(newFile.SrcFile, DataState.Added);
                     newPreStagedFile.DataRelPath = newSrcFileRelPath;
                     _preStagedFilesDict.TryAdd(newPreStagedFile.DataRelPath, newPreStagedFile);
-                    newlyAllocatedFiles.TryAdd(newPreStagedFile.DataRelPath, new ProjectFile(newPreStagedFile, DataState.PreStaged));
                 }
             }
-            RegisterDeployData(_dstProjectData.ProjectName, newlyAllocatedFiles);
             DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
         }
-        private void RegisterDeployData(string projectName, Dictionary<string, ProjectFile> registeredDeployment)
-        {
-            try
-            {
-                string srcPath = registeredDeployment.Values.First().DataSrcPath;
-                const string deployFilename = "DeployAssistant.deploy";
-                string deployfilePath = Path.Combine(srcPath, deployFilename);
-                DeployData deployData = new DeployData(projectName, registeredDeployment);
-                _fileHandlerTool.TrySerializeJsonData(deployfilePath, deployData);
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning($"Failed Deployment {ex.Message}");
-            }
-        }
-        private void RegisterFilesFromDeployData(string srcPath, DeployData deployedData)
-        {
-            foreach (ProjectFile registeredFile in deployedData.SortedTopFiles.Values)
-            {
-                ProjectFile newPreStagedFile = new ProjectFile(registeredFile, DataState.PreStaged);
-                newPreStagedFile.DataSrcPath = srcPath;
-                _preStagedFilesDict.TryAdd(newPreStagedFile.DataRelPath, newPreStagedFile);
-            }
-            DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
-        }
-        private bool TryRemovePreRegisteredAllocation(string dstSrcPath, DeployData deployedData)
-        {
-            try
-            {
-                foreach (ProjectFile registeredFile in deployedData.SortedTopFiles.Values)
-                {
-                    string fileOriginalSrcPath = Path.Combine(dstSrcPath, registeredFile.DataName);
 
-                    if (File.Exists(PathCompat.ToNetFrameworkLongPath(registeredFile.DataAbsPath)) && fileOriginalSrcPath != registeredFile.DataAbsPath) 
-                        File.Delete(PathCompat.ToNetFrameworkLongPath(registeredFile.DataAbsPath));
-                }
-                return true; 
-            }
-            catch (Exception ex)
+        /// <summary>
+        /// Entry point for files dragged onto the staging surface. Each file is copied
+        /// into a session-scoped temp drop folder (originals are never touched), then
+        /// routed through the same name-match categorization as top-level source files:
+        /// one match pre-stages automatically, several or none raise the destination
+        /// picker. Directories and unreadable paths are skipped.
+        /// </summary>
+        public void RegisterDroppedFiles(string[]? filePaths)
+        {
+            if (_dstProjectData == null)
             {
-                Trace.TraceWarning($"Failed to remove existing registered files in src folder {ex.Message}");
-                return false;
+                Trace.TraceWarning("RegisterDroppedFiles: no project loaded");
+                return;
             }
+            string[] files = (filePaths ?? Array.Empty<string>())
+                .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(PathCompat.ToNetFrameworkLongPath(p)))
+                .ToArray();
+            if (files.Length == 0) return;
+
+            string dropRoot = Path.Combine(Path.GetTempPath(), "DeployAssistant",
+                "Drop_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(PathCompat.ToNetFrameworkLongPath(dropRoot));
+            List<string> copied = new List<string>();
+            foreach (string file in files)
+            {
+                string dst = Path.Combine(dropRoot, Path.GetFileName(file));
+                try
+                {
+                    File.Copy(PathCompat.ToNetFrameworkLongPath(file), PathCompat.ToNetFrameworkLongPath(dst), overwrite: true);
+                    copied.Add(dst);
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning($"RegisterDroppedFiles: skipped '{file}' ({ex.Message})");
+                }
+            }
+            if (copied.Count == 0) return;
+            HandleAbnormalFiles(dropRoot, copied.ToArray());
         }
         #endregion
 
@@ -1538,53 +1523,6 @@ namespace DeployAssistant.DataComponent
         #endregion
 
         #region Util Calls 
-        private bool TryGetDeployMetaFile(string srcPath, out DeployData? deployData)
-        {
-            const string deployFilename = "DeployAssistant.deploy";
-            string deployfilePath = Path.Combine(srcPath, deployFilename);
-            if (_fileHandlerTool.TryDeserializeJsonData(deployfilePath, out DeployData? existingDeployData))
-            {
-                if (existingDeployData.ProjectName != _dstProjectData.ProjectName)
-                {
-                    deployData = null; 
-                    return false;
-                }
-
-                if (!TryValidateDeployMetaFile(srcPath, existingDeployData)) 
-                {
-                    deployData = null; 
-                    return false; 
-                }
-                deployData = existingDeployData;
-                return true;
-            }
-            else
-            {
-                if (File.Exists(PathCompat.ToNetFrameworkLongPath(deployfilePath))) File.Delete(PathCompat.ToNetFrameworkLongPath(deployfilePath));
-                deployData = null;
-                return false;
-            }
-        }
-
-        private bool TryValidateDeployMetaFile(string srcPath, DeployData deployData)
-        {
-            try
-            {
-                foreach (ProjectFile registeredFile in deployData.SortedTopFiles.Values)
-                {
-                    if (registeredFile.DataType == ProjectDataType.Directory) continue; 
-                    if (registeredFile == null || registeredFile.DataName == "") return false; 
-                    string fileSrcPath = Path.Combine(srcPath, registeredFile.DataName);
-                    if (!File.Exists(PathCompat.ToNetFrameworkLongPath(fileSrcPath))) return false; 
-                }
-                return true; 
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning($"Critical Error while validating registered deploy meta files {ex.Message}");
-                return false; 
-            }
-        }
         #endregion
 
         #region Planned 

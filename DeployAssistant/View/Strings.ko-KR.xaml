@@ -87,6 +87,8 @@
     <sys:String x:Key="S.Filter">필터…</sys:String>
     <sys:String x:Key="S.FilterFiles">파일 필터…</sys:String>
     <sys:String x:Key="S.GroupByFolder">폴더별 보기</sys:String>
+    <sys:String x:Key="S.Drop.Title">파일 드롭</sys:String>
+    <sys:String x:Key="S.Drop.FoldersIgnored">파일만 드롭할 수 있습니다 — 폴더는 무시되었습니다.</sys:String>
     <sys:String x:Key="S.UpdateLog">업데이트 로그</sys:String>
     <sys:String x:Key="S.SrcPrefix">소스: </sys:String>
     <sys:String x:Key="S.DstPrefix">대상: </sys:String>

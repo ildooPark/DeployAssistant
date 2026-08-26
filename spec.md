@@ -320,8 +320,8 @@ exclusions. An **unreadable** `.ignore` is never fatal: `SettingManager` preserv
 None=0, Integration=1, IntegrityCheck=2, Deploy=4, Initialization=8, All=~0
 ```
 
-### 6.7 `DeployData`
-Saved as `DeployAssistant.deploy` (JSON) in the source folder when file allocation has been manually resolved. Stores `ProjectName` and `Dictionary<string, ProjectFile> SortedTopFiles` (key = `DataRelPath`) so that the same allocation can be reused on the next deployment from the same folder.
+### 6.7 `DeployData` — **deprecated (4.x)**
+The `DeployAssistant.deploy` sidecar is retired: 4.x neither writes it (allocation resolution no longer persists) nor reads it (`RetrieveDataSrc` skips straight to scanning). The `[Obsolete]` `DeployData` class stays only to document the shape 3.6.1 still writes in the field — `ProjectName` plus `Dictionary<string, ProjectFile> SortedTopFiles` (key = `DataRelPath`) — and scans keep ignoring the file itself (the `*.deploy` ignore entry and the explicit `.deploy` skip in `HandleAbnormalFiles` both remain).
 
 ### 6.8 `LocalConfigData`
 Saved as `DeployAssistant.config` (JSON) in `%USERPROFILE%\Documents`. Contains `LastOpenedDstPath`, `Language` (`"ko-KR"` / `"en-US"`), `RecentProjects` (MRU project paths, newest first, capped at 8 — feeds the Project ▸ Recent Projects menu) and `FastIntegritySamplePercent` (nullable int, see §12.4; `null` reads as 100). All fields after `LastOpenedDstPath` are additive, so 3.6.1-era configs still load — but a 3.6.1 save drops them, resetting the choices. Loaded on startup to offer re-opening the last project and to pick the UI language (default Korean).
@@ -429,6 +429,7 @@ All public `Request*` methods are the sole API surface that ViewModels call. The
 | `RequestRecentProjects()` / `RequestFastIntegritySamplePercent()` / `RequestSaveFastIntegritySamplePercent(int)` | Pass-throughs to `SettingManager` (§8.6) for the GUI menu strip |
 | `RequestFetchBackup()` | Populate backup version list |
 | `RequestFileRestore(file, state)` | Queue a single file for restore |
+| `RequestDroppedFiles(string[]? paths)` | Queue files dragged onto the staging surface: single name match pre-stages automatically, ambiguous/new files raise `OverlappedFileSortEventHandler` for destination selection (§8.2). Staging stays a separate explicit step |
 | `RequestRevertChange(file) → bool` | Revert a single `IntegrityChecked`-flagged file. Returns `true` if the `IntegrityChecked` flag is cleared after the call (success); `false` if `FileManager.RevertChange` re-applied the flag due to missing backup or missing project file entry. |
 | `RequestOverlappedFileAllocation(overlaps, newFiles)` | Accept resolved overlap decisions from the UI |
 | `RequestProjVersionDiff(srcData)` | Compute diff between a given version and main |
@@ -463,11 +464,12 @@ All public `Request*` methods are the sole API surface that ViewModels call. The
 **`RetrieveDataSrc(srcPath)`**
 0. Purge stale `IntegrityChecked` entries from `_registeredChangesDict` (leftovers of earlier integrity runs would otherwise accumulate for the whole session and ride into the next update).
 1. Check for a `.VersionLog` file; if found, deserialize it as `_srcProjectData`.
-2. Check for a `DeployAssistant.deploy` file; if found and valid, restore previous file allocation.
-3. Otherwise, scan all files/directories:
+2. Scan all files/directories (`DeployAssistant.deploy` sidecars are deprecated and no longer consulted — see §6.7):
    - Files in **sub-directories** → added to `_preStagedFilesDict` directly with correct relative paths.
    - Files in the **top directory** → handled as "abnormal" (may be updates to files that live in sub-directories).
-4. Fire `DataPreStagedEventHandler`.
+3. Fire `DataPreStagedEventHandler`.
+
+**`HandleAbnormalFiles` / `RegisterDroppedFiles`** — top-directory source files and files dropped onto the staging surface share one categorization: a name matching exactly **one** tracked file pre-stages automatically at that rel path; **several** matches or **no** match raise `OverlappedFileFoundEventHandler` so the user allocates a destination (new-file candidates are computed fresh from `ProjectDirFileList`, which includes the root `""` entry). The event fires when *either* the overlap or the new list is non-empty — an overlap is not required. Dropped files are first copied into a per-drop `%TEMP%\DeployAssistant\Drop_<guid>\` folder so originals are never touched; directories and unreadable paths are skipped (the GUI reports ignored folders).
 
 **`HandleAbnormalFiles(srcPath, topDirFilePaths[])`** (overlap detection)
 - For each top-level file:
@@ -633,7 +635,6 @@ Failure semantics follow the persist boundary. **Before** the persist, everythin
 - Reads or creates `DeployAssistant.ignore` at the project root.
 - Fires `IgnoreDataLoadedEventHandler(ProjectMetaData, ProjectIgnoreData)`. `MetaDataManager` composes the two into a `ProjectContext` and re-fires `ProjectContextLoadedEventHandler`, which `FileManager` consumes. (This replaced the old `UpdateIgnoreListEventHandler`; the two-event `MetaDataLoaded` + `UpdateIgnoreList` coordination it superseded was the cause of regression #17.)
 
-**`RegisterSrcDeploy(path, registeredFiles)`** — Writes a `DeployAssistant.deploy` file at a source path.
 
 ---
 
@@ -923,7 +924,7 @@ Renaming changes a snapshot's `UpdatedVersion` tag, its `UpdateLog`, or both. It
 | `<Version>.VersionLog` | Base64(JSON(`ProjectData`)) | `<ProjectPath>/Export_<Name>/<Version>/` | `ExportManager` |
 | `DeployAssistant.config` | Indented JSON (`LocalConfigData`) | `%USERPROFILE%/Documents/` | `SettingManager` |
 | `DeployAssistant.ignore` | Indented JSON (`ProjectIgnoreData`) | `<ProjectPath>/` | `SettingManager` |
-| `DeployAssistant.deploy` | Indented JSON (`DeployData`) | `<SourcePath>/` | `FileManager`, `SettingManager` |
+| `DeployAssistant.deploy` | Indented JSON (`DeployData`) | `<SourcePath>/` | **Deprecated** — written/read by 3.6.1 only; 4.x ignores it (§6.7) |
 
 **`ProjectMetaData.bin` is written atomically.** `FileHandlerTool.TrySerializeProjectMetaData` serialises to `ProjectMetaData.bin.tmp` and swaps it in with `File.Replace`, so a crash or a full disk can no longer leave a half-written store. The temp file sits on the same volume as the destination (a `File.Replace` requirement) and is removed in a `finally`.
 
@@ -1208,7 +1209,7 @@ The decomposition below survived the AvalonDock removal; only the docking types 
 | Diff Log | Col 0, bottom | `DataGrid` of the selected version's changed files, plus Updater / Log fields and a per-row **Restore** button |
 | Project Files | Col 2, tab 1 | `DataGrid` of the tracked file set with a keyword filter, plus a **폴더별 보기** (`S.GroupByFolder`) chip that swaps the grid for a `TreeView` folder hierarchy built by `ProjectFileTreeNode.Build` (Core): folder nodes show `(file count · total size)`, leaves show name + `VersionDisplay` + human-readable size + trimmed hash — no rel-path / deployed-version / time columns (names `FsHeader`, metadata `FsBody`, one step above the app norm for scanability). Selecting a file highlights every file with the same hash (`#FFF3C4`) and auto-expands the ancestor folders of each match without collapsing anything. The tree is rebuilt from the grid's view, so the keyword filter carries over, and refreshes on project (re)load |
 | Metafile Compare | Col 2, tab 2 | Import / export sync-package flow against a `.VersionLog` metafile |
-| Staged Changes | Col 4, top | Staged + pre-staged change list |
+| Staged Changes | Col 4, top | Staged + pre-staged change list. The whole right column is a **file drop zone**: dropped files queue via `RequestDroppedFiles` (folders are refused with a dialog) |
 | Actions | Col 4, bottom | Updater / Update Log inputs and the Stage / Update / Clear / Refresh buttons |
 
 **Version History context menu:** Export Full Version · Export Version Log · Compare With Main · Compare Src With Main · Checkout Version · Clean Restore · Full Log · Src Full Log · Src Version Similarities · ─ · **Rename / Re-tag...** · **Delete Version...** (tinted `#C62828`). The menu re-binds `DataContext` to `PlacementTarget.Tag` so the commands resolve against the window's `MainViewModel` rather than the selected row.

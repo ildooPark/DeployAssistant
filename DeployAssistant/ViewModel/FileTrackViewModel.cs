@@ -6,6 +6,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
@@ -191,6 +193,18 @@ namespace DeployAssistant.ViewModel
         private void StageNewChanges(object obj)
         {
             _metaDataManager.RequestStageChanges();
+        }
+
+        public void QueueDroppedFiles(string[]? paths)
+        {
+            if (paths == null || paths.Length == 0) return;
+            if (_metaDataState != MetaDataState.Idle) return;
+            string[] files = paths.Where(File.Exists).ToArray();
+            if (files.Length < paths.Length)
+                _dialogService.Inform(Loc.T("S.Drop.Title", "Drop files"),
+                    Loc.T("S.Drop.FoldersIgnored", "Only files can be dropped — folders were ignored."));
+            if (files.Length > 0)
+                _metaDataManager.RequestDroppedFiles(files);
         }
 
         private bool CanOpenDeployedProjectInfo(object obj)

@@ -874,6 +874,17 @@ namespace DeployAssistant.DataComponent
             _fileManager.RegisterNewfile(targetFile, state);
         }
 
+        /// <summary>
+        /// Queues files dropped onto the staging surface. Name-matched files pre-stage
+        /// automatically; ambiguous or new files raise
+        /// <see cref="OverlappedFileSortEventHandler"/> for destination selection.
+        /// Staging remains a separate, explicit step.
+        /// </summary>
+        public void RequestDroppedFiles(string[]? filePaths)
+        {
+            _fileManager.RegisterDroppedFiles(filePaths);
+        }
+
         public void RequestExportProjectBackup(ProjectData projectData)
         {
             _exportManager.ExportProject(projectData);

@@ -229,6 +229,119 @@ namespace DeployAssistant.Tests.Integration
         }
 
         [Fact]
+        public async Task RequestDroppedFiles_SingleNameMatch_PreStagesAtMatchedRelPath()
+        {
+            string subDir = Path.Combine(_projectDir, "sub");
+            Directory.CreateDirectory(subDir);
+            File.WriteAllText(Path.Combine(subDir, "engine.dll"), "engine v1");
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            string dropSrc = Path.Combine(Path.GetTempPath(), "DA_DropSrc_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dropSrc);
+            string droppedFile = Path.Combine(dropSrc, "engine.dll");
+            File.WriteAllText(droppedFile, "engine v2");
+            try
+            {
+                object? preStagedPayload = null;
+                mgr.FileChangesEventHandler += p => preStagedPayload = p;
+
+                mgr.RequestDroppedFiles(new[] { droppedFile });
+
+                var preStaged = Assert.IsAssignableFrom<System.Collections.ObjectModel.ObservableCollection<ProjectFile>>(preStagedPayload);
+                Assert.Contains(preStaged, f => f.DataRelPath == Path.Combine("sub", "engine.dll"));
+            }
+            finally
+            {
+                Directory.Delete(dropSrc, recursive: true);
+            }
+        }
+
+        [Fact]
+        public async Task RequestDroppedFiles_NewFileOnly_RaisesDestinationPicker()
+        {
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            string dropSrc = Path.Combine(Path.GetTempPath(), "DA_DropSrc_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dropSrc);
+            string droppedFile = Path.Combine(dropSrc, "brandnew.dll");
+            File.WriteAllText(droppedFile, "new content");
+            try
+            {
+                List<ChangedFile>? newCandidates = null;
+                mgr.OverlappedFileSortEventHandler += (overlaps, news) => newCandidates = news;
+
+                mgr.RequestDroppedFiles(new[] { droppedFile });
+
+                Assert.NotNull(newCandidates);
+                Assert.Contains(newCandidates!, c => c.SrcFile?.DataName == "brandnew.dll");
+            }
+            finally
+            {
+                Directory.Delete(dropSrc, recursive: true);
+            }
+        }
+
+        [Fact]
+        public async Task RetrieveSrc_DeployFilePresent_IsIgnoredNotRestored()
+        {
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            string srcDir = Path.Combine(Path.GetTempPath(), "DA_DeploySrc_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(srcDir);
+            File.WriteAllText(Path.Combine(srcDir, "newfile.txt"), "content");
+            // A stale sidecar from an older build claiming a bogus allocation.
+            File.WriteAllText(Path.Combine(srcDir, "DeployAssistant.deploy"),
+                "{\"ProjectName\":\"" + mgr.ProjectMetaData!.ProjectName + "\",\"SortedTopFiles\":{\"ghost\\\\newfile.txt\":{\"DataType\":0,\"DataSize\":7,\"BuildVersion\":\"\",\"DeployedProjectVersion\":\"\",\"UpdatedTime\":\"2024-01-01T00:00:00\",\"DataState\":16,\"dataName\":\"newfile.txt\",\"dataSrcPath\":\"" + srcDir.Replace("\\", "\\\\") + "\",\"dataRelPath\":\"ghost\\\\newfile.txt\",\"dataHash\":\"\",\"IsDstFile\":false}}}");
+            try
+            {
+                object? preStagedPayload = null;
+                mgr.FileChangesEventHandler += p => preStagedPayload = p;
+
+                mgr.RequestSrcDataRetrieval(srcDir);
+                await Task.Delay(300);
+
+                var preStaged = Assert.IsAssignableFrom<System.Collections.ObjectModel.ObservableCollection<ProjectFile>>(preStagedPayload);
+                // The stale allocation must not be applied, and the sidecar itself must not stage.
+                Assert.DoesNotContain(preStaged, f => f.DataRelPath.StartsWith("ghost"));
+                Assert.DoesNotContain(preStaged, f => f.DataName == "DeployAssistant.deploy");
+            }
+            finally
+            {
+                Directory.Delete(srcDir, recursive: true);
+            }
+        }
+
+        [Fact]
+        public async Task OverlapAllocation_NoLongerWritesDeploySidecar()
+        {
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            string srcDir = Path.Combine(Path.GetTempPath(), "DA_DeployWrite_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(srcDir);
+            string newFilePath = Path.Combine(srcDir, "alloc.dll");
+            File.WriteAllText(newFilePath, "alloc content");
+            try
+            {
+                var srcFile = new ProjectFile(13, "", "alloc.dll", srcDir, "alloc.dll");
+                var dstDir = new ProjectFile("sub", _projectDir, "sub") { IsDstFile = true };
+                var newAlloc = new ChangedFile(srcFile, dstDir, DataState.Overlapped);
+
+                mgr.RequestOverlappedFileAllocation(new List<ChangedFile>(), new List<ChangedFile> { newAlloc });
+
+                Assert.False(File.Exists(Path.Combine(srcDir, "DeployAssistant.deploy")),
+                    "The deprecated .deploy sidecar must no longer be written.");
+            }
+            finally
+            {
+                Directory.Delete(srcDir, recursive: true);
+            }
+        }
+
+        [Fact]
         public async Task RequestStageChanges_IntegrityCheckBetweenRestoreAndStage_KeepsQueuedRestore()
         {
             var mgr = BuildAndAwakeManager();

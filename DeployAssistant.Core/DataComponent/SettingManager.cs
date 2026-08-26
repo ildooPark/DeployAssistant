@@ -179,19 +179,6 @@ namespace DeployAssistant.DataComponent
 
         }
 
-        public void RegisterSrcDeploy(string deployPath, Dictionary<string, ProjectFile> registeredFiles)
-        {
-            try
-            {
-                string deployFilePath = Path.Combine(deployPath, _projDeployFilename);
-                DeployData deployData = new DeployData(_projectIgnoreData.ProjectName, registeredFiles);
-                _fileHandlerTool.TrySerializeJsonData(deployFilePath, deployData);
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning($"Could not Generate Deployed Mark, {ex.Message}");
-            }
-        }
         #endregion
 
         #region CallBacks 

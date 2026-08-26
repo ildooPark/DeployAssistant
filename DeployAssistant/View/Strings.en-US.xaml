@@ -84,6 +84,8 @@
     <sys:String x:Key="S.Filter">Filter…</sys:String>
     <sys:String x:Key="S.FilterFiles">Filter files…</sys:String>
     <sys:String x:Key="S.GroupByFolder">Folder view</sys:String>
+    <sys:String x:Key="S.Drop.Title">Drop files</sys:String>
+    <sys:String x:Key="S.Drop.FoldersIgnored">Only files can be dropped — folders were ignored.</sys:String>
     <sys:String x:Key="S.UpdateLog">Update log</sys:String>
     <sys:String x:Key="S.SrcPrefix">Src: </sys:String>
     <sys:String x:Key="S.DstPrefix">Dst: </sys:String>

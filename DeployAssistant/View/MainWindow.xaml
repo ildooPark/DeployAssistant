@@ -655,7 +655,11 @@
                           Background="#E0E0E0"/>
 
             <!-- RIGHT: Staged Changes (top) + Action Panel (bottom) -->
-            <Grid Grid.Column="4">
+            <Grid Grid.Column="4"
+                  AllowDrop="True"
+                  Background="Transparent"
+                  DragOver="StagingArea_DragOver"
+                  Drop="StagingArea_Drop">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="0.4*"/>
                     <RowDefinition Height="5"/>

@@ -264,6 +264,20 @@ namespace DeployAssistant.View
                 ProjectFileTreeNode.Build(ProjectMainFileList.Items.Cast<ProjectFile>());
         }
 
+        private void StagingArea_DragOver(object sender, DragEventArgs e)
+        {
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
+                ? DragDropEffects.Copy
+                : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void StagingArea_Drop(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] paths && DataContext is MainViewModel vm)
+                vm.FileTrackVM.QueueDroppedFiles(paths);
+        }
+
         private void ProjectFileTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (ProjectFileTree.ItemsSource is not System.Collections.Generic.List<ProjectFileTreeNode> roots)
