@@ -19,7 +19,7 @@
 
         <!-- ── Header ── -->
         <Border Grid.Row="0" Background="#2D2D2D" Padding="10,6">
-            <TextBlock Foreground="White" FontSize="13" FontWeight="SemiBold"
+            <TextBlock Foreground="White" FontSize="{StaticResource FsBody}" FontWeight="SemiBold"
                        Text="{DynamicResource S.Win.ErrorLog}"/>
         </Border>
 
@@ -30,7 +30,7 @@
                  AcceptsReturn="True"
                  TextWrapping="NoWrap"
                  FontFamily="Consolas"
-                 FontSize="12"
+                 FontSize="{StaticResource FsBody}"
                  Foreground="#D4D4D4"
                  Background="#1E1E1E"
                  BorderThickness="0"

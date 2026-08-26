@@ -851,10 +851,23 @@ namespace DeployAssistant.DataComponent
             _fileManager.RegisterAbnormalFiles(overlapSorted, newSorted);
         }
 
-        public void RequestProjectIntegrityCheck()
+        /// <summary>
+        /// Runs the integrity check. A normal run hashes the configured sample share
+        /// (fast check; the rest verify by metadata); <paramref name="forceFullHash"/>
+        /// pins 100% — the pre-checkout gates always pass true so a sampled setting can
+        /// never weaken a checkout decision.
+        /// </summary>
+        public void RequestProjectIntegrityCheck(bool forceFullHash = false)
         {
+            _fileManager.IntegritySamplePercent = forceFullHash ? 100 : _settingManager.GetFastIntegritySamplePercent();
             _fileManager.MainProjectIntegrityCheck();
         }
+
+        public List<string> RequestRecentProjects() => _settingManager.GetRecentProjects();
+
+        public int RequestFastIntegritySamplePercent() => _settingManager.GetFastIntegritySamplePercent();
+
+        public void RequestSaveFastIntegritySamplePercent(int percent) => _settingManager.SaveFastIntegritySamplePercent(percent);
 
         public void RequestFileRestore(ProjectFile targetFile, DataState state)
         {
@@ -869,11 +882,6 @@ namespace DeployAssistant.DataComponent
         public void RequestExportProjectVersionLog(ProjectData projectData)
         {
             _exportManager.ExportProjectVersionLog(projectData);
-        }
-
-        public void RequestExportProjectVersionDiffFiles(List<ChangedFile> FileDiffs)
-        {
-
         }
 
         public void RequestProjectCompatibility(ProjectData srcProjectData)

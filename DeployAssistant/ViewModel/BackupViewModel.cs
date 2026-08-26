@@ -17,8 +17,6 @@ namespace DeployAssistant.ViewModel
         #region Window-request events
         /// <summary>Raised when the integrity-log window should be opened for a backup version.</summary>
         public event Action<ProjectData?>? IntegrityLogWindowRequested;
-        /// <summary>Raised when the version-diff window should be opened.</summary>
-        public event Action<ProjectData, ProjectData, List<ChangedFile>>? VersionDiffWindowRequested;
         #endregion
 
         /// <summary>
@@ -149,8 +147,6 @@ namespace DeployAssistant.ViewModel
             TrackUnsubscribe(() => _metaDataManager.ProjExportEventHandler -= ExportRequestCallBack);
             _metaDataManager.ManagerStateEventHandler += MetaDataStateChangeCallBack;
             TrackUnsubscribe(() => _metaDataManager.ManagerStateEventHandler -= MetaDataStateChangeCallBack);
-            _metaDataManager.ProjComparisonCompleteEventHandler += ProjComparisonCompleteCallBack;
-            TrackUnsubscribe(() => _metaDataManager.ProjComparisonCompleteEventHandler -= ProjComparisonCompleteCallBack);
             _metaDataManager.IntegrityCheckCompleteEventHandler += ProjectIntegrityCheckCallBack;
             TrackUnsubscribe(() => _metaDataManager.IntegrityCheckCompleteEventHandler -= ProjectIntegrityCheckCallBack);
             _metaDataManager.CheckoutCompleteEventHandler += CheckoutCompleteCallBack;
@@ -208,18 +204,6 @@ namespace DeployAssistant.ViewModel
             return true;
         }
 
-        private bool _safeCheckoutMode;
-        /// <summary>Safe = CleanRestore (full re-hash against the snapshot); off = Fast diff-based checkout.</summary>
-        public bool SafeCheckoutMode
-        {
-            get => _safeCheckoutMode;
-            set
-            {
-                _safeCheckoutMode = value;
-                OnPropertyChanged(nameof(SafeCheckoutMode));
-            }
-        }
-
         private void Revert(object obj)
         {
             if (_selectedItem == null)
@@ -228,7 +212,9 @@ namespace DeployAssistant.ViewModel
                     Loc.T("S.Dlg.MustSelectVersion", "Must select a version to check out."));
                 return;
             }
-            StartGatedCheckout(_selectedItem, _safeCheckoutMode ? CheckoutMode.CleanRestore : CheckoutMode.Fast);
+            // The gate's integrity check already re-hashes the whole directory, so CleanRestore's
+            // second scan buys nothing here; Fast after the gate reaches the same end state.
+            StartGatedCheckout(_selectedItem, CheckoutMode.Fast);
         }
 
         private bool CanCleanRestoreBackupFiles(object obj)
@@ -266,7 +252,7 @@ namespace DeployAssistant.ViewModel
                 }
                 _pendingCheckout = new PendingCheckout(target, mode);
             }
-            Task.Run(() => _metaDataManager.RequestProjectIntegrityCheck());
+            Task.Run(() => _metaDataManager.RequestProjectIntegrityCheck(forceFullHash: true));
         }
 
         private bool CanDeleteSelectedVersion(object obj)
@@ -393,14 +379,6 @@ namespace DeployAssistant.ViewModel
             _uiDispatcher.Invoke(() =>
             {
                 _metaDataState = state;
-            });
-        }
-
-        private void ProjComparisonCompleteCallBack(ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff)
-        {
-            _uiDispatcher.Invoke(() =>
-            {
-                VersionDiffWindowRequested?.Invoke(srcProject, dstProject, diff);
             });
         }
 

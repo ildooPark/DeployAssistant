@@ -26,13 +26,13 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Foreground="#BBBBBB" FontSize="13" VerticalAlignment="Center">
+                    <TextBlock Foreground="#BBBBBB" FontSize="{StaticResource FsBody}" VerticalAlignment="Center">
                         <Run Text="{DynamicResource S.SrcPrefix}"/>
                         <Run Text="{Binding SrcProject.UpdatedVersion, FallbackValue='—'}"
                              FontWeight="Bold" Foreground="#4EC9B0"/>
                     </TextBlock>
-                    <TextBlock Foreground="#777777" FontSize="13" Margin="10,0" VerticalAlignment="Center" Text="→"/>
-                    <TextBlock Foreground="#BBBBBB" FontSize="13" VerticalAlignment="Center">
+                    <TextBlock Foreground="#777777" FontSize="{StaticResource FsBody}" Margin="10,0" VerticalAlignment="Center" Text="→"/>
+                    <TextBlock Foreground="#BBBBBB" FontSize="{StaticResource FsBody}" VerticalAlignment="Center">
                         <Run Text="{DynamicResource S.DstPrefix}"/>
                         <Run Text="{Binding DstProject.UpdatedVersion, FallbackValue='—'}"
                              FontWeight="Bold" Foreground="White"/>
@@ -40,7 +40,7 @@
                 </StackPanel>
                 <Button Grid.Column="1"
                         Content="{DynamicResource S.ExportDiff}"
-                        Padding="10,4" FontSize="12"
+                        Padding="10,4" FontSize="{StaticResource FsBody}"
                         Command="{Binding ExportDiffFiles}"
                         Style="{StaticResource ToolbarButtonStyle}"/>
             </Grid>
@@ -48,7 +48,7 @@
 
         <!-- ── Summary bar ── -->
         <Border Grid.Row="1" Background="#F5F5F5" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1" Padding="10,4">
-            <TextBlock FontSize="12" Foreground="#555555">
+            <TextBlock FontSize="{StaticResource FsBody}" Foreground="#555555">
                 <Run Text="{Binding TotalCount,  StringFormat={StaticResource S.Fmt.FilesChanged}, Mode=OneWay}"/>
                 <Run Text=" — "/>
                 <Run Text="{Binding AddedCount,   StringFormat={StaticResource S.Fmt.Added},    Mode=OneWay}" Foreground="#388E3C" FontWeight="SemiBold"/>
@@ -148,7 +148,7 @@
                                            ToolTip="{Binding SrcFile.DataHash}"
                                            TextTrimming="CharacterEllipsis"
                                            MaxWidth="70"
-                                           FontFamily="Consolas" FontSize="11"/>
+                                           FontFamily="Consolas" FontSize="{StaticResource FsCaption}"/>
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
@@ -166,14 +166,14 @@
                                            ToolTip="{Binding DstFile.DataHash}"
                                            TextTrimming="CharacterEllipsis"
                                            MaxWidth="70"
-                                           FontFamily="Consolas" FontSize="11"/>
+                                           FontFamily="Consolas" FontSize="{StaticResource FsCaption}"/>
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
                     <GridViewColumn Header="{StaticResource S.ColSizeSrcDst}" Width="110">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock FontSize="11">
+                                <TextBlock FontSize="{StaticResource FsCaption}">
                                     <Run Text="{Binding SrcFile.DataSize, StringFormat='{}{0:N0}'}"/>
                                     <Run Text="→"/>
                                     <Run Text="{Binding DstFile.DataSize, StringFormat='{}{0:N0}'}"/>

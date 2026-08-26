@@ -30,6 +30,14 @@ namespace DeployAssistant.DataComponent
 
         public IDialogService DialogService { get; set; } = new NullDialogService();
 
+        /// <summary>
+        /// Test seam: redirects DeployAssistant.config away from the user's real Documents
+        /// folder. Without it, test runs read the developer's live settings (a saved
+        /// fast-check sample percent broke version-cut tests nondeterministically) and
+        /// pollute them back.
+        /// </summary>
+        public static string? ConfigDirectoryOverride { get; set; }
+
         private readonly string? DAMetaFilePath;
         private string? ignoreMetaFilePath;
         
@@ -43,8 +51,9 @@ namespace DeployAssistant.DataComponent
         {
             try
             {
-                string defaultWindowDocumentPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                DAMetaFilePath = Path.Combine(defaultWindowDocumentPath, _configFilename);
+                string configDir = ConfigDirectoryOverride
+                    ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                DAMetaFilePath = Path.Combine(configDir, _configFilename);
             }
             catch (Exception ex)
             {
@@ -106,10 +115,32 @@ namespace DeployAssistant.DataComponent
 
         }
 
+        private const int RecentProjectsCap = 8;
+
         public void SetRecentDstDirectory(string dstPath)
         {
             LocalConfigData localConfig = ReadConfigOrNew();
             localConfig.LastOpenedDstPath = dstPath;
+            List<string> recents = localConfig.RecentProjects ?? new List<string>();
+            recents.RemoveAll(p => string.Equals(p, dstPath, StringComparison.OrdinalIgnoreCase));
+            recents.Insert(0, dstPath);
+            if (recents.Count > RecentProjectsCap) recents.RemoveRange(RecentProjectsCap, recents.Count - RecentProjectsCap);
+            localConfig.RecentProjects = recents;
+            _fileHandlerTool.TrySerializeJsonData(DAMetaFilePath, localConfig);
+        }
+
+        public List<string> GetRecentProjects() => ReadConfigOrNew().RecentProjects ?? new List<string>();
+
+        public int GetFastIntegritySamplePercent()
+        {
+            int value = ReadConfigOrNew().FastIntegritySamplePercent ?? 100;
+            return value < 1 ? 1 : value > 100 ? 100 : value;
+        }
+
+        public void SaveFastIntegritySamplePercent(int percent)
+        {
+            LocalConfigData localConfig = ReadConfigOrNew();
+            localConfig.FastIntegritySamplePercent = percent < 1 ? 1 : percent > 100 ? 100 : percent;
             _fileHandlerTool.TrySerializeJsonData(DAMetaFilePath, localConfig);
         }
 

@@ -118,7 +118,7 @@ internal sealed class CheckoutGateScreen : Screen
                         activeTask = ctx.AddTask("[cyan]Pre-checkout integrity check[/]",
                             new ProgressTaskSettings { AutoStart = true, MaxValue = 1 });
                     }
-                    _mgr.RequestProjectIntegrityCheck();
+                    _mgr.RequestProjectIntegrityCheck(forceFullHash: true);
                     integrityCompleted = done.Wait(IntegrityWaitTimeout);
                     lock (progressLock)
                     {

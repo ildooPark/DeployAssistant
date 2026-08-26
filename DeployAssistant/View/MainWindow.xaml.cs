@@ -39,6 +39,48 @@ namespace DeployAssistant.View
 
         private bool _languageSelectReady;
 
+        private void ProjectMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+        {
+            var services = ((App)Application.Current).Services;
+            if (services == null) return;
+            RecentProjectsMenu.Items.Clear();
+            var recents = services.MetaDataManager.RequestRecentProjects();
+            if (recents.Count == 0)
+            {
+                RecentProjectsMenu.Items.Add(new System.Windows.Controls.MenuItem
+                {
+                    Header = TryFindResource("S.Menu.NoRecent") as string ?? "(none)",
+                    IsEnabled = false
+                });
+                return;
+            }
+            foreach (string path in recents)
+            {
+                var item = new System.Windows.Controls.MenuItem { Header = path, ToolTip = path };
+                string captured = path;
+                item.Click += (_, _) => (DataContext as MainViewModel)?.MetaDataVM.OpenProjectPath(captured);
+                RecentProjectsMenu.Items.Add(item);
+            }
+        }
+
+        private void SettingsMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+        {
+            var services = ((App)Application.Current).Services;
+            if (services == null) return;
+            int current = services.MetaDataManager.RequestFastIntegritySamplePercent();
+            foreach (var item in new[] { Sample100, Sample50, Sample25, Sample10 })
+                item.IsChecked = item.Tag is string tag && int.TryParse(tag, out int v) && v == current;
+        }
+
+        private void SamplePercent_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.MenuItem item || item.Tag is not string tag) return;
+            if (!int.TryParse(tag, out int percent)) return;
+            ((App)Application.Current).Services?.MetaDataManager.RequestSaveFastIntegritySamplePercent(percent);
+        }
+
+        private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
+
         private void LanguageSelect_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (!_languageSelectReady) return;
@@ -57,7 +99,6 @@ namespace DeployAssistant.View
             mainVM.FileTrackVM.SrcProjectInfoWindowRequested += OpenSrcProjectInfoWindow;
 
             mainVM.BackupVM.IntegrityLogWindowRequested += OpenIntegrityLogWindowFromBackup;
-            mainVM.BackupVM.VersionDiffWindowRequested += OpenVersionDiffWindow;
         }
 
         // ------------------------------------------------------------------ //
@@ -102,7 +143,8 @@ namespace DeployAssistant.View
         private void OpenIntegrityLogWindowFromFileTrack(ProjectData? projData, string changeLog, ObservableCollection<ProjectFile> fileList)
         {
             if (projData == null) return;
-            var window = new IntegrityLogWindow(projData, changeLog, fileList);
+            var outcomes = (DataContext as MainViewModel)?.FileTrackVM.IntegrityOutcomesSnapshot;
+            var window = new IntegrityLogWindow(projData, changeLog, fileList, outcomes);
             window.Owner = this;
             window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
             window.Show();

@@ -64,7 +64,9 @@ namespace DeployAssistant.ViewModel
 
         private void ExportDiff(object obj)
         {
-            _metaDataManager.RequestExportProjectVersionDiffFiles(Diff);
+            // Routed to the implemented package exporter (the old
+            // RequestExportProjectVersionDiffFiles stub silently did nothing).
+            _metaDataManager.RequestExportDiffPackage(_dstProject, Diff);
         }
 
         protected DiffViewModelBase(MetaDataManager metaDataManager, ProjectData srcProject, ProjectData dstProject, List<ChangedFile> diff)

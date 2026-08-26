@@ -43,6 +43,9 @@ internal sealed class RevisionDetailScreen : Screen
         }
 
         // Subscribe before firing the request so we don't miss the synchronous fire.
+        // -= first: the engine re-enters OnEnter every time a pushed child screen pops,
+        // and duplicate handlers on the process-lifetime manager leak popped screens.
+        _mgr.ProjComparisonCompleteEventHandler -= OnDiffComplete;
         _mgr.ProjComparisonCompleteEventHandler += OnDiffComplete;
         _mgr.RequestProjVersionDiff(_revision);
     }
@@ -109,7 +112,7 @@ internal sealed class RevisionDetailScreen : Screen
         }
 
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(TextStyle.Dim("  ↑↓ move · d/u half-page · c checkout · C safe checkout"));
+        AnsiConsole.MarkupLine(TextStyle.Dim("  ↑↓ move · d/u half-page · c checkout"));
         AnsiConsole.MarkupLine(TextStyle.Dim("  r rename · x delete · esc back"));
 
         if (_lastError != null)
@@ -125,10 +128,9 @@ internal sealed class RevisionDetailScreen : Screen
 
         if (key.Key == ConsoleKey.Escape) return ScreenAction.PopAction;
 
-        // 'c' and 'C' both land on ConsoleKey.C, so the two checkout modes are told apart
-        // by KeyChar. (Ctrl+C never reaches here — App intercepts it.)
-        if (key.KeyChar == 'c') return PushCheckout(CheckoutMode.Fast);
-        if (key.KeyChar == 'C') return PushCheckout(CheckoutMode.CleanRestore);
+        // The gate's integrity check already re-hashes the working directory, making the
+        // old 'C' (CleanRestore) binding redundant; the mode survives in Core only.
+        if (key.KeyChar == 'c' || key.KeyChar == 'C') return PushCheckout(CheckoutMode.Fast);
 
         // Case-insensitive, unlike c/C — these two have only one meaning each.
         if (key.KeyChar == 'r' || key.KeyChar == 'R')

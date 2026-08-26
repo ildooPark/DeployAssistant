@@ -324,7 +324,7 @@ None=0, Integration=1, IntegrityCheck=2, Deploy=4, Initialization=8, All=~0
 Saved as `DeployAssistant.deploy` (JSON) in the source folder when file allocation has been manually resolved. Stores `ProjectName` and `Dictionary<string, ProjectFile> SortedTopFiles` (key = `DataRelPath`) so that the same allocation can be reused on the next deployment from the same folder.
 
 ### 6.8 `LocalConfigData`
-Saved as `DeployAssistant.config` (JSON) in `%USERPROFILE%\Documents`. Contains `LastOpenedDstPath` and `Language` (`"ko-KR"` / `"en-US"`; additive, so 3.6.1-era configs still load — but a 3.6.1 save drops it, resetting the language choice). Loaded on startup to offer re-opening the last project and to pick the UI language (default Korean).
+Saved as `DeployAssistant.config` (JSON) in `%USERPROFILE%\Documents`. Contains `LastOpenedDstPath`, `Language` (`"ko-KR"` / `"en-US"`), `RecentProjects` (MRU project paths, newest first, capped at 8 — feeds the Project ▸ Recent Projects menu) and `FastIntegritySamplePercent` (nullable int, see §12.4; `null` reads as 100). All fields after `LastOpenedDstPath` are additive, so 3.6.1-era configs still load — but a 3.6.1 save drops them, resetting the choices. Loaded on startup to offer re-opening the last project and to pick the UI language (default Korean).
 
 ### 6.9 `RecordedFile`
 A lightweight entry inside `ProjectIgnoreData.IgnoreFileList`. Implements `IProjectData` but most properties are `[JsonIgnore]`. Carries `DataName`, `DataType`, `IgnoreType`, `UpdatedTime`.
@@ -425,7 +425,8 @@ All public `Request*` methods are the sole API surface that ViewModels call. The
 | `RequestDeleteVersion(ProjectData? target, bool confirmed = false) → bool` | Deletes one version: its exclusive backup blobs, its list entry and its backup folder. Builds a plan first and refuses on any blocker — the current project main, the last remaining version, a version not in the list, or a non-`Idle` manager. When `confirmed` is `false` it raises an `IDialogService.Confirm` prompt naming the version and the blob count; `confirmed: true` skips it (CLI `--yes`, tests, and the WPF path which has already shown its own confirm window). Always raises `VersionDeleteCompleteEventHandler` (`Deleted` / `Blocked` / `Failed`), always ends on `Idle`, and never decrements `LocalUpdateCount`. Returns `true` only on `Deleted`. |
 | `RequestDeleteVersion(string versionName, bool confirmed = false) → bool` | Tag-resolving overload; an unknown tag reports `Blocked` rather than throwing. |
 | `RequestRenameVersion(ProjectData? target, string? newVersionName, string? newUpdateLog) → bool` | Re-tags a stored version: a new `UpdatedVersion`, a new `UpdateLog`, or both. Passing `null` for either leaves it as-is, so a log-only edit never trips version-name validation. Refuses on: null target, no project loaded, a non-`Idle` manager, a target absent from the version list, an empty / whitespace-padded / period-terminated name, a name containing `Path.GetInvalidFileNameChars()`, and a name that already exists (a duplicate tag would silently merge two versions, because `ProjectData.Equals` compares `UpdatedVersion` only). When the target is also the project main, `ProjectMain` — stored separately from `ProjectDataList` — is re-tagged in the same breath, otherwise the main pointer would be orphaned. Persists through `BackupManager.PersistMetaData(takeBackup: true)`; **a failed persist rolls the in-memory edit back** so the store and the file stay in sync. A no-op request (`"Nothing to change."`) returns `true`. Always raises `VersionRenameCompleteEventHandler`. **The backup folder is deliberately not renamed** — it stays `Backup_<original name>` — because blobs are referenced by absolute `DataSrcPath` and moving a folder other snapshots point into has no atomic undo. |
-| `RequestProjectIntegrityCheck()` | Async hash comparison of all tracked files vs. disk |
+| `RequestProjectIntegrityCheck(bool forceFullHash = false)` | Async hash comparison of all tracked files vs. disk. Sets `FileManager.IntegritySamplePercent` for the run: `forceFullHash` pins 100%, otherwise the saved fast-check sample percent applies (§12.4). Both pre-checkout gates pass `true`, so a sampled setting can never weaken a checkout decision |
+| `RequestRecentProjects()` / `RequestFastIntegritySamplePercent()` / `RequestSaveFastIntegritySamplePercent(int)` | Pass-throughs to `SettingManager` (§8.6) for the GUI menu strip |
 | `RequestFetchBackup()` | Populate backup version list |
 | `RequestFileRestore(file, state)` | Queue a single file for restore |
 | `RequestRevertChange(file) → bool` | Revert a single `IntegrityChecked`-flagged file. Returns `true` if the `IntegrityChecked` flag is cleared after the call (success); `false` if `FileManager.RevertChange` re-applied the flag due to missing backup or missing project file entry. |
@@ -444,7 +445,9 @@ All public `Request*` methods are the sole API surface that ViewModels call. The
 
 **Owns:** pre-staged dict, registered-changes dict, references to main project dicts, ignore data.
 
-**Concurrency:** `SemaphoreSlim(12)` limits concurrent MD5 operations.
+**Concurrency:** `SemaphoreSlim(12, 12)` limits concurrent MD5 operations. The explicit `maxCount` is load-bearing: an unbalanced `Release()` now throws `SemaphoreFullException` instead of silently raising the cap (a stray `Release` in a non-acquiring path had eroded the 12-way limit by one per staging call).
+
+`IntegritySamplePercent` (1–100, set per run by `MetaDataManager`) is the share of intersecting files that get a full MD5 hash during `MainProjectIntegrityCheck`; unsampled files verify by size/version metadata (§12.4).
 
 #### Internal Dictionaries
 | Name | Key | Value | Purpose |
@@ -458,6 +461,7 @@ All public `Request*` methods are the sole API surface that ViewModels call. The
 #### Key Operations
 
 **`RetrieveDataSrc(srcPath)`**
+0. Purge stale `IntegrityChecked` entries from `_registeredChangesDict` (leftovers of earlier integrity runs would otherwise accumulate for the whole session and ride into the next update).
 1. Check for a `.VersionLog` file; if found, deserialize it as `_srcProjectData`.
 2. Check for a `DeployAssistant.deploy` file; if found and valid, restore previous file allocation.
 3. Otherwise, scan all files/directories:
@@ -489,7 +493,7 @@ All public `Request*` methods are the sole API surface that ViewModels call. The
 1. Gather all files/dirs on disk, excluding the ignore list.
 2. Compare against recorded `ProjectFiles`:
    - Added / deleted files & directories → generate `IntegrityChecked` change entries.
-   - Intersecting files → parallel MD5 compare; mismatches → `Modified | IntegrityChecked`.
+   - Intersecting files → parallel MD5 compare; mismatches → `Modified | IntegrityChecked`. When `IntegritySamplePercent < 100`, only a per-run random sample of that share is hashed; the rest go through the size/version metadata fallback (`VerifyByMetadata`).
 3. Fire `IntegrityCheckEventHandler` with log and changed list.
 
 **`FindVersionDifferences(src, dst, isRevert)`** — diff between two `ProjectData` snapshots, used for revert.
@@ -613,7 +617,7 @@ Failure semantics follow the persist boundary. **Before** the persist, everythin
 - Writes a single-sheet workbook with columns: DataName, DataType, DataSize, BuildVersion, DeployedProjectVersion, UpdatedTime, DataState, DataSrcPath, DataRelPath, DataHash.
 - Output path: `<ProjectPath>/Export_XLSX/<VersionName>_ProjectFiles.xlsx`.
 
-**`ExportProjectChanges`** — **stub, not implemented.**
+**`ExportDiffPackage(ProjectData, List<ChangedFile>)`** — diff-only sync package (zip); serves both Metafile Compare's Export Sync Package and `VersionDiffWindow`'s Export Diff. (The old `ExportProjectChanges` stub was deleted.)
 
 ---
 
@@ -621,7 +625,9 @@ Failure semantics follow the persist boundary. **Before** the persist, everythin
 
 **Startup (`Awake()`):** wiring only. **`PromptPreviousProjectRestore()`** reads `DeployAssistant.config`, validates the stored path (must contain a `ProjectMetaData.bin`), and prompts to re-open — exposed as `MetaDataManager.RequestPreviousProjectRestore()` and called by the GUI only after the ViewModels have subscribed (`MainWindow.Loaded`).
 
-**`SetRecentDstDirectory(string path)`** — read-merge-write: loads the existing config, updates `LastOpenedDstPath`, and re-serializes, so other fields (`Language`) survive. **`GetSavedLanguage()` / `SaveLanguage(code)`** use the same read-merge-write path.
+**`SetRecentDstDirectory(string path)`** — read-merge-write: loads the existing config, updates `LastOpenedDstPath`, and re-serializes, so other fields (`Language`) survive. It also maintains the `RecentProjects` MRU: dedupe (OrdinalIgnoreCase), insert at front, cap 8. **`GetSavedLanguage()` / `SaveLanguage(code)`**, **`GetRecentProjects()`** and **`GetFastIntegritySamplePercent()` / `SaveFastIntegritySamplePercent(int)`** (clamped 1–100, default 100) use the same read-merge-write path.
+
+**`ConfigDirectoryOverride`** (static) — test seam that redirects `DeployAssistant.config` away from the real `Documents` folder. Both test assemblies set it in a `[ModuleInitializer]` so test runs neither read nor pollute the developer's live settings (a saved fast-check sample percent had broken version-cut tests nondeterministically).
 
 **On `MetaDataLoadedCallBack`:**
 - Reads or creates `DeployAssistant.ignore` at the project root.
@@ -742,9 +748,9 @@ Calls `App.AwakeModel()` in constructor.
 ### 10.5 `BackupViewModel`
 **Bound to:** backup/history panel.
 
-**Observable state:** `BackupProjectDataList` (version history), `SelectedItem`, `UpdaterName`, `UpdateLog`, `DiffLog` (`ObservableCollection<DiffItem>` — **one row per `ChangedFile`**, not the old dst+src double rows; `DiffItem.RestoreTarget` = `SrcFile ?? DstFile` keeps Restore working from the single row), `SafeCheckoutMode` (toolbar "Safe" checkbox: checked → `CheckoutMode.CleanRestore`, unchecked → `Fast`).
+**Observable state:** `BackupProjectDataList` (version history), `SelectedItem`, `UpdaterName`, `UpdateLog`, `DiffLog` (`ObservableCollection<DiffItem>` — **one row per `ChangedFile`**, not the old dst+src double rows; `DiffItem.RestoreTarget` = `SrcFile ?? DstFile` keeps Restore working from the single row). (`SafeCheckoutMode` is gone with the Safe toggle — see the naming note below.)
 
-**Naming note — `CheckoutBackup` means *revert to*, not *check out a working copy*.** The command property is `CheckoutBackup`, its handler is `Revert`, its guard is `CanRevert`, and its UI labels are the toolbar "Checkout" button and the context-menu "Checkout" item (the separate "Clean Restore" menu item was merged into it; `SafeCheckoutMode` picks the mode). They are all the same operation: apply a stored snapshot to the working directory. `CanRevert` is also reused as the guard for `ViewFullLog`. Nothing here creates a branch or a working copy — there is only one working directory. New code should prefer the manager-side vocabulary (`RequestCheckoutVersion` / `CheckoutMode`) and treat the ViewModel's `Revert*` members as legacy names for the same thing.
+**Naming note — `CheckoutBackup` means *revert to*, not *check out a working copy*.** The command property is `CheckoutBackup`, its handler is `Revert`, its guard is `CanRevert`, and its UI labels are the toolbar "Checkout" button and the context-menu "Checkout" item (the separate "Clean Restore" menu item was merged into it, and the later Safe toggle was removed once the gate made every checkout safe — UI checkouts are always `Fast`). They are all the same operation: apply a stored snapshot to the working directory. `CanRevert` is also reused as the guard for `ViewFullLog`. Nothing here creates a branch or a working copy — there is only one working directory. New code should prefer the manager-side vocabulary (`RequestCheckoutVersion` / `CheckoutMode`) and treat the ViewModel's `Revert*` members as legacy names for the same thing.
 
 **Commands:**
 | Command | Enabled Condition | Action |
@@ -757,9 +763,9 @@ Calls `App.AwakeModel()` in constructor.
 | `ExportVersion` | Idle | `RequestExportProjectBackup` (background) |
 | `ExtractVersionLog` | always | `RequestExportProjectVersionLog` |
 | `ViewFullLog` | Idle & item selected | Open `IntegrityLogWindow` with selected version |
-| `CompareDeployedProjectWithMain` | Idle & item selected | `RequestProjVersionDiff`; open `VersionDiffWindow` |
+| `CompareDeployedProjectWithMain` | Idle & item selected | `RequestProjVersionDiff`; the resulting `VersionDiffWindow` is opened by `FileTrackViewModel`'s `ProjComparisonComplete` callback — `BackupViewModel` no longer subscribes to that event itself (its duplicate subscription opened a second window per compare) |
 
-**`StartGatedCheckout(target, mode)`** — both checkout commands funnel through it. It parks the request under a lock (a second checkout while one is pending is refused with a message, not queued) and kicks off `RequestProjectIntegrityCheck` on a background thread. Nothing is written until `ProjectIntegrityCheckCallBack` has shown the gate.
+**`StartGatedCheckout(target, mode)`** — both checkout commands funnel through it. It parks the request under a lock (a second checkout while one is pending is refused with a message, not queued) and kicks off `RequestProjectIntegrityCheck(forceFullHash: true)` on a background thread. Nothing is written until `ProjectIntegrityCheckCallBack` has shown the gate.
 
 **Callbacks from MetaDataManager:**
 - `FetchRequestEventHandler` → replace `BackupProjectDataList`
@@ -776,7 +782,7 @@ Calls `App.AwakeModel()` in constructor.
 
 **Observable state:** `SrcProject`, `DstProject`, `Diff` (list of changed files).
 
-**Commands:** `ExportDiffFiles` — calls `RequestExportProjectVersionDiffFiles` (stub, not implemented).
+**Commands:** `ExportDiffFiles` — calls `RequestExportDiffPackage(dstProject, Diff)` (diff-only sync-package zip; replaced the deleted `RequestExportProjectVersionDiffFiles` stub).
 
 ### 10.7 `VersionIntegrationViewModel`
 **Stub.** Constructor receives `srcProject`, `dstProject`, `diff` but no logic is implemented.
@@ -838,7 +844,7 @@ The three gate windows above are the deliberate exception. They exist to take a 
 
 ### 12.3 Checkout a Version
 
-Checkout applies a stored snapshot to the working directory. There is one entry point — `RequestCheckoutVersion(target, mode)` — and two modes. In the GUI both modes share one surface: the toolbar **Checkout** button (and the history context-menu item) plus the **Safe** checkbox; Safe = `CleanRestore`. The words "Clean Restore" no longer appear in either UI — the CLI's `C` binding and gate call it "safe checkout" — while the API keeps the `CleanRestore` names for spec stability.
+Checkout applies a stored snapshot to the working directory. There is one entry point — `RequestCheckoutVersion(target, mode)` — and two modes. Neither front end exposes the mode any more: the pre-checkout gate already re-hashes the whole working directory, so a user-facing `CleanRestore` toggle only repeated that scan — the GUI checkbox and the CLI `C` binding were removed (2026-08-25) and every UI checkout runs `Fast` behind the gate. `CheckoutMode.CleanRestore` survives in Core for API stability and headless callers.
 
 | | `CheckoutMode.Fast` | `CheckoutMode.CleanRestore` |
 |---|---|---|
@@ -864,7 +870,7 @@ Checkout applies a stored snapshot to the working directory. There is one entry 
 2. `FileManager.MainProjectIntegrityCheck()` runs async:
    - Reads all files/dirs from disk; excludes ignore list.
    - Set-arithmetic vs. recorded list → Added/Deleted entries.
-   - Parallel MD5 of intersecting files → Modified entries.
+   - Parallel MD5 of intersecting files → Modified entries. **Fast check:** when the saved `FastIntegritySamplePercent` (GUI Settings menu, 1–100, default 100) is below 100, only a random sample of that share is hashed per run — a fresh `Random` each run, so a file sampled out this time can be caught the next — and the rest verify by size/version metadata. The pre-checkout gates always force 100% (`forceFullHash: true`), so sampling never weakens a checkout decision.
 3. Result opens `IntegrityLogWindow` with a text log and list of deviant files.
 4. User can select a deviant file and click **Revert Change** to restore it individually.
 
@@ -940,11 +946,9 @@ The following issues were observed in the current implementation and should be a
 
 2. **Stub — `LogManager`**: Class body is empty. Logging is done ad-hoc via `LogTool` (static) and inline `StringBuilder`. Should be consolidated.
 
-3. **Stub — `ExportProjectChanges`** (`ExportManager.cs`): Method declared but returns `false` immediately. Export of diff files from `VersionDiffWindow` is non-functional.
+3. *(resolved 2026-08-25)* `VersionDiffWindow`'s Export Diff is now wired to the implemented `RequestExportDiffPackage`; the dead `ExportProjectChanges` / `RequestExportProjectVersionDiffFiles` stubs were deleted.
 
 4. **Stub — `VersionIntegrationViewModel`**: Constructor receives data but contains no logic.
-
-5. **Stub — `RequestExportProjectVersionDiffFiles`** (`MetaDataManager.cs`): Empty body.
 
 6. **Inconsistent namespace** (`DeployAssistant.*` vs `DeployManager.*`): `SettingManager.cs` uses namespace `DeployManager.DataComponent` and `LocalConfigData.cs` uses `DeployManager.Model`. All files should be unified under the `DeployAssistant.*` hierarchy.
 
@@ -1080,7 +1084,7 @@ The CI smoke test asserts exactly this contract: no-args → exit 0 with `"Deplo
 3. Call `AutoAdvance()`; a non-null `ScreenAction` transitions without waiting for a key.
 4. Otherwise block on `Console.ReadKey(intercept: true)` and pass it to `Handle(key)`.
 
-`ScreenAction` is a record hierarchy: `Stay`, `Pop`, `Push(next)`, `Replace(next)`, `Exit`. `OnExit()` runs on pop, replace and exit — that is where screens unsubscribe from manager events. `Screen` is an abstract class rather than an interface because `AutoAdvance` needs a virtual default and default interface methods are not available on net472.
+`ScreenAction` is a record hierarchy: `Stay`, `Pop`, `Push(next)`, `Replace(next)`, `Exit`. `OnExit()` runs on pop, replace and exit — that is where screens unsubscribe from manager events. Note that `OnEnter()` re-runs every time a pushed child screen pops, so a subscription made there must be idempotent (`-=` before `+=`) — a duplicate handler on the process-lifetime manager leaks every popped screen instance. `Screen` is an abstract class rather than an interface because `AutoAdvance` needs a virtual default and default interface methods are not available on net472.
 
 Two guards sit in front of the loop, both returning exit code 0 rather than crashing:
 
@@ -1110,14 +1114,14 @@ MainScreen
 | `PathPickerScreen` | `tab` complete · `↑↓` pick · `enter` open · `esc` cancel |
 | `IntegrityResultScreen` | `↑↓` move · `d`/`u` half-page · `r` revert selected file · `u` update · `esc` back |
 | `RevisionListScreen` | `↑↓` move · `d`/`u` half-page · `enter` inspect · `esc` back |
-| **`RevisionDetailScreen`** | `↑↓` move · `d`/`u` half-page · **`c` checkout** · **`C` clean restore** · **`r` rename** · **`x` delete** · `esc` back |
+| **`RevisionDetailScreen`** | `↑↓` move · `d`/`u` half-page · **`c` checkout** · **`r` rename** · **`x` delete** · `esc` back |
 | `CheckoutGateScreen` (clean) | `y` checkout · `n`/`esc` cancel |
 | `CheckoutGateScreen` (dirty, Fast) | `↑↓` move · `u` half-page up · `d` discard & checkout · `esc` cancel |
 | `CheckoutGateScreen` (dirty, CleanRestore) | `↑↓` move · `d`/`u` half-page · `y` clean restore · `esc` cancel |
 | `VersionRenameScreen` | `tab` next field · `enter` submit · `esc` cancel |
 | `VersionDeleteGateScreen` | `y` delete · `n`/`esc` cancel (offered only when the plan has no blockers) |
 
-**`c` vs `C` is genuinely case-sensitive.** Both land on `ConsoleKey.C`, so the two checkout modes are told apart by `KeyChar`: lowercase `c` = `CheckoutMode.Fast`, uppercase `C` = `CheckoutMode.CleanRestore`. `r` and `x` are case-**in**sensitive, because each has only one meaning. This asymmetry is deliberate and load-bearing — do not "tidy" it into a uniform comparison.
+**`c` and `C` both mean Fast checkout now.** The uppercase `C` = `CleanRestore` binding was removed with the Safe toggle (§12.3); the dirty-CleanRestore gate row above survives only for the Core mode, which no key path reaches any more. `r` and `x` remain case-insensitive.
 
 **`d` is overloaded by context, also deliberately.** On list screens it is half-page-down. On the dirty-Fast checkout gate it is "discard local changes and check out" — the destructive confirmation — and half-page-down is dropped from the footer there, leaving only `u`.
 
@@ -1125,7 +1129,7 @@ MainScreen
 
 **`RevisionListScreen`** holds a *snapshot* of `ProjectDataList`, so a delete performed further down the stack would leave a row pointing at a version that no longer exists. `OnEnter` runs again every time the screen returns to top-of-stack, and re-takes the snapshot; `SelectableList.SetItemCount` clamps the selection if the list shrank. `AutoAdvance` **consumes** `LastCheckedOut` (and pops back to `MainScreen`) and `LastDeletedVersion` (and rebuilds).
 
-**`RevisionDetailScreen`** computes its diff against main by subscribing to `ProjComparisonCompleteEventHandler` *before* firing `RequestProjVersionDiff` — the fire is synchronous, so subscribing after would miss it — and unsubscribes in `OnExit`. Its `AutoAdvance` **peeks and never consumes** the manager's read-once flags, because `RevisionListScreen` is the real consumer and needs them to survive this hop. Each peek is paired with a local `_checkoutRequested` / `_deleteRequested` bool so a stale flag from an earlier operation can never auto-pop this screen.
+**`RevisionDetailScreen`** computes its diff against main by subscribing to `ProjComparisonCompleteEventHandler` *before* firing `RequestProjVersionDiff` — the fire is synchronous, so subscribing after would miss it — and unsubscribes in `OnExit`; the subscription is `-=`-then-`+=` because `OnEnter` re-runs on every child pop (see the engine note above). Its `AutoAdvance` **peeks and never consumes** the manager's read-once flags, because `RevisionListScreen` is the real consumer and needs them to survive this hop. Each peek is paired with a local `_checkoutRequested` / `_deleteRequested` bool so a stale flag from an earlier operation can never auto-pop this screen.
 
 **`CheckoutGateScreen`** runs the pre-checkout integrity check inside an `AnsiConsole.Progress()` block driven by `IntegrityProgressEventHandler`, waiting on a `ManualResetEventSlim` with a 10-minute cap, then moves to `Clean`, `Dirty` or `Error`. It attaches `CheckoutCompleteEventHandler` around the request so a failure shows the manager's real reason instead of "see logs".
 
@@ -1162,7 +1166,7 @@ The WPF shell is a fixed three-column workspace under a header bar. This section
 
 ### 18.1 Structure
 
-`MainWindow` is a two-row `Grid`: a header bar (`Auto`) over the workspace (`*`). The window is 1600×900 with `MinWidth="1100"` / `MinHeight="700"`, and its title is stamped with the running assembly version (`Deploy Assistant  v<major.minor.build>`) so the build in use is visible without an About box. `Icon="/app.ico"` resolves from the assembly, because `app.ico` is included as a WPF `Resource`.
+`MainWindow` is a three-row `Grid`: a menu strip (`Auto`) over a header bar (`Auto`) over the workspace (`*`). The window is 1600×900 with `MinWidth="1100"` / `MinHeight="700"`, and its title is stamped with the running assembly version (`Deploy Assistant  v<major.minor.build>`) so the build in use is visible without an About box. `Icon="/app.ico"` resolves from the assembly, because `app.ico` is included as a WPF `Resource`.
 
 The workspace is a five-column `Grid`: three content columns separated by two 5px `GridSplitter` columns.
 
@@ -1176,17 +1180,25 @@ The workspace is a five-column `Grid`: three content columns separated by two 5p
 
 Every panel is a `DockPanel` with a `Border` header (`PanelHeaderStyle` + `HeaderLabelStyle`) docked to the top, so panels are visually consistent without a docking library.
 
-The header bar is light (`#F0F0F0`, matching the 3.6.1-era neutral look): Set Source Dir / Set Dest Dir / Integrity Check / Checkout buttons, the **Safe** checkbox, then project/version info, and on the right a language dropdown (한국어/English) beside the state badge. The **Version Log** panel (renamed from "Diff Log") shows a summary card for the selected version — version name, date, author, commit message — above the single-row diff grid with Build V / Prev V columns; `VersionDisplay` prefers `ProductVersion` (the commit-id-bearing string) over `FileVersion` everywhere a build version is shown.
+Font sizes come from a four-level type scale in `SharedStyles.xaml` (`sys:Double` resources): `FsTitle` 16 / `FsHeader` 13 / `FsBody` 12 / `FsCaption` 11 — deliberately non-consecutive so each level reads as a different rank. XAML references them via `{StaticResource ...}` instead of literal `FontSize` values; new views must do the same.
 
-### 18.2 Busy overlay
+The menu strip has two menus, populated on `SubmenuOpened` (no ViewModel state). **Project**: Open Destination Project… / Set Source Folder… (the former toolbar Set Dir buttons, relocated) · **Recent Projects** (the `RecentProjects` MRU from `DeployAssistant.config`; clicking one calls `MetaDataViewModel.OpenProjectPath`, which is `RetrieveProject` minus the folder picker and refuses when not `Idle`) · Exit. **Settings**: **Fast-check hash sample** (100/50/25/10%, checkmark on the saved value) — the `FastIntegritySamplePercent` described in §12.4.
+
+The header bar is light (`#F0F0F0`, matching the 3.6.1-era neutral look): Integrity Check / Checkout buttons (Set Source/Dest moved into the Project menu; the **Safe** checkbox is gone — §12.3), then project/version info, and on the right a language dropdown (한국어/English) beside the state badge. The **Version Log** panel (renamed from "Diff Log") shows a summary card for the selected version — version name, date, author, commit message — above the single-row diff grid with Build V / Prev V columns; `VersionDisplay` prefers `ProductVersion` (the commit-id-bearing string) over `FileVersion` everywhere a build version is shown.
+
+### 18.2 Integrity results dashboard (`IntegrityLogWindow`)
+
+The window serves two modes from one layout. **Integrity-result mode**: a verdict banner first (green "모든 파일이 스냅샷과 일치합니다" or amber "{n}개 항목이 현재 버전과 다릅니다" with version · scanned-count subtitle), clickable tally chips (변경/추가/삭제 filter the grid; 해시 실패/메타데이터 검증 are informational counts from the `IntegrityFileOutcome` stream), then the results grid showing flagged files only, **grouped by date** — Added rows group on `CreationTime`, Modified rows on `LastWriteTime`, so files that arrived or were built together cluster under one header — with an 출처 badge per row (유입 when `CreationTime > LastWriteTime`, i.e. copied in; 수정 for in-place edits), Prev→Current version columns (`VersionDisplay`, commit-id first), and per-row / all Revert actions. The raw text log survives behind an expander. **Full-log mode** (opened from Version History) reuses the same date-grouped grid over a whole version's file list with a neutral banner. Grouping/filtering are view concerns (`ICollectionView`) in the window's code-behind.
+
+### 18.3 Busy overlay
 
 Whenever `MetaDataState != Idle`, a full-window scrim (`#66000000`, hit-test-visible so it physically absorbs clicks) covers both grid rows with a centered card: localized state title, progress bar (determinate with a `{done:N0} / {total:N0} files` counter during `IntegrityChecking`, indeterminate otherwise), and — for integrity checks — a 200-row auto-scrolling log of per-file verdicts colored by `IntegrityFileOutcome`. Commands were already `CanExecute`-gated on `Idle`; the overlay makes that lock visible. There is no cancel button: Core's integrity check has no `CancellationToken`.
 
-### 18.3 Localization (ko-KR default / en-US)
+### 18.4 Localization (ko-KR default / en-US)
 
 All user-visible GUI strings live in `View/Strings.ko-KR.xaml` and `View/Strings.en-US.xaml` (`sys:String` dictionaries, keys `S.*`); **every key must exist in both files** — a missing `StaticResource` key crashes startup. `App.ApplyLanguage(code)` swaps the merged dictionary; the choice persists in `DeployAssistant.config` (`Language`, default `ko-KR`). `DynamicResource` labels switch live from the toolbar dropdown; `DataGridColumn` / `GridViewColumn` headers have no inheritance context, use `StaticResource`, and therefore update on the next start. Code-composed strings go through `Loc.T(key, englishFallback)` (`ViewModelBase.cs`) — the fallback keeps headless tests deterministic. Korean terminology follows the Pro Git Korean translation's hybrid style (`Checkout` / `Stage` / `Staging Area` kept in English; 커밋 메시지 · 버전 히스토리 · 배포 · 무결성 검사 · 되돌리기 · 복원 in Korean). Out of scope by design: Core-originated dialog/log text and the CLI (both English).
 
-### 18.2 Panel Inventory
+### 18.5 Panel Inventory
 
 The decomposition below survived the AvalonDock removal; only the docking types went away.
 

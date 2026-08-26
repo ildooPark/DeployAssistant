@@ -1,4 +1,4 @@
-<Window x:Class="DeployAssistant.View.VersionDeleteConfirmWindow"
+﻿<Window x:Class="DeployAssistant.View.VersionDeleteConfirmWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -21,14 +21,14 @@
 
         <TextBlock Grid.Row="0"
                    x:Name="HeadlineText"
-                   FontSize="16" FontWeight="Bold"
+                   FontSize="{StaticResource FsTitle}" FontWeight="Bold"
                    Foreground="#C62828"
                    TextWrapping="Wrap"/>
 
         <TextBlock Grid.Row="1"
                    x:Name="WarningText"
                    Margin="0,6,0,10"
-                   FontSize="12" Foreground="#555555"
+                   FontSize="{StaticResource FsBody}" Foreground="#555555"
                    TextWrapping="Wrap"/>
 
         <!-- What the delete costs -->
@@ -46,20 +46,20 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="{DynamicResource S.Del.DiskReclaimed}"  FontSize="12" FontWeight="SemiBold" Foreground="#555555" Margin="0,2"/>
-                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ReclaimableText"     FontSize="12" Margin="0,2"/>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{DynamicResource S.Del.DiskReclaimed}"  FontSize="{StaticResource FsBody}" FontWeight="SemiBold" Foreground="#555555" Margin="0,2"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ReclaimableText"     FontSize="{StaticResource FsBody}" Margin="0,2"/>
 
-                <TextBlock Grid.Row="1" Grid.Column="0" Text="{DynamicResource S.Del.BackupRemoved}"  FontSize="12" FontWeight="SemiBold" Foreground="#555555" Margin="0,2"/>
-                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="ExclusiveText"       FontSize="12" Margin="0,2"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{DynamicResource S.Del.BackupRemoved}"  FontSize="{StaticResource FsBody}" FontWeight="SemiBold" Foreground="#555555" Margin="0,2"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="ExclusiveText"       FontSize="{StaticResource FsBody}" Margin="0,2"/>
 
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource S.Del.Relocated}" FontSize="12" FontWeight="SemiBold" Foreground="#555555" Margin="0,2"/>
-                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="RelocationText"      FontSize="12" Margin="0,2"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource S.Del.Relocated}" FontSize="{StaticResource FsBody}" FontWeight="SemiBold" Foreground="#555555" Margin="0,2"/>
+                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="RelocationText"      FontSize="{StaticResource FsBody}" Margin="0,2"/>
 
-                <TextBlock Grid.Row="3" Grid.Column="0" Text="{DynamicResource S.Del.SharedKept}"     FontSize="12" FontWeight="SemiBold" Foreground="#555555" Margin="0,2"/>
-                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="SharedText"          FontSize="12" Margin="0,2"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="{DynamicResource S.Del.SharedKept}"     FontSize="{StaticResource FsBody}" FontWeight="SemiBold" Foreground="#555555" Margin="0,2"/>
+                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="SharedText"          FontSize="{StaticResource FsBody}" Margin="0,2"/>
 
-                <TextBlock Grid.Row="4" Grid.Column="0" Text="{DynamicResource S.Del.BackupFolder}"         FontSize="12" FontWeight="SemiBold" Foreground="#555555" Margin="0,2"/>
-                <TextBlock Grid.Row="4" Grid.Column="1" x:Name="BackupFolderText"    FontSize="12" Margin="0,2"
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="{DynamicResource S.Del.BackupFolder}"         FontSize="{StaticResource FsBody}" FontWeight="SemiBold" Foreground="#555555" Margin="0,2"/>
+                <TextBlock Grid.Row="4" Grid.Column="1" x:Name="BackupFolderText"    FontSize="{StaticResource FsBody}" Margin="0,2"
                            TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
             </Grid>
@@ -76,12 +76,12 @@
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top"
                            Text="{DynamicResource S.Del.CannotDelete}"
-                           FontSize="12" FontWeight="SemiBold" Foreground="#E65100"
+                           FontSize="{StaticResource FsBody}" FontWeight="SemiBold" Foreground="#E65100"
                            Margin="0,0,0,4"/>
                 <ItemsControl x:Name="BlockerList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding}" FontSize="12" Foreground="#555555"
+                            <TextBlock Text="{Binding}" FontSize="{StaticResource FsBody}" Foreground="#555555"
                                        TextWrapping="Wrap" Margin="0,1"/>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -95,13 +95,13 @@
             <Button x:Name="DeleteButton"
                     Click="Delete_Click"
                     MinWidth="180" Height="30" Margin="0,0,8,0"
-                    FontSize="13"
+                    FontSize="{StaticResource FsBody}"
                     Style="{StaticResource ActionButtonStyle}"/>
             <Button x:Name="CancelButton"
                     Content="{DynamicResource S.Cancel}"
                     IsCancel="True" IsDefault="True"
                     MinWidth="100" Height="30"
-                    FontSize="13"
+                    FontSize="{StaticResource FsBody}"
                     Style="{StaticResource ActionButtonStyle}"/>
         </StackPanel>
     </Grid>

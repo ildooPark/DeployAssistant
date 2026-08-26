@@ -19,13 +19,13 @@
         <!-- ── Header banner ── -->
         <Border Grid.Row="0" Background="#2D2D2D" Padding="10,6">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Foreground="#BBBBBB" FontSize="13" VerticalAlignment="Center">
+                <TextBlock Foreground="#BBBBBB" FontSize="{StaticResource FsBody}" VerticalAlignment="Center">
                     <Run Text="{DynamicResource S.SrcPrefix}"/>
                     <Run Text="{Binding SrcProjVersion, FallbackValue='—'}"
                          FontWeight="Bold" Foreground="#4EC9B0"/>
                 </TextBlock>
-                <TextBlock Foreground="#777777" FontSize="13" Margin="16,0" VerticalAlignment="Center" Text="·"/>
-                <TextBlock Foreground="#BBBBBB" FontSize="13" VerticalAlignment="Center">
+                <TextBlock Foreground="#777777" FontSize="{StaticResource FsBody}" Margin="16,0" VerticalAlignment="Center" Text="·"/>
+                <TextBlock Foreground="#BBBBBB" FontSize="{StaticResource FsBody}" VerticalAlignment="Center">
                     <Run Text="PC: "/>
                     <Run Text="{Binding SrcProjConductedPC, FallbackValue='—'}"
                          FontWeight="Bold" Foreground="White"/>

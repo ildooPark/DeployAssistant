@@ -293,9 +293,16 @@ namespace DeployAssistant.ViewModel
 
         private void RetrieveProject(object parameter)
         {
-            if (_projectFiles != null && _projectFiles.Count != 0) _projectFiles.Clear();
             string? projectPath = _dialogService.PickFolder(Loc.T("S.Dlg.OpenProjectFolder", "Open Managed Project"));
             if (projectPath == null || projectPath.Length == 0) return;
+            OpenProjectPath(projectPath);
+        }
+
+        /// <summary>Opens a project directly by path (recents menu); same flow as RetrieveProject minus the picker.</summary>
+        public void OpenProjectPath(string projectPath)
+        {
+            if (_metaDataState != MetaDataState.Idle) return;
+            if (_projectFiles != null && _projectFiles.Count != 0) _projectFiles.Clear();
             CurrentProjectPath = projectPath;
 
             bool retrieveProjectResult = _metaDataManager.RequestProjectRetrieval(projectPath);

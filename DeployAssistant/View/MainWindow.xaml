@@ -46,13 +46,39 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
+
+        <Menu Grid.Row="0" Background="#F7F7F7" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1"
+              FontSize="{StaticResource FsBody}" Padding="2,1">
+            <MenuItem x:Name="ProjectMenu" Header="{DynamicResource S.Menu.Project}"
+                      SubmenuOpened="ProjectMenu_SubmenuOpened">
+                <MenuItem Header="{DynamicResource S.Menu.OpenDest}" Command="{Binding MetaDataVM.GetProject}"/>
+                <MenuItem Header="{DynamicResource S.Menu.SetSource}" Command="{Binding FileTrackVM.GetDeploySrcDir}"/>
+                <Separator/>
+                <MenuItem x:Name="RecentProjectsMenu" Header="{DynamicResource S.Menu.Recent}">
+                    <MenuItem Header="{DynamicResource S.Menu.NoRecent}" IsEnabled="False"/>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="{DynamicResource S.Menu.Exit}" Click="MenuExit_Click"/>
+            </MenuItem>
+            <MenuItem x:Name="SettingsMenu" Header="{DynamicResource S.Menu.Settings}"
+                      SubmenuOpened="SettingsMenu_SubmenuOpened">
+                <MenuItem Header="{DynamicResource S.Menu.FastCheckPercent}"
+                          ToolTip="{DynamicResource S.Menu.FastCheckTooltip}">
+                    <MenuItem x:Name="Sample100" Header="100%" Tag="100" Click="SamplePercent_Click"/>
+                    <MenuItem x:Name="Sample50"  Header="50%"  Tag="50"  Click="SamplePercent_Click"/>
+                    <MenuItem x:Name="Sample25"  Header="25%"  Tag="25"  Click="SamplePercent_Click"/>
+                    <MenuItem x:Name="Sample10"  Header="10%"  Tag="10"  Click="SamplePercent_Click"/>
+                </MenuItem>
+            </MenuItem>
+        </Menu>
 
         <!-- ═══════════════════════════════════════════════════════
              Header ToolBar
         ════════════════════════════════════════════════════════════ -->
-        <Border Grid.Row="0" Background="#F0F0F0" BorderBrush="#D0D0D0" BorderThickness="0,0,0,1" Padding="6,4">
+        <Border Grid.Row="1" Background="#F0F0F0" BorderBrush="#D0D0D0" BorderThickness="0,0,0,1" Padding="6,4">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -62,52 +88,31 @@
 
                 <!-- Primary action buttons -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <Button x:Name="SetDeploySrcDir"
-                            Margin="4,2"
-                            Padding="10,5"
-                            FontSize="13"
-                            Content="{DynamicResource S.SetSourceDir}"
-                            Command="{Binding FileTrackVM.GetDeploySrcDir}"
-                            Style="{StaticResource ToolbarButtonStyle}"/>
-                    <Button x:Name="SetProject"
-                            Margin="4,2"
-                            Padding="10,5"
-                            FontSize="13"
-                            Content="{DynamicResource S.SetDestDir}"
-                            Command="{Binding MetaDataVM.GetProject}"
-                            Style="{StaticResource ToolbarButtonStyle}"/>
                     <Button x:Name="IntegrityCheckButton"
                             Margin="4,2"
                             Padding="10,5"
-                            FontSize="13"
+                            FontSize="{StaticResource FsBody}"
                             Content="{DynamicResource S.IntegrityCheck}"
                             Command="{Binding FileTrackVM.CheckProjectIntegrity}"
                             Style="{StaticResource ToolbarButtonStyle}"/>
                     <Button x:Name="CheckoutButton"
                             Margin="4,2"
                             Padding="10,5"
-                            FontSize="13"
+                            FontSize="{StaticResource FsBody}"
                             Content="{DynamicResource S.Checkout}"
                             ToolTip="{DynamicResource S.CheckoutTooltip}"
                             Command="{Binding BackupVM.CheckoutBackup}"
                             Style="{StaticResource ToolbarButtonStyle}"/>
-                    <CheckBox Content="{DynamicResource S.Safe}"
-                              IsChecked="{Binding BackupVM.SafeCheckoutMode}"
-                              ToolTip="{DynamicResource S.SafeTooltip}"
-                              VerticalAlignment="Center"
-                              Margin="2,0,4,0"
-                              FontSize="12"
-                              Foreground="#424242"/>
                 </StackPanel>
 
                 <!-- Project info -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal"
                             VerticalAlignment="Center" Margin="16,0">
-                    <TextBlock VerticalAlignment="Center" Foreground="#616161" FontSize="13">
+                    <TextBlock VerticalAlignment="Center" Foreground="#616161" FontSize="{StaticResource FsBody}">
                         <Run Text="{DynamicResource S.ProjectLabel}"/>
                         <Run Text="{Binding MetaDataVM.ProjectName}" FontWeight="Bold" Foreground="#212121"/>
                     </TextBlock>
-                    <TextBlock Margin="20,0,0,0" VerticalAlignment="Center" Foreground="#616161" FontSize="13">
+                    <TextBlock Margin="20,0,0,0" VerticalAlignment="Center" Foreground="#616161" FontSize="{StaticResource FsBody}">
                         <Run Text="{DynamicResource S.VersionLabel}"/>
                         <Run Text="{Binding MetaDataVM.CurrentVersion}" FontWeight="Bold" Foreground="#00796B"/>
                     </TextBlock>
@@ -118,7 +123,7 @@
                     <ComboBox x:Name="LanguageSelect"
                               Width="82" Margin="4,0"
                               VerticalAlignment="Center"
-                              FontSize="12"
+                              FontSize="{StaticResource FsBody}"
                               SelectionChanged="LanguageSelect_SelectionChanged">
                         <ComboBoxItem Content="한국어" Tag="ko-KR"/>
                         <ComboBoxItem Content="English" Tag="en-US"/>
@@ -127,7 +132,7 @@
                             VerticalAlignment="Center" Margin="4,0"
                             Style="{StaticResource StateBadgeStyle}">
                         <TextBlock Text="{Binding MetaDataVM.CurrentMetaDataState}"
-                                   FontSize="12" Foreground="White" FontWeight="SemiBold"/>
+                                   FontSize="{StaticResource FsBody}" Foreground="White" FontWeight="SemiBold"/>
                     </Border>
                 </StackPanel>
             </Grid>
@@ -136,7 +141,7 @@
         <!-- ═══════════════════════════════════════════════════════
              Workspace — History/DiffLog | Tabs | Staging/Actions
         ════════════════════════════════════════════════════════════ -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="420" MinWidth="300"/>
                 <ColumnDefinition Width="5"/>
@@ -163,7 +168,7 @@
                                     ToolTip="{DynamicResource S.RefreshHistoryTooltip}"
                                     Command="{Binding BackupVM.FetchBackup}"
                                     Width="22" Height="18" Padding="0"
-                                    FontSize="12"
+                                    FontSize="{StaticResource FsBody}"
                                     Style="{StaticResource ActionButtonStyle}"/>
                             <TextBlock Style="{StaticResource HeaderLabelStyle}" Margin="0"
                                        VerticalAlignment="Center" Text="{DynamicResource S.VersionHistory}"/>
@@ -237,20 +242,20 @@
                                 BorderThickness="0,0,0,1" Padding="8,5">
                             <StackPanel>
                                 <DockPanel>
-                                    <TextBlock DockPanel.Dock="Right" FontSize="11" Foreground="#757575"
+                                    <TextBlock DockPanel.Dock="Right" FontSize="{StaticResource FsCaption}" Foreground="#757575"
                                                VerticalAlignment="Center"
                                                Text="{Binding BackupVM.SelectedItem.UpdatedTime, StringFormat={}{0:yyyy-MM-dd HH:mm}}"/>
-                                    <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#212121"
+                                    <TextBlock FontSize="{StaticResource FsBody}" FontWeight="SemiBold" Foreground="#212121"
                                                TextTrimming="CharacterEllipsis"
                                                Text="{Binding BackupVM.SelectedItem.UpdatedVersion}"/>
                                 </DockPanel>
-                                <TextBlock FontSize="11" Foreground="#757575" Margin="0,1,0,0">
+                                <TextBlock FontSize="{StaticResource FsCaption}" Foreground="#757575" Margin="0,1,0,0">
                                     <Run Text="{DynamicResource S.ByPrefix}"/><Run Text="{Binding BackupVM.UpdaterName, Mode=OneWay}"/>
                                 </TextBlock>
                                 <ScrollViewer MaxHeight="52" Margin="0,3,0,0"
                                               VerticalScrollBarVisibility="Auto"
                                               HorizontalScrollBarVisibility="Disabled">
-                                    <TextBlock FontSize="12" Foreground="#424242" TextWrapping="Wrap"
+                                    <TextBlock FontSize="{StaticResource FsBody}" Foreground="#424242" TextWrapping="Wrap"
                                                Text="{Binding BackupVM.UpdateLog}"/>
                                 </ScrollViewer>
                             </StackPanel>
@@ -263,7 +268,7 @@
                                   GridLinesVisibility="Horizontal"
                                   HorizontalGridLinesBrush="#F0F0F0"
                                   RowHeight="22"
-                                  FontSize="12"
+                                  FontSize="{StaticResource FsBody}"
                                   ColumnHeaderStyle="{StaticResource GridHeaderStyle}"
                                   ScrollViewer.CanContentScroll="True"
                                   ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -337,7 +342,7 @@
                                  Height="28"
                                  VerticalAlignment="Center"
                                  Margin="6,4"
-                                 FontSize="13"
+                                 FontSize="{StaticResource FsBody}"
                                  BorderThickness="1"
                                  BorderBrush="#E0E0E0"/>
                         <DataGrid Grid.Row="1"
@@ -349,7 +354,7 @@
                                   GridLinesVisibility="Horizontal"
                                   HorizontalGridLinesBrush="#F0F0F0"
                                   RowHeight="24"
-                                  FontSize="12"
+                                  FontSize="{StaticResource FsBody}"
                                   ColumnHeaderStyle="{StaticResource GridHeaderStyle}"
                                   ScrollViewer.CanContentScroll="True"
                                   ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -409,30 +414,30 @@
                                     <Button Content="{DynamicResource S.Browse}"
                                             Command="{Binding MetaFileDiffVM.BrowseMetaFile}"
                                             Style="{StaticResource ToolbarButtonStyle}"
-                                            Margin="4,2" Padding="10,5" FontSize="13"/>
+                                            Margin="4,2" Padding="10,5" FontSize="{StaticResource FsBody}"/>
                                     <Button Content="{DynamicResource S.SelectChanged}"
                                             Command="{Binding MetaFileDiffVM.SelectAllChanged}"
                                             Style="{StaticResource ToolbarButtonStyle}"
-                                            Margin="4,2" Padding="10,5" FontSize="13"/>
+                                            Margin="4,2" Padding="10,5" FontSize="{StaticResource FsBody}"/>
                                     <Button Content="{DynamicResource S.DeselectAll}"
                                             Command="{Binding MetaFileDiffVM.DeselectAll}"
                                             Style="{StaticResource ToolbarButtonStyle}"
-                                            Margin="4,2" Padding="10,5" FontSize="13"/>
+                                            Margin="4,2" Padding="10,5" FontSize="{StaticResource FsBody}"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding MetaFileDiffVM.DropZoneMessage}"
-                                           Foreground="#AAAAAA" FontSize="12"
+                                           Foreground="#AAAAAA" FontSize="{StaticResource FsBody}"
                                            VerticalAlignment="Center" Margin="12,0"
                                            TextTrimming="CharacterEllipsis"/>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                                     <Button Content="{DynamicResource S.ImportSelected}"
                                             Command="{Binding MetaFileDiffVM.ImportSelected}"
                                             Style="{StaticResource ToolbarButtonStyle}"
-                                            Margin="4,2" Padding="10,5" FontSize="13"/>
+                                            Margin="4,2" Padding="10,5" FontSize="{StaticResource FsBody}"/>
                                     <Button Content="{DynamicResource S.ExportSyncPackage}"
                                             Command="{Binding MetaFileDiffVM.ExportSyncPackage}"
                                             Style="{StaticResource ToolbarButtonStyle}"
-                                            Margin="4,2" Padding="10,5" FontSize="13"/>
+                                            Margin="4,2" Padding="10,5" FontSize="{StaticResource FsBody}"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -441,7 +446,7 @@
                         <Border Grid.Row="1" Background="#F5F5F5"
                                 BorderBrush="#E0E0E0" BorderThickness="0,0,0,1"
                                 Padding="10,4">
-                            <TextBlock FontSize="12" Foreground="#555555">
+                            <TextBlock FontSize="{StaticResource FsBody}" Foreground="#555555">
                                 <Run Text="{Binding MetaFileDiffVM.TotalCount, StringFormat='{}{0} files changed', Mode=OneWay}"/>
                                 <Run Text=" — "/>
                                 <Run Text="{Binding MetaFileDiffVM.AddedCount,    StringFormat='{}{0} in metafile only', Mode=OneWay}" Foreground="#388E3C" FontWeight="SemiBold"/>
@@ -479,10 +484,10 @@
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <TextBlock Text="⬇" FontSize="48" HorizontalAlignment="Center" Foreground="#CCCCCC"/>
                                     <TextBlock Text="{DynamicResource S.DropVersionLogHere}"
-                                               FontSize="16" HorizontalAlignment="Center"
+                                               FontSize="{StaticResource FsTitle}" HorizontalAlignment="Center"
                                                Foreground="#888888" Margin="0,8,0,4"/>
                                     <TextBlock Text="{DynamicResource S.OrUseBrowse}"
-                                               FontSize="12" HorizontalAlignment="Center"
+                                               FontSize="{StaticResource FsBody}" HorizontalAlignment="Center"
                                                Foreground="#AAAAAA"/>
                                 </StackPanel>
                             </Border>
@@ -678,8 +683,8 @@
                                 <ColumnDefinition Width="70"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Label  Grid.Column="0" Content="{DynamicResource S.Updater}" FontSize="13" Padding="2"/>
-                            <TextBox Grid.Column="1" FontSize="13"
+                            <Label  Grid.Column="0" Content="{DynamicResource S.Updater}" FontSize="{StaticResource FsBody}" Padding="2"/>
+                            <TextBox Grid.Column="1" FontSize="{StaticResource FsBody}"
                                      Text="{Binding MetaDataVM.UpdaterName}"
                                      ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
                         </Grid>
@@ -690,8 +695,8 @@
                                 <ColumnDefinition Width="70"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Label  Grid.Column="0" Content="{DynamicResource S.Log}" FontSize="13" Padding="2"/>
-                            <TextBox Grid.Column="1" FontSize="13"
+                            <Label  Grid.Column="0" Content="{DynamicResource S.Log}" FontSize="{StaticResource FsBody}" Padding="2"/>
+                            <TextBox Grid.Column="1" FontSize="{StaticResource FsBody}"
                                      TextWrapping="Wrap"
                                      AcceptsReturn="True"
                                      Text="{Binding MetaDataVM.UpdateLog}"
@@ -703,19 +708,19 @@
                         <!-- Action buttons -->
                         <UniformGrid Grid.Row="2" Columns="2" Margin="0,4,0,0">
                             <Button Content="{DynamicResource S.Clear}"
-                                    Margin="2" Height="30" FontSize="13"
+                                    Margin="2" Height="30" FontSize="{StaticResource FsBody}"
                                     Command="{Binding FileTrackVM.ClearNewfiles}"
                                     Style="{StaticResource ActionButtonStyle}"/>
                             <Button Content="{DynamicResource S.Refresh}"
-                                    Margin="2" Height="30" FontSize="13"
+                                    Margin="2" Height="30" FontSize="{StaticResource FsBody}"
                                     Command="{Binding FileTrackVM.RefreshDeployFileList}"
                                     Style="{StaticResource ActionButtonStyle}"/>
                             <Button Content="{DynamicResource S.Stage}"
-                                    Margin="2" Height="30" FontSize="13"
+                                    Margin="2" Height="30" FontSize="{StaticResource FsBody}"
                                     Command="{Binding FileTrackVM.StageChanges}"
                                     Style="{StaticResource ActionButtonStyle}"/>
                             <Button Content="{DynamicResource S.Deploy}"
-                                    Margin="2" Height="30" FontSize="13"
+                                    Margin="2" Height="30" FontSize="{StaticResource FsBody}"
                                     Command="{Binding MetaDataVM.ConductUpdate}"
                                     Style="{StaticResource DeployButtonStyle}"/>
                         </UniformGrid>
@@ -728,7 +733,7 @@
 
         <!-- Busy overlay: commands are already state-gated; this makes the lock visible
              and absorbs clicks while any operation runs. -->
-        <Grid Grid.RowSpan="2"
+        <Grid Grid.RowSpan="3"
               Background="#66000000"
               Visibility="{Binding MetaDataVM.IsBusy, Converter={StaticResource BoolToVis}}">
             <Border HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -736,13 +741,14 @@
                     CornerRadius="6" Padding="24,18" MinWidth="440" MaxWidth="560">
                 <StackPanel>
                     <TextBlock Text="{Binding MetaDataVM.BusyTitle}"
-                               FontSize="15" FontWeight="SemiBold" Foreground="#212121"/>
+                               FontSize="{StaticResource FsTitle}" FontWeight="SemiBold" Foreground="#212121"/>
                     <ProgressBar Height="8" Margin="0,12,0,4"
                                  Minimum="0" Maximum="100"
                                  Value="{Binding MetaDataVM.BusyProgress, Mode=OneWay}"
                                  IsIndeterminate="{Binding MetaDataVM.BusyIndeterminate}"/>
                     <TextBlock Text="{Binding MetaDataVM.BusyCountText}"
-                               FontSize="12" Foreground="#616161"/>
+                               Typography.NumeralAlignment="Tabular"
+                               FontSize="{StaticResource FsBody}" Foreground="#616161"/>
                     <Border Margin="0,10,0,0" Background="#FAFAFA"
                             BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="3"
                             Visibility="{Binding MetaDataVM.BusyIndeterminate, Converter={StaticResource InverseBoolToVis}}">
@@ -754,7 +760,7 @@
                                     <DataTemplate>
                                         <DockPanel>
                                             <TextBlock DockPanel.Dock="Right" Text="{Binding OutcomeLabel}"
-                                                       FontSize="11" Margin="8,0,0,0">
+                                                       FontSize="{StaticResource FsCaption}" Margin="8,0,0,0">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Setter Property="Foreground" Value="#9E9E9E"/>
@@ -778,7 +784,7 @@
                                                     </Style>
                                                 </TextBlock.Style>
                                             </TextBlock>
-                                            <TextBlock Text="{Binding Text}" FontSize="11"
+                                            <TextBlock Text="{Binding Text}" FontSize="{StaticResource FsCaption}"
                                                        Foreground="#616161" TextTrimming="CharacterEllipsis"/>
                                         </DockPanel>
                                     </DataTemplate>
@@ -787,7 +793,7 @@
                         </ScrollViewer>
                     </Border>
                     <TextBlock Text="{DynamicResource S.Ovl.Disabled}"
-                               FontSize="11" Foreground="#9E9E9E" Margin="0,10,0,0"/>
+                               FontSize="{StaticResource FsCaption}" Foreground="#9E9E9E" Margin="0,10,0,0"/>
                 </StackPanel>
             </Border>
         </Grid>

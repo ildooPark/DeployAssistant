@@ -1,8 +1,9 @@
-using DeployAssistant.DataComponent;
+﻿using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
 using DeployAssistant.Services;
 using DeployAssistant.ViewModel.Utils;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
@@ -130,6 +131,25 @@ namespace DeployAssistant.ViewModel
             TrackUnsubscribe(() => _metaDataManager.ProjComparisonCompleteEventHandler -= MetaDataManager_ProjComparisonCompleteCallBack);
             _metaDataManager.SimilarityCheckCompleteEventHandler += MetaDataManager_SimilarityCheckCompleteCallBack;
             TrackUnsubscribe(() => _metaDataManager.SimilarityCheckCompleteEventHandler -= MetaDataManager_SimilarityCheckCompleteCallBack);
+            _metaDataManager.IntegrityFileProgressEventHandler += IntegrityFileOutcomeCallBack;
+            TrackUnsubscribe(() => _metaDataManager.IntegrityFileProgressEventHandler -= IntegrityFileOutcomeCallBack);
+        }
+
+        // Per-file verdicts of the LAST integrity run; the results window reads a snapshot.
+        private readonly ConcurrentDictionary<string, IntegrityFileOutcome> _lastIntegrityOutcomes = new();
+
+        public IReadOnlyDictionary<string, IntegrityFileOutcome> IntegrityOutcomesSnapshot
+            => new Dictionary<string, IntegrityFileOutcome>(_lastIntegrityOutcomes);
+
+        private void IntegrityFileOutcomeCallBack(string relPath, IntegrityFileOutcome outcome)
+        {
+            // HashFailed arrives before the same file's final verdict; keep the failure
+            // visible in tallies by never overwriting it with a milder outcome.
+            if (_lastIntegrityOutcomes.TryGetValue(relPath, out var existing)
+                && existing == IntegrityFileOutcome.HashFailed
+                && outcome == IntegrityFileOutcome.MetadataFallback)
+                return;
+            _lastIntegrityOutcomes[relPath] = outcome;
         }
 
         private bool CanSetDeployDir(object obj)
@@ -339,6 +359,7 @@ namespace DeployAssistant.ViewModel
 
         private void MetaDataManager_IssueEventCallBack(MetaDataState state)
         {
+            if (state == MetaDataState.IntegrityChecking) _lastIntegrityOutcomes.Clear();
             _uiDispatcher.Invoke(() =>
             {
                 _metaDataState = state;

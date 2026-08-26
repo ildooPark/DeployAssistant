@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text.RegularExpressions;
 using Xunit;
 
@@ -55,5 +55,22 @@ public class CliVersionTests
         // banner is embedded in markup by MainScreen / TopMenuScreen.
         Assert.DoesNotContain("[", CliVersion.Banner);
         Assert.DoesNotContain("]", CliVersion.Banner);
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Runs before any test in this assembly: every SettingManager must use a
+// throwaway config dir, never the developer's real Documents\DeployAssistant.config.
+internal static class TestConfigIsolation
+{
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void RedirectConfig()
+    {
+        string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "DA_TestConfig");
+        System.IO.Directory.CreateDirectory(dir);
+        string cfg = System.IO.Path.Combine(dir, "DeployAssistant.config");
+        try { if (System.IO.File.Exists(cfg)) System.IO.File.Delete(cfg); } catch { }
+        DeployAssistant.DataComponent.SettingManager.ConfigDirectoryOverride = dir;
     }
 }

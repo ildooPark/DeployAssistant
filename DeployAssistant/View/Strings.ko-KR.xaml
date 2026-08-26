@@ -6,12 +6,8 @@
          Checkout·Merge·Staging Area는 영문 유지, 커밋·히스토리·버전은 음차, 되돌리기는 순우리말. -->
 
     <!-- Toolbar -->
-    <sys:String x:Key="S.SetSourceDir">소스 폴더 선택</sys:String>
-    <sys:String x:Key="S.SetDestDir">대상 폴더 선택</sys:String>
     <sys:String x:Key="S.IntegrityCheck">무결성 검사</sys:String>
     <sys:String x:Key="S.Checkout">Checkout</sys:String>
-    <sys:String x:Key="S.Safe">안전 모드</sys:String>
-    <sys:String x:Key="S.SafeTooltip">안전 모드: 전체 디렉터리를 스냅샷과 대조해 재해시합니다. 해제하면 기록된 변경분만 적용하는 빠른 Checkout입니다.</sys:String>
     <sys:String x:Key="S.CheckoutTooltip">버전 히스토리에서 선택한 버전으로 프로젝트를 되돌립니다</sys:String>
     <sys:String x:Key="S.ProjectLabel">프로젝트: </sys:String>
     <sys:String x:Key="S.VersionLabel">버전: </sys:String>
@@ -88,13 +84,9 @@
     <sys:String x:Key="S.SafeCheckout">안전 Checkout</sys:String>
     <sys:String x:Key="S.Unnamed">(이름 없음)</sys:String>
     <sys:String x:Key="S.Unknown">(알 수 없음)</sys:String>
-    <sys:String x:Key="S.Undefined">정의되지 않음</sys:String>
-    <sys:String x:Key="S.IntegrityChecking">무결성 검사 중</sys:String>
     <sys:String x:Key="S.Filter">필터…</sys:String>
     <sys:String x:Key="S.FilterFiles">파일 필터…</sys:String>
-    <sys:String x:Key="S.ChangeLog">변경 로그</sys:String>
     <sys:String x:Key="S.UpdateLog">업데이트 로그</sys:String>
-    <sys:String x:Key="S.VersionInfo">버전 정보</sys:String>
     <sys:String x:Key="S.SrcPrefix">소스: </sys:String>
     <sys:String x:Key="S.DstPrefix">대상: </sys:String>
     <sys:String x:Key="S.SelectedPrefix">선택: </sys:String>
@@ -151,8 +143,6 @@
     <sys:String x:Key="S.ColDstBuildV">대상 빌드 버전</sys:String>
     <sys:String x:Key="S.ColDstHash">대상 해시</sys:String>
     <sys:String x:Key="S.ColSizeSrcDst">크기 (소스→대상)</sys:String>
-    <sys:String x:Key="S.ColFilePath">파일 경로</sys:String>
-    <sys:String x:Key="S.ColSizeB">크기 (B)</sys:String>
     <sys:String x:Key="S.Cmp.SnapshotHeader">스냅샷 히스토리 — 버전을 선택하면 차이를 확인할 수 있습니다</sys:String>
     <sys:String x:Key="S.ColDeltaSig">Δ 유의</sys:String>
     <sys:String x:Key="S.ColDeltaRes">Δ 리소스</sys:String>
@@ -234,4 +224,28 @@
     <sys:String x:Key="S.Ovl.OutDeleted">삭제됨</sys:String>
     <sys:String x:Key="S.Ovl.OutHashFailed">해시 실패</sys:String>
     <sys:String x:Key="S.Ovl.OutMetadata">메타데이터 검증</sys:String>
+
+    <!-- Integrity dashboard -->
+    <sys:String x:Key="S.Ig.VerdictClean">모든 파일이 스냅샷과 일치합니다.</sys:String>
+    <sys:String x:Key="S.Ig.VerdictDirty">{0}개 항목이 현재 버전과 다릅니다</sys:String>
+    <sys:String x:Key="S.Ig.FullLogBanner">버전 '{0}'</sys:String>
+    <sys:String x:Key="S.Ig.SubtitleScan">{0} · 파일 {1}개 검사</sys:String>
+    <sys:String x:Key="S.Ig.BadgeImported">유입</sys:String>
+    <sys:String x:Key="S.Ig.BadgeEdited">수정</sys:String>
+    <sys:String x:Key="S.Ig.ColOrigin">출처</sys:String>
+    <sys:String x:Key="S.Ig.ColTime">시각</sys:String>
+    <sys:String x:Key="S.Ig.GroupCountSuffix">개</sys:String>
+    <sys:String x:Key="S.Ig.RawLog">자세한 로그</sys:String>
+    <sys:String x:Key="S.Ig.HashInfo">참고: 해시를 계산하지 못한 파일과, 해시 대신 크기·버전 메타데이터로 검증된 파일 수입니다. 해당 파일은 최종 판정으로도 목록에 표시됩니다.</sys:String>
+
+    <!-- Menu strip -->
+    <sys:String x:Key="S.Menu.Project">프로젝트(_P)</sys:String>
+    <sys:String x:Key="S.Menu.OpenDest">대상 프로젝트 열기…</sys:String>
+    <sys:String x:Key="S.Menu.SetSource">소스 폴더 선택…</sys:String>
+    <sys:String x:Key="S.Menu.Recent">최근 프로젝트</sys:String>
+    <sys:String x:Key="S.Menu.NoRecent">(없음)</sys:String>
+    <sys:String x:Key="S.Menu.Exit">종료</sys:String>
+    <sys:String x:Key="S.Menu.Settings">설정(_S)</sys:String>
+    <sys:String x:Key="S.Menu.FastCheckPercent">빠른 검사 해시 비율</sys:String>
+    <sys:String x:Key="S.Menu.FastCheckTooltip">일반 무결성 검사에서 전체 MD5 해시를 계산할 파일의 비율입니다. 나머지는 크기·버전 메타데이터로 검증됩니다. Checkout 게이트는 항상 100% 해시합니다.</sys:String>
 </ResourceDictionary>

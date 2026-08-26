@@ -83,6 +83,8 @@ namespace DeployAssistant.DataComponent
         public event Action<int, int>? IntegrityProgressEventHandler;
         /// <summary>Streams (relPath, outcome) per file during MainProjectIntegrityCheck. Raised from worker threads; subscribers must marshal.</summary>
         public event Action<string, IntegrityFileOutcome>? IntegrityFileProgressEventHandler;
+        /// <summary>Share (1-100) of intersecting files hashed during MainProjectIntegrityCheck; the rest verify by metadata. Set per run by MetaDataManager.</summary>
+        public int IntegritySamplePercent { get; set; } = 100;
         public event Action<MetaDataState> ManagerStateEventHandler;
         #endregion
 
@@ -96,7 +98,7 @@ namespace DeployAssistant.DataComponent
             _registeredChangesDict = new Dictionary<string, ChangedFile>();
             _fileHandlerTool = new FileHandlerTool();
             _hashTool = new HashTool();
-            _asyncControl = new SemaphoreSlim(12);
+            _asyncControl = new SemaphoreSlim(12, 12);
         }
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         #region Calls For File Differences
@@ -116,6 +118,12 @@ namespace DeployAssistant.DataComponent
                 return;
             }
             _preStagedFilesDict.Clear();
+            // Entries from earlier integrity runs would otherwise accumulate for the whole
+            // session (TryAdd lets stale state win) and ride into the next update.
+            foreach (string staleKey in _registeredChangesDict
+                         .Where(kv => (kv.Value.DataState & DataState.IntegrityChecked) != 0)
+                         .Select(kv => kv.Key).ToList())
+                _registeredChangesDict.Remove(staleKey);
 
             try
             {
@@ -165,6 +173,20 @@ namespace DeployAssistant.DataComponent
                 IEnumerable<string> deletedFiles = recordedFiles.Except(directoryRelFiles);
                 IEnumerable<string> deletedDirs = recordedDirs.Except(directoryRelDirs);
                 IEnumerable<string> intersectFiles = recordedFiles.Intersect(directoryRelFiles);
+
+                // Fast check: pick the hash sample per run (fresh Random each run, so files
+                // sampled out this time can still be caught on the next run). Unsampled files
+                // keep an empty hash, which routes them through VerifyByMetadata below.
+                int samplePercent = IntegritySamplePercent < 1 ? 1 : IntegritySamplePercent > 100 ? 100 : IntegritySamplePercent;
+                HashSet<string>? hashSample = null;
+                if (samplePercent < 100)
+                {
+                    var sampleRng = new Random();
+                    hashSample = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (string relPath in intersectFiles)
+                        if (sampleRng.Next(100) < samplePercent) hashSample.Add(relPath);
+                    fileIntegrityLog.AppendLine($"Fast check: hashing {samplePercent}% sample ({hashSample.Count} of {intersectFiles.Count()} files); the rest verify by size/version metadata.");
+                }
 
                 foreach (string dirRelPath in addedDirs)
                 {
@@ -241,7 +263,8 @@ namespace DeployAssistant.DataComponent
                     }
                     try
                     {
-                        _hashTool.GetFileMD5CheckSum(intersectedFile);
+                        if (hashSample == null || hashSample.Contains(fileRelPath))
+                            _hashTool.GetFileMD5CheckSum(intersectedFile);
                     }
                     catch (Exception ex)
                     {
@@ -258,7 +281,8 @@ namespace DeployAssistant.DataComponent
                     // in projectFilesConcurrent so the async-task block can engage the metadata
                     // fallback (VerifyByMetadata).  Log the deferred verification so the user
                     // sees it.
-                    if (string.IsNullOrEmpty(intersectedFile.DataHash))
+                    if (string.IsNullOrEmpty(intersectedFile.DataHash)
+                        && (hashSample == null || hashSample.Contains(fileRelPath)))
                     {
                         hashFailureLog.Add($"Note: {fileRelPath} — hash unavailable after retries; will verify by metadata");
                         try { IntegrityFileProgressEventHandler?.Invoke(fileRelPath, IntegrityFileOutcome.HashFailed); } catch (Exception) { }
@@ -1316,7 +1340,6 @@ namespace DeployAssistant.DataComponent
                 //Update changedFilesDict
                 foreach (ProjectFile file in _preStagedFilesDict.Values)
                 {
-                    Console.WriteLine(_asyncControl.CurrentCount);
                     if (file.DataType == ProjectDataType.Directory || file.DataHash != "") continue;
                     asyncTasks.Add(Task.Run(async () =>
                     {
@@ -1328,7 +1351,6 @@ namespace DeployAssistant.DataComponent
                         finally
                         {
                             _asyncControl.Release();
-                            Console.WriteLine(_asyncControl.CurrentCount);
                         }
                     }));
                 }
@@ -1341,9 +1363,9 @@ namespace DeployAssistant.DataComponent
             }
             finally
             {
+                // This scope never acquires the semaphore — releasing here raised the
+                // 12-way hashing cap by one on every stage (measured 12 -> 22 in ten calls).
                 ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
-                _asyncControl.Release();
-                Console.WriteLine(_asyncControl.CurrentCount);
             }
         }
         

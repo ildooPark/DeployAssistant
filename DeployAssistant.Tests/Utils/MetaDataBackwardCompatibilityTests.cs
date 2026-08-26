@@ -1,4 +1,4 @@
-#pragma warning disable CS0618  // V1 types are the on-disk format; these tests exist to keep them readable.
+﻿#pragma warning disable CS0618  // V1 types are the on-disk format; these tests exist to keep them readable.
 
 using DeployAssistant.DataComponent;
 using DeployAssistant.Interfaces;
@@ -785,4 +785,27 @@ namespace DeployAssistant.Tests.Utils
             Assert.True(File.Exists(Path.Combine(v1Folder, "GlassInspector.exe")));
         }
     }
+}
+
+
+// ---------------------------------------------------------------------------
+// Runs before any test in this assembly: every SettingManager must use a
+// throwaway config dir, never the developer's real Documents\DeployAssistant.config.
+internal static class TestConfigIsolation
+{
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void RedirectConfig()
+    {
+        string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "DA_TestConfig");
+        System.IO.Directory.CreateDirectory(dir);
+        string cfg = System.IO.Path.Combine(dir, "DeployAssistant.config");
+        try { if (System.IO.File.Exists(cfg)) System.IO.File.Delete(cfg); } catch { }
+        DeployAssistant.DataComponent.SettingManager.ConfigDirectoryOverride = dir;
+    }
+}
+
+namespace System.Runtime.CompilerServices
+{
+    [global::System.AttributeUsage(global::System.AttributeTargets.Method, Inherited = false)]
+    internal sealed class ModuleInitializerAttribute : global::System.Attribute { }
 }

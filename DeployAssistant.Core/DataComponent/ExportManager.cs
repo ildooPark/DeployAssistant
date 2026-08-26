@@ -283,15 +283,6 @@ namespace DeployAssistant.DataComponent
             exportPath = xlsxFileDirPath;
             return true;
         }
-        public void ExportProjectChanges(ProjectData projectData, List<ChangedFile> changes)
-        {
-
-        }
-        private bool TryExportProjectChanges(ProjectData projectData, List<ChangedFile> changes, out string? exportPath)
-        {
-            exportPath = null;
-            return false; 
-        }
 
         /// <summary>
         /// Exports a diff-only sync package: a zip containing only the files referenced by

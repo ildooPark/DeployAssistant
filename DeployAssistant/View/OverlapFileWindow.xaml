@@ -24,9 +24,9 @@
         <!-- ── Header explanation ── -->
         <Border Grid.Row="0" Background="#FFF9C4" BorderBrush="#F9A825" BorderThickness="0,0,0,1" Padding="12,8">
             <StackPanel>
-                <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#5D4037"
+                <TextBlock FontSize="{StaticResource FsBody}" FontWeight="SemiBold" Foreground="#5D4037"
                            Text="{DynamicResource S.Ovl.Header}"/>
-                <TextBlock FontSize="12" Foreground="#6D4C41" Margin="0,2,0,0" TextWrapping="Wrap"
+                <TextBlock FontSize="{StaticResource FsBody}" Foreground="#6D4C41" Margin="0,2,0,0" TextWrapping="Wrap"
                            Text="{DynamicResource S.Ovl.Explain}"/>
             </StackPanel>
         </Border>

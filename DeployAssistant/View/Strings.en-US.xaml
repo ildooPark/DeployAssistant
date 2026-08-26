@@ -3,12 +3,8 @@
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
     <!-- Toolbar -->
-    <sys:String x:Key="S.SetSourceDir">Set Source Dir</sys:String>
-    <sys:String x:Key="S.SetDestDir">Set Dest Dir</sys:String>
     <sys:String x:Key="S.IntegrityCheck">Integrity Check</sys:String>
     <sys:String x:Key="S.Checkout">Checkout</sys:String>
-    <sys:String x:Key="S.Safe">Safe</sys:String>
-    <sys:String x:Key="S.SafeTooltip">Safe: checkout re-hashes the whole directory against the snapshot. Off: fast diff-based checkout.</sys:String>
     <sys:String x:Key="S.CheckoutTooltip">Restore the project to the version selected in Version History</sys:String>
     <sys:String x:Key="S.ProjectLabel">Project: </sys:String>
     <sys:String x:Key="S.VersionLabel">Version: </sys:String>
@@ -85,13 +81,9 @@
     <sys:String x:Key="S.SafeCheckout">Safe Checkout</sys:String>
     <sys:String x:Key="S.Unnamed">(unnamed)</sys:String>
     <sys:String x:Key="S.Unknown">(unknown)</sys:String>
-    <sys:String x:Key="S.Undefined">Undefined</sys:String>
-    <sys:String x:Key="S.IntegrityChecking">Integrity Checking</sys:String>
     <sys:String x:Key="S.Filter">Filter…</sys:String>
     <sys:String x:Key="S.FilterFiles">Filter files…</sys:String>
-    <sys:String x:Key="S.ChangeLog">Change log</sys:String>
     <sys:String x:Key="S.UpdateLog">Update log</sys:String>
-    <sys:String x:Key="S.VersionInfo">Version info</sys:String>
     <sys:String x:Key="S.SrcPrefix">Src: </sys:String>
     <sys:String x:Key="S.DstPrefix">Dst: </sys:String>
     <sys:String x:Key="S.SelectedPrefix">Selected: </sys:String>
@@ -148,8 +140,6 @@
     <sys:String x:Key="S.ColDstBuildV">Dst Build V</sys:String>
     <sys:String x:Key="S.ColDstHash">Dst Hash</sys:String>
     <sys:String x:Key="S.ColSizeSrcDst">Size (src→dst)</sys:String>
-    <sys:String x:Key="S.ColFilePath">File Path</sys:String>
-    <sys:String x:Key="S.ColSizeB">Size (B)</sys:String>
     <sys:String x:Key="S.Cmp.SnapshotHeader">Snapshot history — select a version to inspect its diff</sys:String>
     <sys:String x:Key="S.ColDeltaSig">Δ Sig.</sys:String>
     <sys:String x:Key="S.ColDeltaRes">Δ Resource</sys:String>
@@ -231,4 +221,28 @@
     <sys:String x:Key="S.Ovl.OutDeleted">deleted</sys:String>
     <sys:String x:Key="S.Ovl.OutHashFailed">hash failed</sys:String>
     <sys:String x:Key="S.Ovl.OutMetadata">metadata check</sys:String>
+
+    <!-- Integrity dashboard -->
+    <sys:String x:Key="S.Ig.VerdictClean">Every file matches the snapshot.</sys:String>
+    <sys:String x:Key="S.Ig.VerdictDirty">{0} item(s) differ from the current version</sys:String>
+    <sys:String x:Key="S.Ig.FullLogBanner">Version '{0}'</sys:String>
+    <sys:String x:Key="S.Ig.SubtitleScan">{0} · {1} file(s) scanned</sys:String>
+    <sys:String x:Key="S.Ig.BadgeImported">imported</sys:String>
+    <sys:String x:Key="S.Ig.BadgeEdited">edited</sys:String>
+    <sys:String x:Key="S.Ig.ColOrigin">Origin</sys:String>
+    <sys:String x:Key="S.Ig.ColTime">Time</sys:String>
+    <sys:String x:Key="S.Ig.GroupCountSuffix"> item(s)</sys:String>
+    <sys:String x:Key="S.Ig.RawLog">Detailed log</sys:String>
+    <sys:String x:Key="S.Ig.HashInfo">Informational: files whose hash could not be computed, and files verified by size/version metadata instead of a hash. They also appear under their final verdict.</sys:String>
+
+    <!-- Menu strip -->
+    <sys:String x:Key="S.Menu.Project">_Project</sys:String>
+    <sys:String x:Key="S.Menu.OpenDest">Open Destination Project…</sys:String>
+    <sys:String x:Key="S.Menu.SetSource">Set Source Folder…</sys:String>
+    <sys:String x:Key="S.Menu.Recent">Recent Projects</sys:String>
+    <sys:String x:Key="S.Menu.NoRecent">(none)</sys:String>
+    <sys:String x:Key="S.Menu.Exit">Exit</sys:String>
+    <sys:String x:Key="S.Menu.Settings">_Settings</sys:String>
+    <sys:String x:Key="S.Menu.FastCheckPercent">Fast-check hash sample</sys:String>
+    <sys:String x:Key="S.Menu.FastCheckTooltip">Share of files that get a full MD5 hash during a normal integrity check; the rest are verified by size/version metadata. Checkout gates always hash 100%.</sys:String>
 </ResourceDictionary>
