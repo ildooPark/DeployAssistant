@@ -123,8 +123,19 @@
                             <DataTemplate>
                                 <ComboBox ItemsSource="{Binding Candidates}"
                                           SelectedItem="{Binding Selected, Mode=TwoWay}"
-                                          MinWidth="540"
-                                          DisplayMemberPath="DstFile.DataRelPath"/>
+                                          MinWidth="540">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock x:Name="PathText" Text="{Binding DstFile.DataRelPath}"/>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding DstFile.DataRelPath}" Value="">
+                                                    <Setter TargetName="PathText" Property="Text" Value="{DynamicResource S.RootFolder}"/>
+                                                    <Setter TargetName="PathText" Property="FontStyle" Value="Italic"/>
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>

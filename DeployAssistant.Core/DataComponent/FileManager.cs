@@ -1207,7 +1207,9 @@ namespace DeployAssistant.DataComponent
                         );
                     // Computed fresh: the ProjLoaded-time _projDirFileList snapshot predates
                     // the root ("") directory entry, which is appended after that event.
-                    foreach (ProjectFile projDir in _dstProjectData.ProjectDirFileList)
+                    // Ordered so the picker lists root first, then sub-directories A-Z.
+                    foreach (ProjectFile projDir in _dstProjectData.ProjectDirFileList
+                                 .OrderBy(d => d.DataRelPath, StringComparer.OrdinalIgnoreCase))
                     {
                         ChangedFile potentialNew = new ChangedFile(newFile, projDir, DataState.Overlapped);
                         registeredNewList.Add(potentialNew);

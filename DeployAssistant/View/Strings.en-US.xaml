@@ -84,6 +84,7 @@
     <sys:String x:Key="S.Filter">Filter…</sys:String>
     <sys:String x:Key="S.FilterFiles">Filter files…</sys:String>
     <sys:String x:Key="S.GroupByFolder">Folder view</sys:String>
+    <sys:String x:Key="S.RootFolder">(root)</sys:String>
     <sys:String x:Key="S.Drop.Title">Drop files</sys:String>
     <sys:String x:Key="S.Drop.Hint">Drop files to queue them for staging</sys:String>
     <sys:String x:Key="S.Drop.SubHint">One matching file is placed automatically; ambiguous or new files ask for a destination</sys:String>

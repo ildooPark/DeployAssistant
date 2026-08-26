@@ -260,6 +260,8 @@ namespace DeployAssistant.Tests.Integration
         [Fact]
         public async Task RequestDroppedFiles_NewFileOnly_RaisesDestinationPicker()
         {
+            Directory.CreateDirectory(Path.Combine(_projectDir, "sub"));
+            File.WriteAllText(Path.Combine(_projectDir, "sub", "other.dll"), "x");
             var mgr = BuildAndAwakeManager();
             await InitializeAndWaitAsync(mgr, _projectDir);
 
@@ -276,6 +278,9 @@ namespace DeployAssistant.Tests.Integration
 
                 Assert.NotNull(newCandidates);
                 Assert.Contains(newCandidates!, c => c.SrcFile?.DataName == "brandnew.dll");
+                // Root ("") is offered and listed first, then sub-directories.
+                Assert.Equal("", newCandidates![0].DstFile?.DataRelPath);
+                Assert.Contains(newCandidates!, c => c.DstFile?.DataRelPath == "sub");
             }
             finally
             {
