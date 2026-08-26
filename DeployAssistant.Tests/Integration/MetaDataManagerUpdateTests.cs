@@ -258,6 +258,89 @@ namespace DeployAssistant.Tests.Integration
         }
 
         [Fact]
+        public async Task RequestDroppedFiles_TwoSequentialDrops_ViewListKeepsBothFiles()
+        {
+            Directory.CreateDirectory(Path.Combine(_projectDir, "sub"));
+            File.WriteAllText(Path.Combine(_projectDir, "sub", "engine.dll"), "engine v1");
+            Directory.CreateDirectory(Path.Combine(_projectDir, "sub2"));
+            File.WriteAllText(Path.Combine(_projectDir, "sub2", "vision.dll"), "vision v1");
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            string dropSrc = Path.Combine(Path.GetTempPath(), "DA_DropSrc_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dropSrc);
+            File.WriteAllText(Path.Combine(dropSrc, "engine.dll"), "engine v2");
+            File.WriteAllText(Path.Combine(dropSrc, "vision.dll"), "vision v2");
+            try
+            {
+                object? lastViewPayload = null;
+                mgr.FileChangesEventHandler += p => lastViewPayload = p;
+
+                mgr.RequestDroppedFiles(new[] { Path.Combine(dropSrc, "engine.dll") });
+                mgr.RequestDroppedFiles(new[] { Path.Combine(dropSrc, "vision.dll") });
+
+                var view = Assert.IsAssignableFrom<System.Collections.ObjectModel.ObservableCollection<ProjectFile>>(lastViewPayload);
+                Assert.Contains(view, f => f.DataRelPath == Path.Combine("sub", "engine.dll"));
+                Assert.Contains(view, f => f.DataRelPath == Path.Combine("sub2", "vision.dll"));
+            }
+            finally
+            {
+                Directory.Delete(dropSrc, recursive: true);
+            }
+        }
+
+        [Fact]
+        public async Task RequestDroppedFiles_DropAfterStaging_ViewKeepsStagedAndPreStaged()
+        {
+            Directory.CreateDirectory(Path.Combine(_projectDir, "sub"));
+            File.WriteAllText(Path.Combine(_projectDir, "sub", "engine.dll"), "engine v1");
+            Directory.CreateDirectory(Path.Combine(_projectDir, "sub2"));
+            File.WriteAllText(Path.Combine(_projectDir, "sub2", "vision.dll"), "vision v1");
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            string dropSrc = Path.Combine(Path.GetTempPath(), "DA_DropSrc_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dropSrc);
+            File.WriteAllText(Path.Combine(dropSrc, "engine.dll"), "engine v2");
+            File.WriteAllText(Path.Combine(dropSrc, "vision.dll"), "vision v2");
+            try
+            {
+                object? lastViewPayload = null;
+                mgr.FileChangesEventHandler += p => lastViewPayload = p;
+
+                // Drop A and stage it, then drop B — the combined view must keep
+                // showing the staged A entry alongside the newly queued B.
+                mgr.RequestDroppedFiles(new[] { Path.Combine(dropSrc, "engine.dll") });
+
+                var stageTcs = new TaskCompletionSource<bool>();
+                bool stagingStarted = false;
+                mgr.ManagerStateEventHandler += state =>
+                {
+                    if (state == MetaDataState.Processing) stagingStarted = true;
+                    if (stagingStarted && state == MetaDataState.Idle) stageTcs.TrySetResult(true);
+                };
+                mgr.RequestStageChanges();
+                await Task.Delay(100);
+                if (!stagingStarted && mgr.CurrentState == MetaDataState.Idle) stageTcs.TrySetResult(true);
+                using (var cts = new System.Threading.CancellationTokenSource(10_000))
+                {
+                    cts.Token.Register(() => stageTcs.TrySetCanceled());
+                    await stageTcs.Task;
+                }
+
+                mgr.RequestDroppedFiles(new[] { Path.Combine(dropSrc, "vision.dll") });
+
+                var view = Assert.IsAssignableFrom<System.Collections.ObjectModel.ObservableCollection<ProjectFile>>(lastViewPayload);
+                Assert.Contains(view, f => f.DataRelPath == Path.Combine("sub", "engine.dll"));
+                Assert.Contains(view, f => f.DataRelPath == Path.Combine("sub2", "vision.dll"));
+            }
+            finally
+            {
+                Directory.Delete(dropSrc, recursive: true);
+            }
+        }
+
+        [Fact]
         public async Task RequestDroppedFiles_NewFileOnly_RaisesDestinationPicker()
         {
             Directory.CreateDirectory(Path.Combine(_projectDir, "sub"));

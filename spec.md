@@ -385,7 +385,7 @@ All public `Request*` methods are the sole API surface that ViewModels call. The
 | `ProjLoadedEventHandler` | `object` (ProjectData) | A version has been set as `MainProjectData` |
 | `MetaDataLoadedEventHandler` | `object` (ProjectMetaData) | Metadata loaded/initialized |
 | `SrcProjectLoadedEventHandler` | `object` (ProjectData?) | Source directory scan loaded a `ProjectData` from a `.VersionLog` |
-| `FileChangesEventHandler` | `ObservableCollection<ProjectFile>` | Staged change list updated |
+| `FileChangesEventHandler` | `ObservableCollection<ProjectFile>` | Staging view updated — always the **union** of staged (`DstFile`s of registered changes) and pre-staged entries, composed from snapshots of the two `FileManager` events so neither half wipes the other. `FileManager` re-fires `DataPreStagedEventHandler` wherever it clears the pre-staged dict (stage, clear, project (re)load) to keep the snapshot honest |
 | `PreStagedChangesEventHandler` | `object` | Pre-staged list updated |
 | `StagedChangesEventHandler` | `object` | Staged changes finalized (sent to `UpdateManager`) |
 | `OverlappedFileSortEventHandler` | `List<ChangedFile>, List<ChangedFile>` | Overlap resolution required |

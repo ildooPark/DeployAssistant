@@ -1069,11 +1069,26 @@ namespace DeployAssistant.DataComponent
             IntegrityProgressEventHandler?.Invoke(completed, total);
         }
 
+        // The staging view shows staged and pre-staged entries together, but FileManager
+        // reports them through two separate events. Each callback refreshes its half and
+        // re-publishes the union — otherwise whichever event fired last would wipe the
+        // other half from the list (e.g. dropping a file after staging blanked the view).
+        private List<ProjectFile> _stagedViewSnapshot = new List<ProjectFile>();
+        private List<ProjectFile> _preStagedViewSnapshot = new List<ProjectFile>();
+
+        private void PushCombinedFileChangesView()
+        {
+            ObservableCollection<ProjectFile> view = new ObservableCollection<ProjectFile>();
+            foreach (ProjectFile file in _stagedViewSnapshot) view.Add(file);
+            foreach (ProjectFile file in _preStagedViewSnapshot) view.Add(file);
+            FileChangesEventHandler?.Invoke(view);
+        }
+
         private void FileManager_DataPreStagedCallBack(object preStagedFileListObj)
         {
             if (preStagedFileListObj is not List<ProjectFile> preStagedFileList) return;
-            ObservableCollection<ProjectFile> preStagedChangesObs = new ObservableCollection<ProjectFile>(preStagedFileList);
-            FileChangesEventHandler?.Invoke(preStagedChangesObs);
+            _preStagedViewSnapshot = preStagedFileList;
+            PushCombinedFileChangesView();
         }
 
         private void FileManager_DataStagedCallBack(object stagedFileListObj)
@@ -1083,12 +1098,13 @@ namespace DeployAssistant.DataComponent
                 Trace.TraceWarning("Improper stagedFile parameter value returned");
                 return;
             }
-            ObservableCollection<ProjectFile> stagedChangesObs = new ObservableCollection<ProjectFile>();
+            List<ProjectFile> stagedDstFiles = new List<ProjectFile>();
             foreach (ChangedFile file in stagedFiles)
             {
-                if (file.DstFile != null) stagedChangesObs.Add(file.DstFile);
+                if (file.DstFile != null) stagedDstFiles.Add(file.DstFile);
             }
-            FileChangesEventHandler?.Invoke(stagedChangesObs);
+            _stagedViewSnapshot = stagedDstFiles;
+            PushCombinedFileChangesView();
             StagedChangesEventHandler?.Invoke(stagedFiles);
         }
 

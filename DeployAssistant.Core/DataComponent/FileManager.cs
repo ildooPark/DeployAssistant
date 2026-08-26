@@ -1423,6 +1423,7 @@ namespace DeployAssistant.DataComponent
 
             _preStagedFilesDict.Clear();
             ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
+            DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
             DataStagedEventHandler?.Invoke(_registeredChangesDict.Values.ToList());
         }
         
@@ -1446,18 +1447,20 @@ namespace DeployAssistant.DataComponent
                 if (idenfitiedChange.DstFile != null)
                     _registeredChangesDict.Remove(idenfitiedChange.DstFile.DataRelPath);
             }
-            SrcProjectDataLoadedEventHandler?.Invoke(_srcProjectData); 
+            SrcProjectDataLoadedEventHandler?.Invoke(_srcProjectData);
+            DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
             DataStagedEventHandler?.Invoke(_registeredChangesDict.Values.ToList());
         }
         #endregion
 
-        #region CallBacks From Parent Model 
+        #region CallBacks From Parent Model
         public void MetaDataManager_ProjLoadedCallback(object projObj)
         {
             if (projObj is not ProjectData loadedProject) return;
 
             _preStagedFilesDict.Clear();
             _registeredChangesDict.Clear();
+            DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
             _dstProjectData = loadedProject;
             _projectFilesDict = _dstProjectData.ProjectFiles;
             _projDirFileList = _dstProjectData.ProjectDirFileList;
