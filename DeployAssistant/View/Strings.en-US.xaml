@@ -83,6 +83,7 @@
     <sys:String x:Key="S.Unknown">(unknown)</sys:String>
     <sys:String x:Key="S.Filter">Filter…</sys:String>
     <sys:String x:Key="S.FilterFiles">Filter files…</sys:String>
+    <sys:String x:Key="S.GroupByFolder">Folder view</sys:String>
     <sys:String x:Key="S.UpdateLog">Update log</sys:String>
     <sys:String x:Key="S.SrcPrefix">Src: </sys:String>
     <sys:String x:Key="S.DstPrefix">Dst: </sys:String>

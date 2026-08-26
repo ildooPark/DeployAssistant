@@ -389,4 +389,144 @@ namespace DeployAssistant.Tests.Models
 
         #endregion
     }
+
+    public class ProjectFileTreeNodeTests
+    {
+        private static ProjectFile File(string relPath, long size = 0, string version = "", string hash = "")
+        {
+            var f = new ProjectFile(size, version, System.IO.Path.GetFileName(relPath), @"C:\P", relPath);
+            f.DataHash = hash;
+            return f;
+        }
+
+        private static ProjectFile Dir(string relPath)
+            => new ProjectFile(System.IO.Path.GetFileName(relPath), @"C:\P", relPath);
+
+        [Fact]
+        public void Build_NestsFilesByFolder_FoldersFirstAlphabetical()
+        {
+            var roots = ProjectFileTreeNode.Build(new[]
+            {
+                File(@"bin\x64\a.dll"),
+                File(@"bin\b.dll"),
+                File("zroot.exe"),
+            });
+
+            Assert.Equal(2, roots.Count);
+            Assert.Equal("bin", roots[0].Name);
+            Assert.True(roots[0].IsDirectory);
+            Assert.Equal("zroot.exe", roots[1].Name);
+
+            var bin = roots[0];
+            Assert.Equal("x64", bin.Children[0].Name);
+            Assert.Equal("b.dll", bin.Children[1].Name);
+            Assert.Equal("a.dll", bin.Children[0].Children[0].Name);
+        }
+
+        [Fact]
+        public void Build_ExplicitDirectoryEntries_BecomeFolderNodesNotLeaves()
+        {
+            var roots = ProjectFileTreeNode.Build(new[]
+            {
+                Dir("bin"),
+                File(@"bin\a.dll"),
+                Dir("empty"),
+            });
+
+            Assert.Equal(2, roots.Count);
+            Assert.True(roots[0].IsDirectory);
+            Assert.Single(roots[0].Children);
+            Assert.True(roots[1].IsDirectory);
+            Assert.Empty(roots[1].Children);
+        }
+
+        [Fact]
+        public void Build_AggregatesRecursiveFileCountAndSize()
+        {
+            var roots = ProjectFileTreeNode.Build(new[]
+            {
+                File(@"bin\x64\a.dll", size: 100),
+                File(@"bin\b.dll", size: 50),
+            });
+
+            var bin = roots[0];
+            Assert.Equal(2, bin.FileCount);
+            Assert.Equal(150, bin.TotalSize);
+            Assert.Equal(1, bin.Children[0].FileCount);
+            Assert.Equal(100, bin.Children[0].TotalSize);
+        }
+
+        [Fact]
+        public void SizeDisplay_FormatsHumanReadable()
+        {
+            Assert.Equal("532 B", ProjectFileTreeNode.FormatSize(532));
+            Assert.Equal("1.5 KB", ProjectFileTreeNode.FormatSize(1536));
+            Assert.Equal("2.3 MB", ProjectFileTreeNode.FormatSize(2_400_000));
+            Assert.Equal("5.0 GB", ProjectFileTreeNode.FormatSize(5_400_000_000));
+        }
+
+        [Fact]
+        public void HighlightMatchingHash_MarksOnlyFilesWithSameHash()
+        {
+            var roots = ProjectFileTreeNode.Build(new[]
+            {
+                File(@"bin\a.dll", hash: "AAA"),
+                File(@"bin\b.dll", hash: "BBB"),
+                File("c.dll", hash: "AAA"),
+            });
+
+            int marked = ProjectFileTreeNode.HighlightMatchingHash(roots, "AAA");
+
+            Assert.Equal(2, marked);
+            var bin = roots[0];
+            Assert.True(bin.Children[0].IsHighlighted);
+            Assert.False(bin.Children[1].IsHighlighted);
+            Assert.True(roots[1].IsHighlighted);
+            Assert.False(bin.IsHighlighted);
+        }
+
+        [Fact]
+        public void HighlightMatchingHash_NullOrEmptyHash_ClearsAll()
+        {
+            var roots = ProjectFileTreeNode.Build(new[]
+            {
+                File(@"bin\a.dll", hash: "AAA"),
+                File("c.dll", hash: ""),
+            });
+            ProjectFileTreeNode.HighlightMatchingHash(roots, "AAA");
+
+            int marked = ProjectFileTreeNode.HighlightMatchingHash(roots, null);
+
+            Assert.Equal(0, marked);
+            Assert.False(roots[0].Children[0].IsHighlighted);
+            Assert.False(roots[1].IsHighlighted);
+
+            Assert.Equal(0, ProjectFileTreeNode.HighlightMatchingHash(roots, ""));
+        }
+
+        [Fact]
+        public void IsHighlighted_RaisesPropertyChanged()
+        {
+            var roots = ProjectFileTreeNode.Build(new[] { File("a.dll", hash: "AAA") });
+            var changed = new List<string?>();
+            roots[0].PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+            ProjectFileTreeNode.HighlightMatchingHash(roots, "AAA");
+            ProjectFileTreeNode.HighlightMatchingHash(roots, "AAA");
+
+            Assert.Equal(new[] { nameof(ProjectFileTreeNode.IsHighlighted) }, changed);
+        }
+
+        [Fact]
+        public void Build_LeafExposesUnderlyingFile()
+        {
+            var roots = ProjectFileTreeNode.Build(new[] { File(@"bin\a.dll", size: 10, version: "1.2.3", hash: "ABC") });
+
+            var leaf = roots[0].Children[0];
+            Assert.False(leaf.IsDirectory);
+            Assert.Equal("1.2.3", leaf.File!.BuildVersion);
+            Assert.Equal("ABC", leaf.File.DataHash);
+            Assert.Equal("10 B", leaf.SizeDisplay);
+        }
+    }
 }

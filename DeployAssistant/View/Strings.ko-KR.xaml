@@ -86,6 +86,7 @@
     <sys:String x:Key="S.Unknown">(알 수 없음)</sys:String>
     <sys:String x:Key="S.Filter">필터…</sys:String>
     <sys:String x:Key="S.FilterFiles">파일 필터…</sys:String>
+    <sys:String x:Key="S.GroupByFolder">폴더별 보기</sys:String>
     <sys:String x:Key="S.UpdateLog">업데이트 로그</sys:String>
     <sys:String x:Key="S.SrcPrefix">소스: </sys:String>
     <sys:String x:Key="S.DstPrefix">대상: </sys:String>

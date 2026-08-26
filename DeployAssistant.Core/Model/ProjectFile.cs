@@ -1,5 +1,7 @@
 ﻿using DeployAssistant.DataComponent;
 using DeployAssistant.Interfaces;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json.Serialization;
@@ -246,6 +248,125 @@ namespace DeployAssistant.Model
                 return false;
             }
             return other.DataName == this.DataName;
+        }
+    }
+
+    /// <summary>
+    /// Folder-hierarchy projection of a flat <see cref="ProjectFile"/> set, for
+    /// tree-shaped file views. Folders sort before files, both alphabetical.
+    /// </summary>
+    public sealed class ProjectFileTreeNode : System.ComponentModel.INotifyPropertyChanged
+    {
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+        public string Name { get; }
+        public bool IsDirectory { get; }
+
+        private bool _isHighlighted;
+        public bool IsHighlighted
+        {
+            get => _isHighlighted;
+            private set
+            {
+                if (_isHighlighted == value) return;
+                _isHighlighted = value;
+                PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsHighlighted)));
+            }
+        }
+
+        /// <summary>
+        /// Marks every file node whose hash equals <paramref name="hash"/> and clears the
+        /// rest; a null/empty hash clears all. Returns the number of marked nodes.
+        /// </summary>
+        public static int HighlightMatchingHash(IEnumerable<ProjectFileTreeNode> roots, string? hash)
+        {
+            int marked = 0;
+            bool match = !string.IsNullOrEmpty(hash);
+            void Walk(ProjectFileTreeNode node)
+            {
+                node.IsHighlighted = match && !node.IsDirectory && node.File?.DataHash == hash;
+                if (node.IsHighlighted) marked++;
+                foreach (var child in node.Children) Walk(child);
+            }
+            foreach (var root in roots) Walk(root);
+            return marked;
+        }
+#pragma warning disable CS0618
+        public ProjectFile? File { get; private set; }
+#pragma warning restore CS0618
+        public List<ProjectFileTreeNode> Children { get; } = new List<ProjectFileTreeNode>();
+        public int FileCount { get; private set; }
+        public long TotalSize { get; private set; }
+
+        public string SizeDisplay => FormatSize(IsDirectory ? TotalSize : File?.DataSize ?? 0);
+
+        private ProjectFileTreeNode(string name, bool isDirectory)
+        {
+            Name = name;
+            IsDirectory = isDirectory;
+        }
+
+#pragma warning disable CS0618
+        public static List<ProjectFileTreeNode> Build(IEnumerable<ProjectFile> files)
+        {
+            var root = new ProjectFileTreeNode("", isDirectory: true);
+            var dirNodes = new Dictionary<string, ProjectFileTreeNode>(StringComparer.OrdinalIgnoreCase) { [""] = root };
+
+            ProjectFileTreeNode GetDir(string relDir)
+            {
+                if (dirNodes.TryGetValue(relDir, out var node))
+                    return node;
+                string parentDir = Path.GetDirectoryName(relDir) ?? "";
+                var parent = GetDir(parentDir);
+                node = new ProjectFileTreeNode(Path.GetFileName(relDir), isDirectory: true);
+                parent.Children.Add(node);
+                dirNodes[relDir] = node;
+                return node;
+            }
+
+            foreach (var f in files)
+            {
+                if (string.IsNullOrEmpty(f.DataRelPath))
+                    continue;
+                if (f.DataType == ProjectDataType.Directory)
+                    GetDir(f.DataRelPath).File = f;
+                else
+                    GetDir(Path.GetDirectoryName(f.DataRelPath) ?? "").Children.Add(
+                        new ProjectFileTreeNode(f.DataName, isDirectory: false) { File = f });
+            }
+
+            root.SortAndAggregate();
+            return root.Children;
+        }
+#pragma warning restore CS0618
+
+        private void SortAndAggregate()
+        {
+            Children.Sort((a, b) => a.IsDirectory != b.IsDirectory
+                ? (a.IsDirectory ? -1 : 1)
+                : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+            foreach (var child in Children)
+            {
+                if (child.IsDirectory)
+                {
+                    child.SortAndAggregate();
+                    FileCount += child.FileCount;
+                    TotalSize += child.TotalSize;
+                }
+                else
+                {
+                    FileCount++;
+                    TotalSize += child.File?.DataSize ?? 0;
+                }
+            }
+        }
+
+        public static string FormatSize(long bytes)
+        {
+            if (bytes < 1024) return $"{bytes} B";
+            if (bytes < 1024L * 1024) return $"{bytes / 1024.0:0.0} KB";
+            if (bytes < 1024L * 1024 * 1024) return $"{bytes / (1024.0 * 1024):0.0} MB";
+            return $"{bytes / (1024.0 * 1024 * 1024):0.0} GB";
         }
     }
 }

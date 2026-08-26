@@ -336,18 +336,33 @@
                             <RowDefinition Height="40"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-                        <TextBox Grid.Row="0"
-                                 x:Name="FileFilterKeyword"
-                                 TextChanged="FileFilterKeyword_TextChanged"
-                                 Height="28"
-                                 VerticalAlignment="Center"
-                                 Margin="6,4"
-                                 FontSize="{StaticResource FsBody}"
-                                 BorderThickness="1"
-                                 BorderBrush="#E0E0E0"/>
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0"
+                                     x:Name="FileFilterKeyword"
+                                     TextChanged="FileFilterKeyword_TextChanged"
+                                     Height="28"
+                                     VerticalAlignment="Center"
+                                     Margin="6,4"
+                                     FontSize="{StaticResource FsBody}"
+                                     BorderThickness="1"
+                                     BorderBrush="#E0E0E0"/>
+                            <ToggleButton Grid.Column="1"
+                                          x:Name="GroupByFolderToggle"
+                                          Style="{StaticResource TallyChipStyle}"
+                                          Content="{DynamicResource S.GroupByFolder}"
+                                          VerticalAlignment="Center"
+                                          Margin="0,4,6,4"
+                                          Checked="GroupByFolderToggle_Changed"
+                                          Unchecked="GroupByFolderToggle_Changed"/>
+                        </Grid>
                         <DataGrid Grid.Row="1"
                                   x:Name="ProjectMainFileList"
-                                  ItemsSource="{Binding MetaDataVM.ProjectFiles}"
+                                  ItemsSource="{Binding MetaDataVM.ProjectFiles, NotifyOnTargetUpdated=True}"
+                                  Binding.TargetUpdated="ProjectMainFileList_TargetUpdated"
                                   IsReadOnly="True"
                                   BorderBrush="#CDCDCD"
                                   AlternatingRowBackground="#FAFAFA"
@@ -386,6 +401,43 @@
                                 </DataGridTextColumn>
                             </DataGrid.Columns>
                         </DataGrid>
+                        <TreeView Grid.Row="1"
+                                  x:Name="ProjectFileTree"
+                                  Visibility="Collapsed"
+                                  BorderBrush="#CDCDCD"
+                                  BorderThickness="1"
+                                  Background="White"
+                                  FontSize="{StaticResource FsBody}"
+                                  VirtualizingPanel.IsVirtualizing="True"
+                                  VirtualizingPanel.VirtualizationMode="Recycling"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                  SelectedItemChanged="ProjectFileTree_SelectedItemChanged">
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                    <Border x:Name="RowBorder" CornerRadius="2" Padding="3,1">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock x:Name="NodeName" Text="{Binding Name}" Foreground="#212121" FontSize="{StaticResource FsBody}"/>
+                                            <TextBlock x:Name="DirInfo" Foreground="#9E9E9E" FontSize="{StaticResource FsCaption}" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"><Run Text="("/><Run Text="{Binding FileCount, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding SizeDisplay, Mode=OneWay}"/><Run Text=")"/></TextBlock>
+                                            <TextBlock x:Name="FileVersion" Text="{Binding File.VersionDisplay}" Foreground="#616161" FontSize="{StaticResource FsCaption}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="FileSize" Text="{Binding SizeDisplay}" Foreground="#9E9E9E" FontSize="{StaticResource FsCaption}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="FileHash" Text="{Binding File.DataHash}" Foreground="#9E9E9E" FontFamily="Consolas" FontSize="{StaticResource FsCaption}" Width="92" TextTrimming="CharacterEllipsis" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <HierarchicalDataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsDirectory}" Value="True">
+                                            <Setter TargetName="NodeName" Property="FontWeight" Value="SemiBold"/>
+                                            <Setter TargetName="DirInfo" Property="Visibility" Value="Visible"/>
+                                            <Setter TargetName="FileVersion" Property="Visibility" Value="Collapsed"/>
+                                            <Setter TargetName="FileSize" Property="Visibility" Value="Collapsed"/>
+                                            <Setter TargetName="FileHash" Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                            <Setter TargetName="RowBorder" Property="Background" Value="#FFF3C4"/>
+                                        </DataTrigger>
+                                    </HierarchicalDataTemplate.Triggers>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
                     </Grid>
                 </TabItem>
 

@@ -3,6 +3,7 @@ using DeployAssistant.ViewModel;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Windows;
 
@@ -226,12 +227,50 @@ namespace DeployAssistant.View
         private void FileFilterKeyword_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
             ProjectMainFileList.Items.Filter = FilterFilesMethod;
+            if (ProjectFileTree.Visibility == Visibility.Visible)
+                RebuildFileTree();
         }
 
         private bool FilterFilesMethod(object obj)
         {
             var file = (ProjectFile)obj;
             return file.DataName.Contains(FileFilterKeyword.Text, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void GroupByFolderToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            ApplyFileViewMode();
+        }
+
+        private void ProjectMainFileList_TargetUpdated(object sender, System.Windows.Data.DataTransferEventArgs e)
+        {
+            // ItemsSource is replaced on every project (re)load — refresh the tree too.
+            ApplyFileViewMode();
+        }
+
+        private void ApplyFileViewMode()
+        {
+            bool tree = GroupByFolderToggle.IsChecked == true;
+            ProjectFileTree.Visibility = tree ? Visibility.Visible : Visibility.Collapsed;
+            ProjectMainFileList.Visibility = tree ? Visibility.Collapsed : Visibility.Visible;
+            if (tree)
+                RebuildFileTree();
+        }
+
+        private void RebuildFileTree()
+        {
+            // Built from the DataGrid's view so the keyword filter carries over.
+            ProjectFileTree.ItemsSource =
+                ProjectFileTreeNode.Build(ProjectMainFileList.Items.Cast<ProjectFile>());
+        }
+
+        private void ProjectFileTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (ProjectFileTree.ItemsSource is not System.Collections.Generic.List<ProjectFileTreeNode> roots)
+                return;
+            var node = e.NewValue as ProjectFileTreeNode;
+            ProjectFileTreeNode.HighlightMatchingHash(
+                roots, node != null && !node.IsDirectory ? node.File?.DataHash : null);
         }
     }
 }
