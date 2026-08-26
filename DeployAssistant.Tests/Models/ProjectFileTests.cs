@@ -505,6 +505,40 @@ namespace DeployAssistant.Tests.Models
         }
 
         [Fact]
+        public void HighlightMatchingHash_ExpandsAncestorFoldersOfMatches()
+        {
+            var roots = ProjectFileTreeNode.Build(new[]
+            {
+                File(@"bin\x64\a.dll", hash: "AAA"),
+                File(@"other\b.dll", hash: "BBB"),
+            });
+
+            ProjectFileTreeNode.HighlightMatchingHash(roots, "AAA");
+
+            var bin = roots[0];
+            var other = roots[1];
+            Assert.True(bin.IsExpanded);
+            Assert.True(bin.Children[0].IsExpanded);
+            Assert.False(other.IsExpanded);
+        }
+
+        [Fact]
+        public void HighlightMatchingHash_DoesNotCollapseAlreadyExpandedFolders()
+        {
+            var roots = ProjectFileTreeNode.Build(new[]
+            {
+                File(@"bin\a.dll", hash: "AAA"),
+                File(@"other\b.dll", hash: "BBB"),
+            });
+            ProjectFileTreeNode.HighlightMatchingHash(roots, "AAA");
+
+            ProjectFileTreeNode.HighlightMatchingHash(roots, "BBB");
+
+            Assert.True(roots[0].IsExpanded);
+            Assert.True(roots[1].IsExpanded);
+        }
+
+        [Fact]
         public void IsHighlighted_RaisesPropertyChanged()
         {
             var roots = ProjectFileTreeNode.Build(new[] { File("a.dll", hash: "AAA") });

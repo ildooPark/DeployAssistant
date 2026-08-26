@@ -274,19 +274,40 @@ namespace DeployAssistant.Model
             }
         }
 
+        private bool _isExpanded;
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set
+            {
+                if (_isExpanded == value) return;
+                _isExpanded = value;
+                PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsExpanded)));
+            }
+        }
+
         /// <summary>
         /// Marks every file node whose hash equals <paramref name="hash"/> and clears the
-        /// rest; a null/empty hash clears all. Returns the number of marked nodes.
+        /// rest; a null/empty hash clears all. Ancestor folders of marked nodes are
+        /// expanded so every match is visible (already-expanded folders are left alone).
+        /// Returns the number of marked nodes.
         /// </summary>
         public static int HighlightMatchingHash(IEnumerable<ProjectFileTreeNode> roots, string? hash)
         {
             int marked = 0;
             bool match = !string.IsNullOrEmpty(hash);
+            var ancestors = new List<ProjectFileTreeNode>();
             void Walk(ProjectFileTreeNode node)
             {
                 node.IsHighlighted = match && !node.IsDirectory && node.File?.DataHash == hash;
-                if (node.IsHighlighted) marked++;
+                if (node.IsHighlighted)
+                {
+                    marked++;
+                    foreach (var a in ancestors) a.IsExpanded = true;
+                }
+                ancestors.Add(node);
                 foreach (var child in node.Children) Walk(child);
+                ancestors.RemoveAt(ancestors.Count - 1);
             }
             foreach (var root in roots) Walk(root);
             return marked;

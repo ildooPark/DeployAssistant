@@ -412,15 +412,20 @@
                                   VirtualizingPanel.VirtualizationMode="Recycling"
                                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                   SelectedItemChanged="ProjectFileTree_SelectedItemChanged">
+                            <TreeView.ItemContainerStyle>
+                                <Style TargetType="TreeViewItem">
+                                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                </Style>
+                            </TreeView.ItemContainerStyle>
                             <TreeView.ItemTemplate>
                                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                                     <Border x:Name="RowBorder" CornerRadius="2" Padding="3,1">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock x:Name="NodeName" Text="{Binding Name}" Foreground="#212121" FontSize="{StaticResource FsBody}"/>
-                                            <TextBlock x:Name="DirInfo" Foreground="#9E9E9E" FontSize="{StaticResource FsCaption}" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"><Run Text="("/><Run Text="{Binding FileCount, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding SizeDisplay, Mode=OneWay}"/><Run Text=")"/></TextBlock>
-                                            <TextBlock x:Name="FileVersion" Text="{Binding File.VersionDisplay}" Foreground="#616161" FontSize="{StaticResource FsCaption}" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="FileSize" Text="{Binding SizeDisplay}" Foreground="#9E9E9E" FontSize="{StaticResource FsCaption}" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="FileHash" Text="{Binding File.DataHash}" Foreground="#9E9E9E" FontFamily="Consolas" FontSize="{StaticResource FsCaption}" Width="92" TextTrimming="CharacterEllipsis" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="NodeName" Text="{Binding Name}" Foreground="#212121" FontSize="{StaticResource FsHeader}"/>
+                                            <TextBlock x:Name="DirInfo" Foreground="#9E9E9E" FontSize="{StaticResource FsBody}" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"><Run Text="("/><Run Text="{Binding FileCount, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding SizeDisplay, Mode=OneWay}"/><Run Text=")"/></TextBlock>
+                                            <TextBlock x:Name="FileVersion" Text="{Binding File.VersionDisplay}" Foreground="#616161" FontSize="{StaticResource FsBody}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="FileSize" Text="{Binding SizeDisplay}" Foreground="#9E9E9E" FontSize="{StaticResource FsBody}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="FileHash" Text="{Binding File.DataHash}" Foreground="#9E9E9E" FontFamily="Consolas" FontSize="{StaticResource FsBody}" Width="100" TextTrimming="CharacterEllipsis" Margin="10,0,0,0" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </Border>
                                     <HierarchicalDataTemplate.Triggers>
