@@ -264,16 +264,38 @@ namespace DeployAssistant.View
                 ProjectFileTreeNode.Build(ProjectMainFileList.Items.Cast<ProjectFile>());
         }
 
-        private void StagingArea_DragOver(object sender, DragEventArgs e)
+        private int _dragDepth;
+
+        private bool CanAcceptFileDrop(DragEventArgs e)
+            => e.Data.GetDataPresent(DataFormats.FileDrop)
+               && DataContext is MainViewModel vm
+               && vm.MetaDataVM.ProjectData != null;
+
+        private void Window_DragEnter(object sender, DragEventArgs e)
         {
-            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
-                ? DragDropEffects.Copy
-                : DragDropEffects.None;
+            if (!CanAcceptFileDrop(e)) return;
+            _dragDepth++;
+            DropOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void Window_DragOver(object sender, DragEventArgs e)
+        {
+            e.Effects = CanAcceptFileDrop(e) ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         }
 
-        private void StagingArea_Drop(object sender, DragEventArgs e)
+        private void Window_DragLeave(object sender, DragEventArgs e)
         {
+            // Enter/leave pairs bubble up from every child; the depth counter keeps the
+            // overlay from flickering while the drag moves across panels.
+            if (_dragDepth > 0 && --_dragDepth == 0)
+                DropOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void Window_Drop(object sender, DragEventArgs e)
+        {
+            _dragDepth = 0;
+            DropOverlay.Visibility = Visibility.Collapsed;
             if (e.Data.GetData(DataFormats.FileDrop) is string[] paths && DataContext is MainViewModel vm)
                 vm.FileTrackVM.QueueDroppedFiles(paths);
         }

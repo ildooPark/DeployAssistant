@@ -88,6 +88,8 @@
     <sys:String x:Key="S.FilterFiles">파일 필터…</sys:String>
     <sys:String x:Key="S.GroupByFolder">폴더별 보기</sys:String>
     <sys:String x:Key="S.Drop.Title">파일 드롭</sys:String>
+    <sys:String x:Key="S.Drop.Hint">파일을 놓으면 스테이징 대기열에 추가됩니다</sys:String>
+    <sys:String x:Key="S.Drop.SubHint">일치하는 파일이 하나면 자동 배치, 애매하거나 새 파일이면 대상을 묻습니다</sys:String>
     <sys:String x:Key="S.Drop.FoldersIgnored">파일만 드롭할 수 있습니다 — 폴더는 무시되었습니다.</sys:String>
     <sys:String x:Key="S.UpdateLog">업데이트 로그</sys:String>
     <sys:String x:Key="S.SrcPrefix">소스: </sys:String>

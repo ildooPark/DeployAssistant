@@ -8,7 +8,12 @@
         Title="Deploy Assistant" Height="900" Width="1600"
         MinHeight="700"
         MinWidth="1100"
-        Icon="/app.ico">
+        Icon="/app.ico"
+        AllowDrop="True"
+        DragEnter="Window_DragEnter"
+        DragOver="Window_DragOver"
+        DragLeave="Window_DragLeave"
+        Drop="Window_Drop">
 
     <Window.Resources>
         <!-- StateBadgeStyle — uses MetaDataVM.CurrentMetaDataState binding unique to MainWindow -->
@@ -655,11 +660,7 @@
                           Background="#E0E0E0"/>
 
             <!-- RIGHT: Staged Changes (top) + Action Panel (bottom) -->
-            <Grid Grid.Column="4"
-                  AllowDrop="True"
-                  Background="Transparent"
-                  DragOver="StagingArea_DragOver"
-                  Drop="StagingArea_Drop">
+            <Grid Grid.Column="4">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="0.4*"/>
                     <RowDefinition Height="5"/>
@@ -791,6 +792,29 @@
             </Grid>
         </Grid>
 
+
+        <!-- Drop overlay: shown only while files are dragged over the window and a
+             project is loaded. Hit-test invisible — the Window handles the drop. -->
+        <Grid x:Name="DropOverlay"
+              Grid.RowSpan="3"
+              Background="#CCF5F8FB"
+              IsHitTestVisible="False"
+              Visibility="Collapsed">
+            <Grid Margin="60">
+                <Rectangle Stroke="#5B8DBE" StrokeThickness="3" StrokeDashArray="8 5"
+                           RadiusX="12" RadiusY="12" Fill="#33FFFFFF"/>
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="64"
+                               Foreground="#5B8DBE" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{DynamicResource S.Drop.Hint}"
+                               FontSize="{StaticResource FsTitle}" FontWeight="SemiBold"
+                               Foreground="#2F5B84" Margin="0,16,0,4" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{DynamicResource S.Drop.SubHint}"
+                               FontSize="{StaticResource FsBody}" Foreground="#616161"
+                               HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
 
         <!-- Busy overlay: commands are already state-gated; this makes the lock visible
              and absorbs clicks while any operation runs. -->
