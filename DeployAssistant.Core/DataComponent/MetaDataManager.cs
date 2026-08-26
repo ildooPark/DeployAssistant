@@ -841,9 +841,14 @@ namespace DeployAssistant.DataComponent
             _fileManager.StageNewFilesAsync();
         }
 
-        public void RequestClearStagedFiles()
+        /// <summary>
+        /// Clears the staging queue. <paramref name="keepDroppedFiles"/> preserves entries
+        /// queued via drag &amp; drop — the source-folder refresh path uses it so a re-scan
+        /// does not silently discard dropped files; the explicit Clear button wipes all.
+        /// </summary>
+        public void RequestClearStagedFiles(bool keepDroppedFiles = false)
         {
-            _fileManager.ClearDeployedFileChanges();
+            _fileManager.ClearDeployedFileChanges(keepDroppedFiles);
         }
 
         public void RequestOverlappedFileAllocation(List<ChangedFile> overlapSorted, List<ChangedFile> newSorted)

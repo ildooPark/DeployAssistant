@@ -1272,6 +1272,15 @@ namespace DeployAssistant.DataComponent
         /// one match pre-stages automatically, several or none raise the destination
         /// picker. Directories and unreadable paths are skipped.
         /// </summary>
+        /// <summary>Base temp folder every drop batch is copied under; also how
+        /// drop-originated pre-staged entries are recognized later.</summary>
+        public static readonly string DropStagingRoot =
+            Path.Combine(Path.GetTempPath(), "DeployAssistant");
+
+        private static bool IsDroppedEntry(ProjectFile file)
+            => file.DataSrcPath != null
+               && file.DataSrcPath.StartsWith(DropStagingRoot, StringComparison.OrdinalIgnoreCase);
+
         public void RegisterDroppedFiles(string[]? filePaths)
         {
             if (_dstProjectData == null)
@@ -1284,8 +1293,7 @@ namespace DeployAssistant.DataComponent
                 .ToArray();
             if (files.Length == 0) return;
 
-            string dropRoot = Path.Combine(Path.GetTempPath(), "DeployAssistant",
-                "Drop_" + Guid.NewGuid().ToString("N"));
+            string dropRoot = Path.Combine(DropStagingRoot, "Drop_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(PathCompat.ToNetFrameworkLongPath(dropRoot));
             List<string> copied = new List<string>();
             foreach (string file in files)
@@ -1428,12 +1436,24 @@ namespace DeployAssistant.DataComponent
         }
         
         /// <summary>
-        /// Clears StagedFiles Except those registered as IntegrityChecked
+        /// Clears StagedFiles Except those registered as IntegrityChecked.
+        /// <paramref name="keepDroppedFiles"/> preserves pre-staged entries that came in
+        /// through <see cref="RegisterDroppedFiles"/> (recognized by their source path
+        /// under <see cref="DropStagingRoot"/>) so a source-folder refresh cannot
+        /// silently discard them.
         /// </summary>
-        public void ClearDeployedFileChanges()
+        public void ClearDeployedFileChanges(bool keepDroppedFiles = false)
         {
             _srcProjectData = null;
-            _preStagedFilesDict.Clear();
+            if (keepDroppedFiles)
+            {
+                foreach (string staleKey in _preStagedFilesDict
+                             .Where(kv => !IsDroppedEntry(kv.Value))
+                             .Select(kv => kv.Key).ToList())
+                    _preStagedFilesDict.Remove(staleKey);
+            }
+            else
+                _preStagedFilesDict.Clear();
             List<ChangedFile> clearChangedList = new List<ChangedFile>();
             foreach (ChangedFile changedFile in _registeredChangesDict.Values)
             {

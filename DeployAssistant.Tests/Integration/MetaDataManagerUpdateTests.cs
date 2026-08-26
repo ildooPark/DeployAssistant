@@ -341,6 +341,46 @@ namespace DeployAssistant.Tests.Integration
         }
 
         [Fact]
+        public async Task RequestClearStagedFiles_KeepDropped_PreservesDropsClearsFolderScan()
+        {
+            Directory.CreateDirectory(Path.Combine(_projectDir, "sub"));
+            File.WriteAllText(Path.Combine(_projectDir, "sub", "engine.dll"), "engine v1");
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            string dropSrc = Path.Combine(Path.GetTempPath(), "DA_DropSrc_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dropSrc);
+            File.WriteAllText(Path.Combine(dropSrc, "engine.dll"), "engine v2");
+            string scanSrc = Path.Combine(Path.GetTempPath(), "DA_ScanSrc_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(scanSrc, "sub"));
+            File.WriteAllText(Path.Combine(scanSrc, "sub", "scanned.dll"), "scanned");
+            try
+            {
+                object? lastViewPayload = null;
+                mgr.FileChangesEventHandler += p => lastViewPayload = p;
+
+                mgr.RequestDroppedFiles(new[] { Path.Combine(dropSrc, "engine.dll") });
+                mgr.RequestSrcDataRetrieval(scanSrc);
+                await Task.Delay(300);
+
+                mgr.RequestClearStagedFiles(keepDroppedFiles: true);
+
+                var view = Assert.IsAssignableFrom<System.Collections.ObjectModel.ObservableCollection<ProjectFile>>(lastViewPayload);
+                Assert.Contains(view, f => f.DataRelPath == Path.Combine("sub", "engine.dll"));
+                Assert.DoesNotContain(view, f => f.DataName == "scanned.dll");
+
+                mgr.RequestClearStagedFiles();
+                view = Assert.IsAssignableFrom<System.Collections.ObjectModel.ObservableCollection<ProjectFile>>(lastViewPayload);
+                Assert.Empty(view);
+            }
+            finally
+            {
+                Directory.Delete(dropSrc, recursive: true);
+                Directory.Delete(scanSrc, recursive: true);
+            }
+        }
+
+        [Fact]
         public async Task RequestDroppedFiles_NewFileOnly_RaisesDestinationPicker()
         {
             Directory.CreateDirectory(Path.Combine(_projectDir, "sub"));

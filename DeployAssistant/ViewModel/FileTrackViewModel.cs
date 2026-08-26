@@ -71,7 +71,7 @@ namespace DeployAssistant.ViewModel
         public ICommand ClearNewfiles => _clearNewfiles ??= new RelayCommand(ClearFiles, CanClearFiles);
 
         private ICommand? _refreshDeployFileList;
-        public ICommand RefreshDeployFileList => _refreshDeployFileList ??= new RelayCommand(RefreshFilesList);
+        public ICommand RefreshDeployFileList => _refreshDeployFileList ??= new RelayCommand(RefreshFilesList, CanRefreshFiles);
 
         private ICommand? _revertChange;
         public ICommand RevertChange => _revertChange ??= new RelayCommand(RevertIntegrityCheckFile);
@@ -242,14 +242,22 @@ namespace DeployAssistant.ViewModel
             }
         }
 
+        private bool CanRefreshFiles(object? obj)
+        {
+            if (_metaDataState != MetaDataState.Idle) return false;
+            return _deploySrcPath != null && System.IO.Directory.Exists(_deploySrcPath);
+        }
+
         private void RefreshFilesList(object? obj)
         {
             if (_deploySrcPath == null)
             {
                 _dialogService.Inform(Loc.T("S.Refresh", "Refresh"),
                     Loc.T("S.Dlg.SetSrcPath", "Please set the source deploy path first."));
+                return;
             }
-            _metaDataManager.RequestClearStagedFiles();
+            // Re-scan the source folder without discarding files queued via drag & drop.
+            _metaDataManager.RequestClearStagedFiles(keepDroppedFiles: true);
             _metaDataManager.RequestSrcDataRetrieval(_deploySrcPath);
         }
 
