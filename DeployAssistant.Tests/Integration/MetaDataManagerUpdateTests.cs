@@ -399,6 +399,25 @@ namespace DeployAssistant.Tests.Integration
         }
 
         [Fact]
+        public async Task RequestAddIgnoreEntry_AppendsPersistsAndIsIdempotent()
+        {
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            List<RecordedFile>? published = null;
+            mgr.IgnoreEntriesEventHandler += list => published = list;
+
+            Assert.True(mgr.RequestAddIgnoreEntry("*.tmp", ProjectDataType.File));
+            Assert.NotNull(published);
+            Assert.Contains(published!, e => e.DataName == "*.tmp" && e.DataType == ProjectDataType.File);
+            Assert.Contains("*.tmp", File.ReadAllText(Path.Combine(_projectDir, "DeployAssistant.ignore")));
+
+            // Adding the same entry again succeeds without creating a duplicate row.
+            Assert.True(mgr.RequestAddIgnoreEntry("*.tmp", ProjectDataType.File));
+            Assert.Equal(1, published!.Count(e => e.DataName == "*.tmp"));
+        }
+
+        [Fact]
         public async Task RequestSaveIgnoreEntries_PersistsAndFiltersNextScan()
         {
             var mgr = BuildAndAwakeManager();

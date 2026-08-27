@@ -16,15 +16,19 @@ namespace DeployAssistant.View
     /// </summary>
     public partial class IntegrityLogWindow : Window
     {
+        // Quick-ignore commands for the result rows' context menu (right-click → ignore).
+        public ViewModel.IgnoreViewModel IgnoreVM { get; }
+
         public IntegrityLogWindow(ProjectData projData, string versionLog, ObservableCollection<ProjectFile> fileList,
                                   IReadOnlyDictionary<string, IntegrityFileOutcome>? outcomes = null)
         {
             InitializeComponent();
             var services = ((App)Application.Current).Services!;
             var vm = new VersionCheckViewModel(services.MetaDataManager, projData, versionLog, fileList, outcomes);
+            IgnoreVM = new ViewModel.IgnoreViewModel(services.MetaDataManager, services.DialogService, services.UiDispatcher);
             this.DataContext = vm;
             ConfigureView(vm);
-            Closed += (_, _) => (vm as IDisposable)?.Dispose();
+            Closed += (_, _) => { (vm as IDisposable)?.Dispose(); IgnoreVM.Dispose(); };
         }
 
         public IntegrityLogWindow(ProjectData projectData)
@@ -32,9 +36,10 @@ namespace DeployAssistant.View
             InitializeComponent();
             var services = ((App)Application.Current).Services!;
             var vm = new VersionCheckViewModel(services.MetaDataManager, projectData);
+            IgnoreVM = new ViewModel.IgnoreViewModel(services.MetaDataManager, services.DialogService, services.UiDispatcher);
             this.DataContext = vm;
             ConfigureView(vm);
-            Closed += (_, _) => (vm as IDisposable)?.Dispose();
+            Closed += (_, _) => { (vm as IDisposable)?.Dispose(); IgnoreVM.Dispose(); };
         }
 
         private ICollectionView? _view;

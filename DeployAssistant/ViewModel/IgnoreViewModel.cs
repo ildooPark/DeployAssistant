@@ -156,5 +156,68 @@ namespace DeployAssistant.ViewModel
                 _dialogService.Inform(Loc.T("S.IgnoreTab", "Ignore List"),
                     Loc.T("S.Ign.SaveFailed", "Could not save the ignore list."));
         }
+
+        // ------------------------------------------------------------------ quick add
+        // Context-menu shortcuts on file lists: one gesture adds + saves immediately.
+
+        private ICommand? _quickIgnoreFile;
+        public ICommand QuickIgnoreFile => _quickIgnoreFile ??= new RelayCommand(
+            p => QuickAdd(ResolveFileName(p), ProjectDataType.File),
+            p => _metaDataState == MetaDataState.Idle && ResolveFileName(p) != null);
+
+        private ICommand? _quickIgnoreExtension;
+        public ICommand QuickIgnoreExtension => _quickIgnoreExtension ??= new RelayCommand(
+            p => QuickAdd(ResolveExtensionPattern(p), ProjectDataType.File),
+            p => _metaDataState == MetaDataState.Idle && ResolveExtensionPattern(p) != null);
+
+        private ICommand? _quickIgnoreFolder;
+        public ICommand QuickIgnoreFolder => _quickIgnoreFolder ??= new RelayCommand(
+            p => QuickAdd(ResolveFolderName(p), ProjectDataType.Directory),
+            p => _metaDataState == MetaDataState.Idle && ResolveFolderName(p) != null);
+
+        private static ProjectFile? ResolveProjectFile(object? param) => param switch
+        {
+            ProjectFile file => file,
+            ProjectFileTreeNode node => node.File,
+            _ => null,
+        };
+
+        private static string? ResolveFileName(object? param)
+        {
+            ProjectFile? file = ResolveProjectFile(param);
+            if (file == null || file.DataType == ProjectDataType.Directory) return null;
+            return string.IsNullOrWhiteSpace(file.DataName) ? null : file.DataName;
+        }
+
+        private static string? ResolveExtensionPattern(object? param)
+        {
+            string? name = ResolveFileName(param);
+            if (name == null) return null;
+            string ext = Path.GetExtension(name);
+            return string.IsNullOrEmpty(ext) ? null : "*" + ext;
+        }
+
+        private static string? ResolveFolderName(object? param)
+        {
+            switch (param)
+            {
+                case ProjectFileTreeNode node when node.IsDirectory:
+                    return string.IsNullOrEmpty(node.Name) ? null : node.Name;
+                default:
+                    ProjectFile? file = ResolveProjectFile(param);
+                    if (file == null) return null;
+                    string dir = file.DataType == ProjectDataType.Directory ? file.DataRelPath : file.DataRelDir;
+                    string name = Path.GetFileName(dir ?? "");
+                    return string.IsNullOrEmpty(name) ? null : name;
+            }
+        }
+
+        private void QuickAdd(string? pattern, ProjectDataType type)
+        {
+            if (pattern == null) return;
+            if (!_metaDataManager.RequestAddIgnoreEntry(pattern, type))
+                _dialogService.Inform(Loc.T("S.IgnoreTab", "Ignore List"),
+                    Loc.T("S.Ign.SaveFailed", "Could not save the ignore list."));
+        }
     }
 }

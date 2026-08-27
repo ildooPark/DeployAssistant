@@ -368,6 +368,7 @@
                                   x:Name="ProjectMainFileList"
                                   ItemsSource="{Binding MetaDataVM.ProjectFiles, NotifyOnTargetUpdated=True}"
                                   Binding.TargetUpdated="ProjectMainFileList_TargetUpdated"
+                                  Tag="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=DataContext}"
                                   IsReadOnly="True"
                                   BorderBrush="#CDCDCD"
                                   AlternatingRowBackground="#FAFAFA"
@@ -405,9 +406,23 @@
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
                             </DataGrid.Columns>
+                            <DataGrid.ContextMenu>
+                                <ContextMenu DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+                                    <MenuItem Header="{DynamicResource S.Ign.QuickFile}"
+                                              Command="{Binding IgnoreVM.QuickIgnoreFile}"
+                                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                    <MenuItem Header="{DynamicResource S.Ign.QuickExt}"
+                                              Command="{Binding IgnoreVM.QuickIgnoreExtension}"
+                                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                    <MenuItem Header="{DynamicResource S.Ign.QuickFolder}"
+                                              Command="{Binding IgnoreVM.QuickIgnoreFolder}"
+                                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
                         </DataGrid>
                         <TreeView Grid.Row="1"
                                   x:Name="ProjectFileTree"
+                                  Tag="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=DataContext}"
                                   Visibility="Collapsed"
                                   BorderBrush="#CDCDCD"
                                   BorderThickness="1"
@@ -417,6 +432,19 @@
                                   VirtualizingPanel.VirtualizationMode="Recycling"
                                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                   SelectedItemChanged="ProjectFileTree_SelectedItemChanged">
+                            <TreeView.ContextMenu>
+                                <ContextMenu DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+                                    <MenuItem Header="{DynamicResource S.Ign.QuickFile}"
+                                              Command="{Binding IgnoreVM.QuickIgnoreFile}"
+                                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                    <MenuItem Header="{DynamicResource S.Ign.QuickExt}"
+                                              Command="{Binding IgnoreVM.QuickIgnoreExtension}"
+                                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                    <MenuItem Header="{DynamicResource S.Ign.QuickFolder}"
+                                              Command="{Binding IgnoreVM.QuickIgnoreFolder}"
+                                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                </ContextMenu>
+                            </TreeView.ContextMenu>
                             <TreeView.ItemContainerStyle>
                                 <Style TargetType="TreeViewItem">
                                     <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>

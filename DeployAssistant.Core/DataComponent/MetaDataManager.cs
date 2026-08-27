@@ -916,6 +916,27 @@ namespace DeployAssistant.DataComponent
         public bool IsWellKnownIgnoreEntry(RecordedFile entry)
             => _settingManager._projectIgnoreData?.IsWellKnownEntry(entry) ?? false;
 
+        /// <summary>
+        /// One-gesture ignore add (context-menu quick add): appends the entry to the
+        /// current list and persists immediately. Idempotent — an already-present
+        /// pattern/type pair reports success without creating a duplicate.
+        /// </summary>
+        public bool RequestAddIgnoreEntry(string? pattern, ProjectDataType type)
+        {
+            if (string.IsNullOrWhiteSpace(pattern) || CurrentState != MetaDataState.Idle) return false;
+            List<RecordedFile>? entries = _settingManager._projectIgnoreData?.IgnoreFileList;
+            if (entries == null) return false;
+            foreach (RecordedFile existing in entries)
+                if (existing.DataType == type &&
+                    string.Equals(existing.DataName, pattern, StringComparison.OrdinalIgnoreCase))
+                {
+                    IgnoreEntriesEventHandler?.Invoke(new List<RecordedFile>(entries));
+                    return true;
+                }
+            var edited = new List<RecordedFile>(entries) { new RecordedFile(pattern!, type, IgnoreType.All) };
+            return RequestSaveIgnoreEntries(edited);
+        }
+
         public void RequestExportProjectBackup(ProjectData projectData)
         {
             _exportManager.ExportProject(projectData);
