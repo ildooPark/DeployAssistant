@@ -649,6 +649,111 @@
                         </Grid>
                     </Grid>
                 </TabItem>
+
+                <!-- ═════════════════════════════════════════════════════
+                     Ignore configuration tab — git-style exclusions:
+                     file patterns (*.log) and folder names, saved to
+                     DeployAssistant.ignore on demand.
+                ═══════════════════════════════════════════════════════ -->
+                <TabItem Header="{DynamicResource S.IgnoreTab}">
+                    <Grid DataContext="{Binding IgnoreVM}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Margin="8,8,8,2"
+                                   Text="{DynamicResource S.Ign.Explain}"
+                                   TextWrapping="Wrap"
+                                   FontSize="{StaticResource FsCaption}" Foreground="#616161"/>
+
+                        <Grid Grid.Row="1" Margin="6,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Height="28" VerticalAlignment="Center"
+                                     VerticalContentAlignment="Center"
+                                     FontSize="{StaticResource FsBody}"
+                                     BorderThickness="1" BorderBrush="#E0E0E0"
+                                     Text="{Binding NewPattern, UpdateSourceTrigger=PropertyChanged}"/>
+                            <ComboBox Grid.Column="1" Width="110" Height="28" Margin="6,0,0,0"
+                                      VerticalAlignment="Center"
+                                      FontSize="{StaticResource FsBody}"
+                                      SelectedIndex="{Binding NewTypeIndex}">
+                                <ComboBoxItem Content="{DynamicResource S.Ign.TypeFile}"/>
+                                <ComboBoxItem Content="{DynamicResource S.Ign.TypeFolder}"/>
+                            </ComboBox>
+                            <Button Grid.Column="2" Content="{DynamicResource S.Ign.Add}"
+                                    Margin="6,0,0,0" Padding="14,4" Height="28"
+                                    FontSize="{StaticResource FsBody}"
+                                    Command="{Binding AddEntry}"
+                                    Style="{StaticResource ActionButtonStyle}"/>
+                        </Grid>
+
+                        <DataGrid Grid.Row="2"
+                                  Margin="6,2"
+                                  ItemsSource="{Binding Entries}"
+                                  IsReadOnly="True"
+                                  AutoGenerateColumns="False"
+                                  BorderBrush="#CDCDCD"
+                                  AlternatingRowBackground="#FAFAFA"
+                                  GridLinesVisibility="Horizontal"
+                                  HorizontalGridLinesBrush="#F0F0F0"
+                                  RowHeight="26"
+                                  FontSize="{StaticResource FsBody}"
+                                  ColumnHeaderStyle="{StaticResource GridHeaderStyle}"
+                                  CanUserAddRows="False" CanUserDeleteRows="False"
+                                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsDeletable}" Value="False">
+                                            <Setter Property="Foreground" Value="#9E9E9E"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGrid.RowStyle>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="{StaticResource S.Ign.ColPattern}" Binding="{Binding Pattern}" Width="2.5*"/>
+                                <DataGridTextColumn Header="{StaticResource S.Ign.ColType}"    Binding="{Binding TypeDisplay}" Width="1.2*"/>
+                                <DataGridTextColumn Header="{StaticResource S.Ign.ColScope}"   Binding="{Binding ScopeDisplay}" Width="2*"/>
+                                <DataGridTemplateColumn Width="90">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="{DynamicResource S.Ign.Remove}"
+                                                    Padding="8,1" FontSize="{StaticResource FsCaption}"
+                                                    Visibility="{Binding IsDeletable, Converter={StaticResource BoolToVis}}"
+                                                    Command="{Binding DataContext.RemoveEntry,
+                                                              RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                    CommandParameter="{Binding}"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="6,4,6,8">
+                            <TextBlock Text="{DynamicResource S.Ign.UnsavedHint}"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"
+                                       FontSize="{StaticResource FsCaption}" Foreground="#C62828"
+                                       Visibility="{Binding IsDirty, Converter={StaticResource BoolToVis}}"/>
+                            <Button Content="{DynamicResource S.Ign.Revert}"
+                                    Padding="14,4" Margin="0,0,6,0" Height="28"
+                                    FontSize="{StaticResource FsBody}"
+                                    Command="{Binding RevertEntries}"
+                                    Style="{StaticResource ActionButtonStyle}"/>
+                            <Button Content="{DynamicResource S.Ign.Save}"
+                                    Padding="20,4" Height="28"
+                                    FontSize="{StaticResource FsBody}"
+                                    Command="{Binding SaveEntries}"
+                                    Style="{StaticResource DeployButtonStyle}"/>
+                        </StackPanel>
+                    </Grid>
+                </TabItem>
             </TabControl>
 
             <GridSplitter Grid.Column="3"

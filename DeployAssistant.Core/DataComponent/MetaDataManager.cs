@@ -890,6 +890,32 @@ namespace DeployAssistant.DataComponent
             _fileManager.RegisterDroppedFiles(filePaths);
         }
 
+        /// <summary>Fires with a copy of the current ignore list; also re-fired after every successful save.</summary>
+        public event Action<List<RecordedFile>>? IgnoreEntriesEventHandler;
+
+        public void RequestIgnoreEntries()
+        {
+            List<RecordedFile>? entries = _settingManager._projectIgnoreData?.IgnoreFileList;
+            if (entries == null) return;
+            IgnoreEntriesEventHandler?.Invoke(new List<RecordedFile>(entries));
+        }
+
+        /// <summary>
+        /// Persists an edited ignore list and rebuilds the ProjectContext so the new
+        /// filter applies to the very next scan. Refused while the manager is busy.
+        /// </summary>
+        public bool RequestSaveIgnoreEntries(List<RecordedFile>? entries)
+        {
+            if (entries == null || CurrentState != MetaDataState.Idle) return false;
+            bool saved = _settingManager.SaveIgnoreEntries(entries);
+            if (saved) RequestIgnoreEntries();
+            return saved;
+        }
+
+        /// <summary>Whether an ignore entry is one of the defaults DA depends on (undeletable in the GUI).</summary>
+        public bool IsWellKnownIgnoreEntry(RecordedFile entry)
+            => _settingManager._projectIgnoreData?.IsWellKnownEntry(entry) ?? false;
+
         public void RequestExportProjectBackup(ProjectData projectData)
         {
             _exportManager.ExportProject(projectData);

@@ -173,6 +173,31 @@ namespace DeployAssistant.DataComponent
         {
 
         }
+
+        private ProjectMetaData? _loadedProjectMetaData;
+
+        /// <summary>
+        /// Replaces the ignore list, persists <c>DeployAssistant.ignore</c>, and re-raises
+        /// <see cref="IgnoreDataLoadedEventHandler"/> so the ProjectContext (and with it
+        /// every consumer's filter) is rebuilt from the new entries. A failed persist
+        /// rolls the in-memory list back.
+        /// </summary>
+        public bool SaveIgnoreEntries(List<RecordedFile> entries)
+        {
+            if (entries == null || _projectIgnoreData == null || _loadedProjectMetaData == null || ignoreMetaFilePath == null)
+                return false;
+            List<RecordedFile> previous = _projectIgnoreData.IgnoreFileList;
+            _projectIgnoreData.IgnoreFileList = new List<RecordedFile>(entries);
+            _projectIgnoreData.EnsureDefaultFlags();
+            if (!_fileHandlerTool.TrySerializeJsonData(ignoreMetaFilePath, _projectIgnoreData))
+            {
+                _projectIgnoreData.IgnoreFileList = previous;
+                Trace.TraceWarning($"SaveIgnoreEntries: could not persist {ignoreMetaFilePath}; edit rolled back");
+                return false;
+            }
+            IgnoreDataLoadedEventHandler?.Invoke(_loadedProjectMetaData, _projectIgnoreData);
+            return true;
+        }
         #region Request Calls
         public void RequestIgnore(string ignoreObj, IgnoreFileType ignoreType)
         {
@@ -185,6 +210,7 @@ namespace DeployAssistant.DataComponent
         public void MetaDataManager_MetaDataLoadedCallBack(object projectMetaDataObj)
         {
             if (projectMetaDataObj is not ProjectMetaData projectMetaData) return;
+            _loadedProjectMetaData = projectMetaData;
             ignoreMetaFilePath = Path.Combine(projectMetaData.ProjectPath, _projIgnoreFilename);
             
             try

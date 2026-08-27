@@ -1,6 +1,7 @@
 #pragma warning disable CS0618  // V1 types used intentionally for V1 integration tests
 
 using DeployAssistant.DataComponent;
+using DeployAssistant.Interfaces;
 using DeployAssistant.Model;
 using DeployAssistant.Services;
 using System;
@@ -376,6 +377,71 @@ namespace DeployAssistant.Tests.Integration
             finally
             {
                 Directory.Delete(dropSrc, recursive: true);
+                Directory.Delete(scanSrc, recursive: true);
+            }
+        }
+
+        [Fact]
+        public async Task RequestIgnoreEntries_PublishesCurrentList()
+        {
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            List<RecordedFile>? published = null;
+            mgr.IgnoreEntriesEventHandler += list => published = list;
+
+            mgr.RequestIgnoreEntries();
+
+            Assert.NotNull(published);
+            Assert.Contains(published!, e => e.DataName == "ProjectMetaData.bin");
+            Assert.Contains(published!, e => e.DataName == "*.ignore");
+            Assert.Contains(published!, e => e.DataName == "Backup_" + mgr.ProjectMetaData!.ProjectName);
+        }
+
+        [Fact]
+        public async Task RequestSaveIgnoreEntries_PersistsAndFiltersNextScan()
+        {
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            List<RecordedFile>? published = null;
+            mgr.IgnoreEntriesEventHandler += list => published = list;
+            mgr.RequestIgnoreEntries();
+            Assert.NotNull(published);
+
+            var edited = new List<RecordedFile>(published!)
+            {
+                new RecordedFile("*.log", ProjectDataType.File, IgnoreType.All),
+                new RecordedFile("TempDir", ProjectDataType.Directory, IgnoreType.All),
+            };
+
+            Assert.True(mgr.RequestSaveIgnoreEntries(edited));
+
+            string ignoreJson = File.ReadAllText(Path.Combine(_projectDir, "DeployAssistant.ignore"));
+            Assert.Contains("*.log", ignoreJson);
+            Assert.Contains("TempDir", ignoreJson);
+
+            // The rebuilt filter must apply to the very next source scan.
+            string scanSrc = Path.Combine(Path.GetTempPath(), "DA_IgnScan_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(scanSrc, "sub"));
+            Directory.CreateDirectory(Path.Combine(scanSrc, "TempDir"));
+            File.WriteAllText(Path.Combine(scanSrc, "sub", "keep.txt"), "keep");
+            File.WriteAllText(Path.Combine(scanSrc, "sub", "skip.log"), "skip");
+            File.WriteAllText(Path.Combine(scanSrc, "TempDir", "inside.txt"), "skip");
+            try
+            {
+                object? lastView = null;
+                mgr.FileChangesEventHandler += p => lastView = p;
+                mgr.RequestSrcDataRetrieval(scanSrc);
+                await Task.Delay(300);
+
+                var view = Assert.IsAssignableFrom<System.Collections.ObjectModel.ObservableCollection<ProjectFile>>(lastView);
+                Assert.Contains(view, f => f.DataName == "keep.txt");
+                Assert.DoesNotContain(view, f => f.DataName == "skip.log");
+                Assert.DoesNotContain(view, f => f.DataName == "inside.txt");
+            }
+            finally
+            {
                 Directory.Delete(scanSrc, recursive: true);
             }
         }
