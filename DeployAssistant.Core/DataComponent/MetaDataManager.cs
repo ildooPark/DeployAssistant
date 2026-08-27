@@ -917,6 +917,28 @@ namespace DeployAssistant.DataComponent
             => _settingManager._projectIgnoreData?.IsWellKnownEntry(entry) ?? false;
 
         /// <summary>
+        /// How many currently tracked files (main project snapshot) an ignore entry
+        /// matches. Backs the GUI notice that mirrors git's rule: version history keeps
+        /// those files — only future scans and staging stop seeing them.
+        /// </summary>
+        public int CountTrackedFilesMatching(RecordedFile? entry)
+        {
+            if (entry == null || MainProjectData?.ProjectFiles == null) return 0;
+            var probe = new ProjectIgnoreData(MainProjectData.ProjectName ?? "")
+            {
+                IgnoreFileList = new List<RecordedFile> { entry }
+            };
+            IIgnoreFilter filter = Filtering.IgnoreFilter.FromIgnoreData(probe);
+            int count = 0;
+            foreach (ProjectFile file in MainProjectData.ProjectFiles.Values)
+            {
+                if (file.DataType != ProjectDataType.File) continue;
+                if (filter.Matches(file.DataRelPath, ProjectDataType.File, entry.IgnoreType)) count++;
+            }
+            return count;
+        }
+
+        /// <summary>
         /// One-gesture ignore add (context-menu quick add): appends the entry to the
         /// current list and persists immediately. Idempotent — an already-present
         /// pattern/type pair reports success without creating a duplicate.

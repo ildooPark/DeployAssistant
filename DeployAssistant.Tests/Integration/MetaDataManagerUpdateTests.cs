@@ -418,6 +418,21 @@ namespace DeployAssistant.Tests.Integration
         }
 
         [Fact]
+        public async Task CountTrackedFilesMatching_CountsByPatternAndFolder()
+        {
+            Directory.CreateDirectory(Path.Combine(_projectDir, "sub"));
+            File.WriteAllText(Path.Combine(_projectDir, "sub", "engine.dll"), "engine");
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            // Project tracks app.dll (root) and sub\engine.dll.
+            Assert.Equal(2, mgr.CountTrackedFilesMatching(new RecordedFile("*.dll", ProjectDataType.File, IgnoreType.All)));
+            Assert.Equal(1, mgr.CountTrackedFilesMatching(new RecordedFile("engine.dll", ProjectDataType.File, IgnoreType.All)));
+            Assert.Equal(1, mgr.CountTrackedFilesMatching(new RecordedFile("sub", ProjectDataType.Directory, IgnoreType.All)));
+            Assert.Equal(0, mgr.CountTrackedFilesMatching(new RecordedFile("*.xyz", ProjectDataType.File, IgnoreType.All)));
+        }
+
+        [Fact]
         public async Task RequestSaveIgnoreEntries_PersistsAndFiltersNextScan()
         {
             var mgr = BuildAndAwakeManager();

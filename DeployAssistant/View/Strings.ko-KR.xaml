@@ -110,6 +110,8 @@
     <sys:String x:Key="S.Ign.InvalidPattern">패턴에 사용할 수 없는 문자가 있습니다.</sys:String>
     <sys:String x:Key="S.Ign.Duplicate">이미 존재하는 항목입니다.</sys:String>
     <sys:String x:Key="S.Ign.SaveFailed">무시 목록을 저장하지 못했습니다.</sys:String>
+    <sys:String x:Key="S.Ign.TrackedNotice">추가한 항목이 현재 추적 중인 파일 {0}개와 일치합니다. 기존 버전 기록은 유지되며, 앞으로의 검사와 스테이징에서만 제외됩니다.</sys:String>
+    <sys:String x:Key="S.Ign.QuickTrackedNotice">'{0}' 패턴이 현재 추적 중인 파일 {1}개와 일치합니다. 기존 버전 기록은 유지되며, 앞으로의 검사와 스테이징에서만 제외됩니다.</sys:String>
     <sys:String x:Key="S.Ign.QuickFile">이 파일 무시</sys:String>
     <sys:String x:Key="S.Ign.QuickExt">이 확장자 무시</sys:String>
     <sys:String x:Key="S.Ign.QuickFolder">폴더 무시</sys:String>

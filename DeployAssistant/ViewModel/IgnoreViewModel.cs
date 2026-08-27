@@ -108,6 +108,7 @@ namespace DeployAssistant.ViewModel
                 Entries.Clear();
                 foreach (RecordedFile entry in entries)
                     Entries.Add(new IgnoreEntryRow(entry, !_metaDataManager.IsWellKnownIgnoreEntry(entry)));
+                _pendingAdds.Clear();
                 IsDirty = false;
             });
         }
@@ -118,6 +119,8 @@ namespace DeployAssistant.ViewModel
             => _metaDataState == MetaDataState.Idle && obj is IgnoreEntryRow row && row.IsDeletable;
 
         private bool CanSave(object? obj) => _metaDataState == MetaDataState.Idle && IsDirty;
+
+        private readonly List<RecordedFile> _pendingAdds = new List<RecordedFile>();
 
         private void AddNewEntry(object? obj)
         {
@@ -137,7 +140,9 @@ namespace DeployAssistant.ViewModel
                     Loc.T("S.Ign.Duplicate", "That entry already exists."));
                 return;
             }
-            Entries.Add(new IgnoreEntryRow(new RecordedFile(pattern, type, IgnoreType.All), isDeletable: true));
+            var entry = new RecordedFile(pattern, type, IgnoreType.All);
+            Entries.Add(new IgnoreEntryRow(entry, isDeletable: true));
+            _pendingAdds.Add(entry);
             NewPattern = "";
             IsDirty = true;
         }
@@ -151,10 +156,20 @@ namespace DeployAssistant.ViewModel
 
         private void SaveAllEntries(object? obj)
         {
+            int trackedMatches = _pendingAdds.Sum(e => _metaDataManager.CountTrackedFilesMatching(e));
             bool saved = _metaDataManager.RequestSaveIgnoreEntries(Entries.Select(r => r.Entry).ToList());
             if (!saved)
+            {
                 _dialogService.Inform(Loc.T("S.IgnoreTab", "Ignore List"),
                     Loc.T("S.Ign.SaveFailed", "Could not save the ignore list."));
+                return;
+            }
+            _pendingAdds.Clear();
+            if (trackedMatches > 0)
+                _dialogService.Inform(Loc.T("S.IgnoreTab", "Ignore List"),
+                    string.Format(Loc.T("S.Ign.TrackedNotice",
+                        "The added entries match {0} currently tracked file(s). Existing version history keeps them — only future scans and staging stop seeing them."),
+                        trackedMatches));
         }
 
         // ------------------------------------------------------------------ quick add
@@ -215,9 +230,19 @@ namespace DeployAssistant.ViewModel
         private void QuickAdd(string? pattern, ProjectDataType type)
         {
             if (pattern == null) return;
+            int trackedMatches = _metaDataManager.CountTrackedFilesMatching(
+                new RecordedFile(pattern, type, IgnoreType.All));
             if (!_metaDataManager.RequestAddIgnoreEntry(pattern, type))
+            {
                 _dialogService.Inform(Loc.T("S.IgnoreTab", "Ignore List"),
                     Loc.T("S.Ign.SaveFailed", "Could not save the ignore list."));
+                return;
+            }
+            if (trackedMatches > 0)
+                _dialogService.Inform(Loc.T("S.IgnoreTab", "Ignore List"),
+                    string.Format(Loc.T("S.Ign.QuickTrackedNotice",
+                        "'{0}' now matches {1} currently tracked file(s). Existing version history keeps them — only future scans and staging stop seeing them."),
+                        pattern, trackedMatches));
         }
     }
 }

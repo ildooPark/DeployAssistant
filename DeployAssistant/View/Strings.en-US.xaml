@@ -107,6 +107,8 @@
     <sys:String x:Key="S.Ign.InvalidPattern">The pattern contains invalid characters.</sys:String>
     <sys:String x:Key="S.Ign.Duplicate">That entry already exists.</sys:String>
     <sys:String x:Key="S.Ign.SaveFailed">Could not save the ignore list.</sys:String>
+    <sys:String x:Key="S.Ign.TrackedNotice">The added entries match {0} currently tracked file(s). Existing version history keeps them — only future scans and staging stop seeing them.</sys:String>
+    <sys:String x:Key="S.Ign.QuickTrackedNotice">'{0}' now matches {1} currently tracked file(s). Existing version history keeps them — only future scans and staging stop seeing them.</sys:String>
     <sys:String x:Key="S.Ign.QuickFile">Ignore this file</sys:String>
     <sys:String x:Key="S.Ign.QuickExt">Ignore this extension</sys:String>
     <sys:String x:Key="S.Ign.QuickFolder">Ignore folder</sys:String>
