@@ -117,7 +117,9 @@ namespace DeployAssistant.DataComponent
                 IntegrityCheckEventHandler?.Invoke(reason, new List<ProjectFile>());
                 return;
             }
-            _preStagedFilesDict.Clear();
+            // _preStagedFilesDict is deliberately left alone: it holds user-queued intent
+            // (file restores, scanned deploy sources) that an integrity run — including the
+            // ones checkout gates trigger — must not silently discard.
             // Entries from earlier integrity runs would otherwise accumulate for the whole
             // session (TryAdd lets stale state win) and ride into the next update.
             foreach (string staleKey in _registeredChangesDict
@@ -895,19 +897,8 @@ namespace DeployAssistant.DataComponent
         }
         private void RegisterNewData(string srcDirPath)
         {
-            if (TryGetDeployMetaFile(srcDirPath, out DeployData? deployData))
-            {
-                if (TryValidateDeployMetaFile(srcDirPath, deployData))
-                {
-                    RegisterFilesFromDeployData(srcDirPath, deployData);
-                    RegisterFilesUnderSubDirectory(srcDirPath);
-                    return;
-                }
-                else
-                {
-                    Trace.TraceWarning("Failed to Allocate src files using previous settings. Allocate Manually");
-                }
-            }
+            // DeployAssistant.deploy sidecars are deprecated as of 4.x: never consulted,
+            // never written. Leftovers (incl. ones 3.6.1 still writes) stay scan-ignored.
             try
             {
                 RegisterAllSrcFiles(srcDirPath);
@@ -1214,14 +1205,20 @@ namespace DeployAssistant.DataComponent
                         srcPath,
                         PathCompat.GetRelativePath(srcPath, topDirFilePaths[i])
                         );
-                    foreach (ProjectFile projDir in _projDirFileList)
+                    // Computed fresh: the ProjLoaded-time _projDirFileList snapshot predates
+                    // the root ("") directory entry, which is appended after that event.
+                    // Ordered so the picker lists root first, then sub-directories A-Z.
+                    foreach (ProjectFile projDir in _dstProjectData.ProjectDirFileList
+                                 .OrderBy(d => d.DataRelPath, StringComparer.OrdinalIgnoreCase))
                     {
                         ChangedFile potentialNew = new ChangedFile(newFile, projDir, DataState.Overlapped);
                         registeredNewList.Add(potentialNew);
                     }
                 }
             }
-            if (registeredOverlapsList.Count >= 1)
+            // New-only batches must open the destination picker too — an overlap is not
+            // required for the user to have an allocation decision to make.
+            if (registeredOverlapsList.Count >= 1 || registeredNewList.Count >= 1)
             {
                 OverlappedFileFoundEventHandler?.Invoke(registeredOverlapsList, registeredNewList);
             }
@@ -1239,7 +1236,6 @@ namespace DeployAssistant.DataComponent
         }
         public void RegisterAbnormalFiles(List<ChangedFile> sortedOverlaps, List<ChangedFile> sortedNew)
         {
-            Dictionary<string, ProjectFile> newlyAllocatedFiles = []; 
             foreach (ChangedFile overlappedFile in sortedOverlaps)
             {
                 if (overlappedFile.DstFile.IsDstFile)
@@ -1249,7 +1245,6 @@ namespace DeployAssistant.DataComponent
                     _fileHandlerTool.HandleFile(overlappedFile.SrcFile.DataAbsPath, newSrcFilePath, DataState.PreStaged);
                     ProjectFile newPreStagedFile = new ProjectFile(overlappedFile.SrcFile, DataState.PreStaged);
                     newPreStagedFile.DataRelPath = overlappedFile.DstFile.DataRelPath;
-                    newlyAllocatedFiles.TryAdd(newPreStagedFile.DataRelPath, newPreStagedFile); 
                     _preStagedFilesDict.TryAdd(newPreStagedFile.DataRelPath, newPreStagedFile);
                 }
             }
@@ -1265,53 +1260,175 @@ namespace DeployAssistant.DataComponent
                     ProjectFile newPreStagedFile = new ProjectFile(newFile.SrcFile, DataState.Added);
                     newPreStagedFile.DataRelPath = newSrcFileRelPath;
                     _preStagedFilesDict.TryAdd(newPreStagedFile.DataRelPath, newPreStagedFile);
-                    newlyAllocatedFiles.TryAdd(newPreStagedFile.DataRelPath, new ProjectFile(newPreStagedFile, DataState.PreStaged));
                 }
             }
-            RegisterDeployData(_dstProjectData.ProjectName, newlyAllocatedFiles);
             DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
         }
-        private void RegisterDeployData(string projectName, Dictionary<string, ProjectFile> registeredDeployment)
-        {
-            try
-            {
-                string srcPath = registeredDeployment.Values.First().DataSrcPath;
-                const string deployFilename = "DeployAssistant.deploy";
-                string deployfilePath = Path.Combine(srcPath, deployFilename);
-                DeployData deployData = new DeployData(projectName, registeredDeployment);
-                _fileHandlerTool.TrySerializeJsonData(deployfilePath, deployData);
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning($"Failed Deployment {ex.Message}");
-            }
-        }
-        private void RegisterFilesFromDeployData(string srcPath, DeployData deployedData)
-        {
-            foreach (ProjectFile registeredFile in deployedData.SortedTopFiles.Values)
-            {
-                ProjectFile newPreStagedFile = new ProjectFile(registeredFile, DataState.PreStaged);
-                newPreStagedFile.DataSrcPath = srcPath;
-                _preStagedFilesDict.TryAdd(newPreStagedFile.DataRelPath, newPreStagedFile);
-            }
-            DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
-        }
-        private bool TryRemovePreRegisteredAllocation(string dstSrcPath, DeployData deployedData)
-        {
-            try
-            {
-                foreach (ProjectFile registeredFile in deployedData.SortedTopFiles.Values)
-                {
-                    string fileOriginalSrcPath = Path.Combine(dstSrcPath, registeredFile.DataName);
 
-                    if (File.Exists(PathCompat.ToNetFrameworkLongPath(registeredFile.DataAbsPath)) && fileOriginalSrcPath != registeredFile.DataAbsPath) 
-                        File.Delete(PathCompat.ToNetFrameworkLongPath(registeredFile.DataAbsPath));
+        /// <summary>
+        /// Entry point for files dragged onto the staging surface. Each file is copied
+        /// into a session-scoped temp drop folder (originals are never touched), then
+        /// routed through the same name-match categorization as top-level source files:
+        /// one match pre-stages automatically, several or none raise the destination
+        /// picker. Directories and unreadable paths are skipped.
+        /// </summary>
+        /// <summary>Base temp folder every drop batch is copied under; also how
+        /// drop-originated pre-staged entries are recognized later.</summary>
+        public static readonly string DropStagingRoot =
+            Path.Combine(Path.GetTempPath(), "DeployAssistant");
+
+        private static bool IsDroppedEntry(ProjectFile file)
+            => file.DataSrcPath != null
+               && file.DataSrcPath.StartsWith(DropStagingRoot, StringComparison.OrdinalIgnoreCase);
+
+        public bool HasProjectLoaded => _dstProjectData != null;
+
+        public void RegisterDroppedFiles(string[]? filePaths)
+        {
+            if (_dstProjectData == null)
+            {
+                Trace.TraceWarning("RegisterDroppedFiles: no project loaded");
+                return;
+            }
+            DroppedFilesCopy? copy = CopyDroppedFilesToStaging(filePaths);
+            if (copy != null) RegisterStagedDrop(copy);
+        }
+
+        /// <summary>Result of <see cref="CopyDroppedFilesToStaging"/>: the drop folder and the copies made in it.</summary>
+        public sealed class DroppedFilesCopy
+        {
+            public DroppedFilesCopy(string dropRoot, string[] copiedFiles)
+            {
+                DropRoot = dropRoot;
+                CopiedFiles = copiedFiles;
+            }
+            public string DropRoot { get; }
+            public string[] CopiedFiles { get; }
+        }
+
+        /// <summary>
+        /// Copies dropped files into a fresh folder under <see cref="DropStagingRoot"/>.
+        /// Touches no manager state, so it is safe to run off the UI thread; hand the
+        /// result to <see cref="RegisterStagedDrop"/> on the caller's thread. Returns
+        /// null when nothing could be copied.
+        /// </summary>
+        public static DroppedFilesCopy? CopyDroppedFilesToStaging(string[]? filePaths)
+        {
+            string[] files = (filePaths ?? Array.Empty<string>())
+                .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(PathCompat.ToNetFrameworkLongPath(p)))
+                .ToArray();
+            if (files.Length == 0) return null;
+
+            string dropRoot = Path.Combine(DropStagingRoot, "Drop_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(PathCompat.ToNetFrameworkLongPath(dropRoot));
+            List<string> copied = new List<string>();
+            foreach (string file in files)
+            {
+                string dst = Path.Combine(dropRoot, Path.GetFileName(file));
+                try
+                {
+                    File.Copy(PathCompat.ToNetFrameworkLongPath(file), PathCompat.ToNetFrameworkLongPath(dst), overwrite: true);
+                    copied.Add(dst);
                 }
-                return true; 
+                catch (Exception ex)
+                {
+                    Trace.TraceWarning($"RegisterDroppedFiles: skipped '{file}' ({ex.Message})");
+                }
+            }
+            return copied.Count == 0 ? null : new DroppedFilesCopy(dropRoot, copied.ToArray());
+        }
+
+        /// <summary>Allocates files already copied by <see cref="CopyDroppedFilesToStaging"/>.</summary>
+        public void RegisterStagedDrop(DroppedFilesCopy copy)
+        {
+            if (_dstProjectData == null)
+            {
+                Trace.TraceWarning("RegisterStagedDrop: no project loaded");
+                return;
+            }
+            TrackDropRoot(copy.DropRoot);
+            HandleAbnormalFiles(copy.DropRoot, copy.CopiedFiles);
+        }
+
+        // Drop folders this instance created. Deleted once nothing staged points into them
+        // (explicit clear) and on process exit; PurgeStaleDropFolders sweeps what a crash left.
+        private readonly HashSet<string> _ownedDropRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private bool _dropExitHookRegistered;
+
+        private void TrackDropRoot(string dropRoot)
+        {
+            lock (_ownedDropRoots)
+            {
+                _ownedDropRoots.Add(dropRoot);
+                if (_dropExitHookRegistered) return;
+                _dropExitHookRegistered = true;
+            }
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => DeleteOwnedDropRoots(onlyUnreferenced: false);
+        }
+
+        private void DeleteOwnedDropRoots(bool onlyUnreferenced)
+        {
+            List<string> roots;
+            lock (_ownedDropRoots) roots = _ownedDropRoots.ToList();
+            if (roots.Count == 0) return;
+
+            HashSet<string> inUse = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (onlyUnreferenced)
+            {
+                IEnumerable<ProjectFile?> referenced = _preStagedFilesDict.Values
+                    .Concat(_registeredChangesDict.Values.SelectMany(c => new[] { c.SrcFile, c.DstFile }));
+                foreach (ProjectFile? file in referenced)
+                    foreach (string root in roots)
+                        if (file?.DataSrcPath != null
+                            && file.DataSrcPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                            inUse.Add(root);
+            }
+
+            foreach (string root in roots)
+            {
+                if (inUse.Contains(root)) continue;
+                if (TryDeleteDirectory(root))
+                    lock (_ownedDropRoots) _ownedDropRoots.Remove(root);
+            }
+        }
+
+        /// <summary>
+        /// Deletes <c>Drop_*</c> folders under <see cref="DropStagingRoot"/> created more than
+        /// <paramref name="maxAge"/> ago — leftovers of crashed or killed sessions. The age
+        /// guard keeps it from touching folders another running instance is still using.
+        /// </summary>
+        public static int PurgeStaleDropFolders(TimeSpan maxAge)
+        {
+            int deleted = 0;
+            try
+            {
+                string root = PathCompat.ToNetFrameworkLongPath(DropStagingRoot);
+                if (!Directory.Exists(root)) return 0;
+                DateTime cutoffUtc = DateTime.UtcNow - maxAge;
+                foreach (string dir in Directory.GetDirectories(root, "Drop_*"))
+                {
+                    if (Directory.GetCreationTimeUtc(dir) > cutoffUtc) continue;
+                    if (TryDeleteDirectory(dir)) deleted++;
+                }
             }
             catch (Exception ex)
             {
-                Trace.TraceWarning($"Failed to remove existing registered files in src folder {ex.Message}");
+                Trace.TraceWarning($"PurgeStaleDropFolders: {ex.Message}");
+            }
+            return deleted;
+        }
+
+        private static bool TryDeleteDirectory(string dir)
+        {
+            try
+            {
+                string longDir = PathCompat.ToNetFrameworkLongPath(dir);
+                if (Directory.Exists(longDir)) Directory.Delete(longDir, recursive: true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning($"Could not delete drop folder '{dir}': {ex.Message}");
                 return false;
             }
         }
@@ -1434,16 +1551,29 @@ namespace DeployAssistant.DataComponent
 
             _preStagedFilesDict.Clear();
             ManagerStateEventHandler?.Invoke(MetaDataState.Idle);
+            DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
             DataStagedEventHandler?.Invoke(_registeredChangesDict.Values.ToList());
         }
         
         /// <summary>
-        /// Clears StagedFiles Except those registered as IntegrityChecked
+        /// Clears StagedFiles Except those registered as IntegrityChecked.
+        /// <paramref name="keepDroppedFiles"/> preserves pre-staged entries that came in
+        /// through <see cref="RegisterDroppedFiles"/> (recognized by their source path
+        /// under <see cref="DropStagingRoot"/>) so a source-folder refresh cannot
+        /// silently discard them.
         /// </summary>
-        public void ClearDeployedFileChanges()
+        public void ClearDeployedFileChanges(bool keepDroppedFiles = false)
         {
             _srcProjectData = null;
-            _preStagedFilesDict.Clear();
+            if (keepDroppedFiles)
+            {
+                foreach (string staleKey in _preStagedFilesDict
+                             .Where(kv => !IsDroppedEntry(kv.Value))
+                             .Select(kv => kv.Key).ToList())
+                    _preStagedFilesDict.Remove(staleKey);
+            }
+            else
+                _preStagedFilesDict.Clear();
             List<ChangedFile> clearChangedList = new List<ChangedFile>();
             foreach (ChangedFile changedFile in _registeredChangesDict.Values)
             {
@@ -1457,18 +1587,21 @@ namespace DeployAssistant.DataComponent
                 if (idenfitiedChange.DstFile != null)
                     _registeredChangesDict.Remove(idenfitiedChange.DstFile.DataRelPath);
             }
-            SrcProjectDataLoadedEventHandler?.Invoke(_srcProjectData); 
+            DeleteOwnedDropRoots(onlyUnreferenced: true);
+            SrcProjectDataLoadedEventHandler?.Invoke(_srcProjectData);
+            DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
             DataStagedEventHandler?.Invoke(_registeredChangesDict.Values.ToList());
         }
         #endregion
 
-        #region CallBacks From Parent Model 
+        #region CallBacks From Parent Model
         public void MetaDataManager_ProjLoadedCallback(object projObj)
         {
             if (projObj is not ProjectData loadedProject) return;
 
             _preStagedFilesDict.Clear();
             _registeredChangesDict.Clear();
+            DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
             _dstProjectData = loadedProject;
             _projectFilesDict = _dstProjectData.ProjectFiles;
             _projDirFileList = _dstProjectData.ProjectDirFileList;
@@ -1536,53 +1669,6 @@ namespace DeployAssistant.DataComponent
         #endregion
 
         #region Util Calls 
-        private bool TryGetDeployMetaFile(string srcPath, out DeployData? deployData)
-        {
-            const string deployFilename = "DeployAssistant.deploy";
-            string deployfilePath = Path.Combine(srcPath, deployFilename);
-            if (_fileHandlerTool.TryDeserializeJsonData(deployfilePath, out DeployData? existingDeployData))
-            {
-                if (existingDeployData.ProjectName != _dstProjectData.ProjectName)
-                {
-                    deployData = null; 
-                    return false;
-                }
-
-                if (!TryValidateDeployMetaFile(srcPath, existingDeployData)) 
-                {
-                    deployData = null; 
-                    return false; 
-                }
-                deployData = existingDeployData;
-                return true;
-            }
-            else
-            {
-                if (File.Exists(PathCompat.ToNetFrameworkLongPath(deployfilePath))) File.Delete(PathCompat.ToNetFrameworkLongPath(deployfilePath));
-                deployData = null;
-                return false;
-            }
-        }
-
-        private bool TryValidateDeployMetaFile(string srcPath, DeployData deployData)
-        {
-            try
-            {
-                foreach (ProjectFile registeredFile in deployData.SortedTopFiles.Values)
-                {
-                    if (registeredFile.DataType == ProjectDataType.Directory) continue; 
-                    if (registeredFile == null || registeredFile.DataName == "") return false; 
-                    string fileSrcPath = Path.Combine(srcPath, registeredFile.DataName);
-                    if (!File.Exists(PathCompat.ToNetFrameworkLongPath(fileSrcPath))) return false; 
-                }
-                return true; 
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning($"Critical Error while validating registered deploy meta files {ex.Message}");
-                return false; 
-            }
-        }
         #endregion
 
         #region Planned 

@@ -71,6 +71,26 @@ namespace DeployAssistant.Model
         /// <c>true</c> if any entry was modified — callers (e.g. SettingManager
         /// on load) should re-persist when <c>true</c>.
         /// </returns>
+        private static readonly string[] WellKnownNames =
+        {
+            "ProjectMetaData.bin", "*.ignore", "*.deploy", "*.VersionLog", "Export_XLSX",
+            "ProductionRecord.db", "configfilepath.txt", "msg_format.dat",
+            "en-US", "ko-KR", "Resources"
+        };
+
+        /// <summary>
+        /// True for the default entries DeployAssistant itself depends on (including the
+        /// per-project Backup_/Export_ folders). The GUI refuses to delete these.
+        /// </summary>
+        public bool IsWellKnownEntry(RecordedFile entry)
+        {
+            if (entry?.DataName == null) return false;
+            foreach (string name in WellKnownNames)
+                if (string.Equals(entry.DataName, name, StringComparison.OrdinalIgnoreCase)) return true;
+            return string.Equals(entry.DataName, $"Backup_{ProjectName}", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(entry.DataName, $"Export_{ProjectName}", StringComparison.OrdinalIgnoreCase);
+        }
+
         public bool EnsureDefaultFlags()
         {
             bool changed = false;

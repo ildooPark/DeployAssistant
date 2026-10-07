@@ -6,11 +6,13 @@ namespace DeployAssistant.ViewModel
         private readonly FileTrackViewModel _fileTrackVM;
         private readonly BackupViewModel _backupVM;
         private readonly MetaFileDiffViewModel _metaFileDiffVM;
+        private readonly IgnoreViewModel _ignoreVM;
 
         public MetaDataViewModel MetaDataVM => _metaDataVM;
         public FileTrackViewModel FileTrackVM => _fileTrackVM;
         public BackupViewModel BackupVM => _backupVM;
         public MetaFileDiffViewModel MetaFileDiffVM => _metaFileDiffVM;
+        public IgnoreViewModel IgnoreVM => _ignoreVM;
 
         public MainViewModel(AppServices services)
         {
@@ -18,6 +20,7 @@ namespace DeployAssistant.ViewModel
             _fileTrackVM    = new FileTrackViewModel(services.MetaDataManager, services.DialogService, services.UiDispatcher);
             _backupVM       = new BackupViewModel(services.MetaDataManager, services.DialogService, services.UiDispatcher);
             _metaFileDiffVM = new MetaFileDiffViewModel(services.MetaDataManager, services.DialogService, services.UiDispatcher);
+            _ignoreVM       = new IgnoreViewModel(services.MetaDataManager, services.DialogService, services.UiDispatcher);
         }
     }
 }

@@ -6,6 +6,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
@@ -69,7 +71,7 @@ namespace DeployAssistant.ViewModel
         public ICommand ClearNewfiles => _clearNewfiles ??= new RelayCommand(ClearFiles, CanClearFiles);
 
         private ICommand? _refreshDeployFileList;
-        public ICommand RefreshDeployFileList => _refreshDeployFileList ??= new RelayCommand(RefreshFilesList);
+        public ICommand RefreshDeployFileList => _refreshDeployFileList ??= new RelayCommand(RefreshFilesList, CanRefreshFiles);
 
         private ICommand? _revertChange;
         public ICommand RevertChange => _revertChange ??= new RelayCommand(RevertIntegrityCheckFile);
@@ -168,6 +170,8 @@ namespace DeployAssistant.ViewModel
                 {
                     _srcProjectData = null;
                     _deploySrcPath = srcPath;
+                    _deploySrcExists = true;   // just picked from the folder dialog
+                    _srcExistsCheckedUtc = DateTime.UtcNow;
                     _metaDataManager.RequestSrcDataRetrieval(_deploySrcPath);
                 }
                 else
@@ -191,6 +195,25 @@ namespace DeployAssistant.ViewModel
         private void StageNewChanges(object obj)
         {
             _metaDataManager.RequestStageChanges();
+        }
+
+        public async void QueueDroppedFiles(string[]? paths)
+        {
+            if (paths == null || paths.Length == 0) return;
+            if (_metaDataState != MetaDataState.Idle) return;
+            string[] files = paths.Where(File.Exists).ToArray();
+            if (files.Length < paths.Length)
+                _dialogService.Inform(Loc.T("S.Drop.Title", "Drop files"),
+                    Loc.T("S.Drop.FoldersIgnored", "Only files can be dropped — folders were ignored."));
+            if (files.Length == 0) return;
+            try
+            {
+                await _metaDataManager.RequestDroppedFilesAsync(files);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceError($"Dropped file registration failed: {ex}");
+            }
         }
 
         private bool CanOpenDeployedProjectInfo(object obj)
@@ -228,14 +251,58 @@ namespace DeployAssistant.ViewModel
             }
         }
 
+        // CanExecute runs on every input event (CommandManager.RequerySuggested), so it must
+        // never touch the disk: on a network share a Directory.Exists there stalls the UI.
+        // A background probe, at most one in flight and one per interval, refreshes the cache.
+        private static readonly TimeSpan SrcExistsProbeInterval = TimeSpan.FromSeconds(2);
+        private bool _deploySrcExists;
+        private DateTime _srcExistsCheckedUtc = DateTime.MinValue;
+        private int _srcExistsProbeRunning;
+
+        private bool CanRefreshFiles(object? obj)
+        {
+            if (_metaDataState != MetaDataState.Idle) return false;
+            if (_deploySrcPath == null) return false;
+            ProbeDeploySrcExists(_deploySrcPath);
+            return _deploySrcExists;
+        }
+
+        private void ProbeDeploySrcExists(string path)
+        {
+            if (DateTime.UtcNow - _srcExistsCheckedUtc < SrcExistsProbeInterval) return;
+            if (System.Threading.Interlocked.Exchange(ref _srcExistsProbeRunning, 1) == 1) return;
+            _srcExistsCheckedUtc = DateTime.UtcNow;
+            Task.Run(() =>
+            {
+                bool exists = Directory.Exists(path);
+                _uiDispatcher.Post(() =>
+                {
+                    _srcExistsCheckedUtc = DateTime.UtcNow;
+                    System.Threading.Interlocked.Exchange(ref _srcExistsProbeRunning, 0);
+                    if (path != _deploySrcPath || exists == _deploySrcExists) return;
+                    _deploySrcExists = exists;
+                    CommandManager.InvalidateRequerySuggested();
+                });
+            });
+        }
+
         private void RefreshFilesList(object? obj)
         {
             if (_deploySrcPath == null)
             {
                 _dialogService.Inform(Loc.T("S.Refresh", "Refresh"),
                     Loc.T("S.Dlg.SetSrcPath", "Please set the source deploy path first."));
+                return;
             }
-            _metaDataManager.RequestClearStagedFiles();
+            if (!Directory.Exists(_deploySrcPath))
+            {
+                _deploySrcExists = false;
+                _dialogService.Inform(Loc.T("S.Refresh", "Refresh"),
+                    Loc.T("S.Dlg.SrcPathMissing", "The source deploy folder no longer exists."));
+                return;
+            }
+            // Re-scan the source folder without discarding files queued via drag & drop.
+            _metaDataManager.RequestClearStagedFiles(keepDroppedFiles: true);
             _metaDataManager.RequestSrcDataRetrieval(_deploySrcPath);
         }
 

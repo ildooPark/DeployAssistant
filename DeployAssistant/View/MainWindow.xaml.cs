@@ -224,7 +224,29 @@ namespace DeployAssistant.View
         //  Filter handler for the Project Files panel                        //
         // ------------------------------------------------------------------ //
 
+        // Filtering re-scans every file and the folder view rebuilds its whole tree, so run it
+        // once the user pauses typing instead of on every keystroke.
+        private System.Windows.Threading.DispatcherTimer? _fileFilterDebounce;
+
         private void FileFilterKeyword_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (_fileFilterDebounce == null)
+            {
+                _fileFilterDebounce = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(250)
+                };
+                _fileFilterDebounce.Tick += (_, _) =>
+                {
+                    _fileFilterDebounce.Stop();
+                    ApplyFileFilter();
+                };
+            }
+            _fileFilterDebounce.Stop();
+            _fileFilterDebounce.Start();
+        }
+
+        private void ApplyFileFilter()
         {
             ProjectMainFileList.Items.Filter = FilterFilesMethod;
             if (ProjectFileTree.Visibility == Visibility.Visible)
@@ -262,6 +284,42 @@ namespace DeployAssistant.View
             // Built from the DataGrid's view so the keyword filter carries over.
             ProjectFileTree.ItemsSource =
                 ProjectFileTreeNode.Build(ProjectMainFileList.Items.Cast<ProjectFile>());
+        }
+
+        private int _dragDepth;
+
+        private bool CanAcceptFileDrop(DragEventArgs e)
+            => e.Data.GetDataPresent(DataFormats.FileDrop)
+               && DataContext is MainViewModel vm
+               && vm.MetaDataVM.ProjectData != null;
+
+        private void Window_DragEnter(object sender, DragEventArgs e)
+        {
+            if (!CanAcceptFileDrop(e)) return;
+            _dragDepth++;
+            DropOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void Window_DragOver(object sender, DragEventArgs e)
+        {
+            e.Effects = CanAcceptFileDrop(e) ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void Window_DragLeave(object sender, DragEventArgs e)
+        {
+            // Enter/leave pairs bubble up from every child; the depth counter keeps the
+            // overlay from flickering while the drag moves across panels.
+            if (_dragDepth > 0 && --_dragDepth == 0)
+                DropOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void Window_Drop(object sender, DragEventArgs e)
+        {
+            _dragDepth = 0;
+            DropOverlay.Visibility = Visibility.Collapsed;
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] paths && DataContext is MainViewModel vm)
+                vm.FileTrackVM.QueueDroppedFiles(paths);
         }
 
         private void ProjectFileTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)

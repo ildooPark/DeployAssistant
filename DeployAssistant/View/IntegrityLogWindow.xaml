@@ -90,7 +90,21 @@
                       ItemsSource="{Binding Rows}"
                       BorderThickness="0"
                       FontSize="{StaticResource FsBody}"
-                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      Tag="{Binding RelativeSource={RelativeSource AncestorType=Window}}">
+                <ListView.ContextMenu>
+                    <ContextMenu DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+                        <MenuItem Header="{DynamicResource S.Ign.QuickFile}"
+                                  Command="{Binding IgnoreVM.QuickIgnoreFile}"
+                                  CommandParameter="{Binding PlacementTarget.SelectedItem.File, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                        <MenuItem Header="{DynamicResource S.Ign.QuickExt}"
+                                  Command="{Binding IgnoreVM.QuickIgnoreExtension}"
+                                  CommandParameter="{Binding PlacementTarget.SelectedItem.File, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                        <MenuItem Header="{DynamicResource S.Ign.QuickFolder}"
+                                  Command="{Binding IgnoreVM.QuickIgnoreFolder}"
+                                  CommandParameter="{Binding PlacementTarget.SelectedItem.File, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    </ContextMenu>
+                </ListView.ContextMenu>
                 <ListView.GroupStyle>
                     <GroupStyle>
                         <GroupStyle.HeaderTemplate>

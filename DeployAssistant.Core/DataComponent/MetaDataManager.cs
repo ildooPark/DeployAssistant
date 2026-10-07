@@ -201,7 +201,12 @@ namespace DeployAssistant.DataComponent
 
             _settingManager.DialogService = _dialogService;
             _settingManager.Awake();
+
+            // Drag & drop copies left behind by crashed or killed sessions.
+            Task.Run(() => FileManager.PurgeStaleDropFolders(StaleDropFolderAge));
         }
+
+        public static readonly TimeSpan StaleDropFolderAge = TimeSpan.FromHours(24);
 
         /// <summary>
         /// Offers to reopen the last project recorded in DeployAssistant.config.
@@ -841,9 +846,14 @@ namespace DeployAssistant.DataComponent
             _fileManager.StageNewFilesAsync();
         }
 
-        public void RequestClearStagedFiles()
+        /// <summary>
+        /// Clears the staging queue. <paramref name="keepDroppedFiles"/> preserves entries
+        /// queued via drag &amp; drop — the source-folder refresh path uses it so a re-scan
+        /// does not silently discard dropped files; the explicit Clear button wipes all.
+        /// </summary>
+        public void RequestClearStagedFiles(bool keepDroppedFiles = false)
         {
-            _fileManager.ClearDeployedFileChanges();
+            _fileManager.ClearDeployedFileChanges(keepDroppedFiles);
         }
 
         public void RequestOverlappedFileAllocation(List<ChangedFile> overlapSorted, List<ChangedFile> newSorted)
@@ -872,6 +882,107 @@ namespace DeployAssistant.DataComponent
         public void RequestFileRestore(ProjectFile targetFile, DataState state)
         {
             _fileManager.RegisterNewfile(targetFile, state);
+        }
+
+        /// <summary>
+        /// Queues files dropped onto the staging surface. Name-matched files pre-stage
+        /// automatically; ambiguous or new files raise
+        /// <see cref="OverlappedFileSortEventHandler"/> for destination selection.
+        /// Staging remains a separate, explicit step.
+        /// </summary>
+        public void RequestDroppedFiles(string[]? filePaths)
+        {
+            _fileManager.RegisterDroppedFiles(filePaths);
+        }
+
+        /// <summary>
+        /// <see cref="RequestDroppedFiles"/> with the file copy moved to a worker thread, so a
+        /// large drop no longer freezes the UI. Allocation (and any destination picker) runs
+        /// back on the calling thread once the copy finishes.
+        /// </summary>
+        public async Task RequestDroppedFilesAsync(string[]? filePaths)
+        {
+            if (!_fileManager.HasProjectLoaded || CurrentState != MetaDataState.Idle) return;
+            FileManager.DroppedFilesCopy? copy;
+            CurrentState = MetaDataState.Processing;
+            try
+            {
+                copy = await Task.Run(() => FileManager.CopyDroppedFilesToStaging(filePaths));
+            }
+            finally
+            {
+                CurrentState = MetaDataState.Idle;
+            }
+            if (copy != null) _fileManager.RegisterStagedDrop(copy);
+        }
+
+        /// <summary>Fires with a copy of the current ignore list; also re-fired after every successful save.</summary>
+        public event Action<List<RecordedFile>>? IgnoreEntriesEventHandler;
+
+        public void RequestIgnoreEntries()
+        {
+            List<RecordedFile>? entries = _settingManager._projectIgnoreData?.IgnoreFileList;
+            if (entries == null) return;
+            IgnoreEntriesEventHandler?.Invoke(new List<RecordedFile>(entries));
+        }
+
+        /// <summary>
+        /// Persists an edited ignore list and rebuilds the ProjectContext so the new
+        /// filter applies to the very next scan. Refused while the manager is busy.
+        /// </summary>
+        public bool RequestSaveIgnoreEntries(List<RecordedFile>? entries)
+        {
+            if (entries == null || CurrentState != MetaDataState.Idle) return false;
+            bool saved = _settingManager.SaveIgnoreEntries(entries);
+            if (saved) RequestIgnoreEntries();
+            return saved;
+        }
+
+        /// <summary>Whether an ignore entry is one of the defaults DA depends on (undeletable in the GUI).</summary>
+        public bool IsWellKnownIgnoreEntry(RecordedFile entry)
+            => _settingManager._projectIgnoreData?.IsWellKnownEntry(entry) ?? false;
+
+        /// <summary>
+        /// How many currently tracked files (main project snapshot) an ignore entry
+        /// matches. Backs the GUI notice that mirrors git's rule: version history keeps
+        /// those files — only future scans and staging stop seeing them.
+        /// </summary>
+        public int CountTrackedFilesMatching(RecordedFile? entry)
+        {
+            if (entry == null || MainProjectData?.ProjectFiles == null) return 0;
+            var probe = new ProjectIgnoreData(MainProjectData.ProjectName ?? "")
+            {
+                IgnoreFileList = new List<RecordedFile> { entry }
+            };
+            IIgnoreFilter filter = Filtering.IgnoreFilter.FromIgnoreData(probe);
+            int count = 0;
+            foreach (ProjectFile file in MainProjectData.ProjectFiles.Values)
+            {
+                if (file.DataType != ProjectDataType.File) continue;
+                if (filter.Matches(file.DataRelPath, ProjectDataType.File, entry.IgnoreType)) count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// One-gesture ignore add (context-menu quick add): appends the entry to the
+        /// current list and persists immediately. Idempotent — an already-present
+        /// pattern/type pair reports success without creating a duplicate.
+        /// </summary>
+        public bool RequestAddIgnoreEntry(string? pattern, ProjectDataType type)
+        {
+            if (string.IsNullOrWhiteSpace(pattern) || CurrentState != MetaDataState.Idle) return false;
+            List<RecordedFile>? entries = _settingManager._projectIgnoreData?.IgnoreFileList;
+            if (entries == null) return false;
+            foreach (RecordedFile existing in entries)
+                if (existing.DataType == type &&
+                    string.Equals(existing.DataName, pattern, StringComparison.OrdinalIgnoreCase))
+                {
+                    IgnoreEntriesEventHandler?.Invoke(new List<RecordedFile>(entries));
+                    return true;
+                }
+            var edited = new List<RecordedFile>(entries) { new RecordedFile(pattern!, type, IgnoreType.All) };
+            return RequestSaveIgnoreEntries(edited);
         }
 
         public void RequestExportProjectBackup(ProjectData projectData)
@@ -1058,11 +1169,26 @@ namespace DeployAssistant.DataComponent
             IntegrityProgressEventHandler?.Invoke(completed, total);
         }
 
+        // The staging view shows staged and pre-staged entries together, but FileManager
+        // reports them through two separate events. Each callback refreshes its half and
+        // re-publishes the union — otherwise whichever event fired last would wipe the
+        // other half from the list (e.g. dropping a file after staging blanked the view).
+        private List<ProjectFile> _stagedViewSnapshot = new List<ProjectFile>();
+        private List<ProjectFile> _preStagedViewSnapshot = new List<ProjectFile>();
+
+        private void PushCombinedFileChangesView()
+        {
+            ObservableCollection<ProjectFile> view = new ObservableCollection<ProjectFile>();
+            foreach (ProjectFile file in _stagedViewSnapshot) view.Add(file);
+            foreach (ProjectFile file in _preStagedViewSnapshot) view.Add(file);
+            FileChangesEventHandler?.Invoke(view);
+        }
+
         private void FileManager_DataPreStagedCallBack(object preStagedFileListObj)
         {
             if (preStagedFileListObj is not List<ProjectFile> preStagedFileList) return;
-            ObservableCollection<ProjectFile> preStagedChangesObs = new ObservableCollection<ProjectFile>(preStagedFileList);
-            FileChangesEventHandler?.Invoke(preStagedChangesObs);
+            _preStagedViewSnapshot = preStagedFileList;
+            PushCombinedFileChangesView();
         }
 
         private void FileManager_DataStagedCallBack(object stagedFileListObj)
@@ -1072,12 +1198,13 @@ namespace DeployAssistant.DataComponent
                 Trace.TraceWarning("Improper stagedFile parameter value returned");
                 return;
             }
-            ObservableCollection<ProjectFile> stagedChangesObs = new ObservableCollection<ProjectFile>();
+            List<ProjectFile> stagedDstFiles = new List<ProjectFile>();
             foreach (ChangedFile file in stagedFiles)
             {
-                if (file.DstFile != null) stagedChangesObs.Add(file.DstFile);
+                if (file.DstFile != null) stagedDstFiles.Add(file.DstFile);
             }
-            FileChangesEventHandler?.Invoke(stagedChangesObs);
+            _stagedViewSnapshot = stagedDstFiles;
+            PushCombinedFileChangesView();
             StagedChangesEventHandler?.Invoke(stagedFiles);
         }
 

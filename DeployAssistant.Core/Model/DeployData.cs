@@ -8,6 +8,12 @@ using System.Threading.Tasks;
 
 namespace DeployAssistant.Model
 {
+    /// <summary>
+    /// On-disk shape of the retired <c>DeployAssistant.deploy</c> sidecar. 4.x neither
+    /// writes nor reads these; the class is kept only to document the format that 3.6.1
+    /// still produces in the field. Scans keep ignoring the file itself.
+    /// </summary>
+    [Obsolete("DeployAssistant.deploy sidecars are deprecated as of 4.x; nothing reads or writes them.")]
     public class DeployData
     {
         public DateTime RegisteredTime { get; set; }
