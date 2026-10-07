@@ -201,7 +201,12 @@ namespace DeployAssistant.DataComponent
 
             _settingManager.DialogService = _dialogService;
             _settingManager.Awake();
+
+            // Drag & drop copies left behind by crashed or killed sessions.
+            Task.Run(() => FileManager.PurgeStaleDropFolders(StaleDropFolderAge));
         }
+
+        public static readonly TimeSpan StaleDropFolderAge = TimeSpan.FromHours(24);
 
         /// <summary>
         /// Offers to reopen the last project recorded in DeployAssistant.config.

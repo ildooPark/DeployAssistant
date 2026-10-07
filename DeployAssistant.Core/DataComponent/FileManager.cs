@@ -1346,7 +1346,91 @@ namespace DeployAssistant.DataComponent
                 Trace.TraceWarning("RegisterStagedDrop: no project loaded");
                 return;
             }
+            TrackDropRoot(copy.DropRoot);
             HandleAbnormalFiles(copy.DropRoot, copy.CopiedFiles);
+        }
+
+        // Drop folders this instance created. Deleted once nothing staged points into them
+        // (explicit clear) and on process exit; PurgeStaleDropFolders sweeps what a crash left.
+        private readonly HashSet<string> _ownedDropRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private bool _dropExitHookRegistered;
+
+        private void TrackDropRoot(string dropRoot)
+        {
+            lock (_ownedDropRoots)
+            {
+                _ownedDropRoots.Add(dropRoot);
+                if (_dropExitHookRegistered) return;
+                _dropExitHookRegistered = true;
+            }
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => DeleteOwnedDropRoots(onlyUnreferenced: false);
+        }
+
+        private void DeleteOwnedDropRoots(bool onlyUnreferenced)
+        {
+            List<string> roots;
+            lock (_ownedDropRoots) roots = _ownedDropRoots.ToList();
+            if (roots.Count == 0) return;
+
+            HashSet<string> inUse = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (onlyUnreferenced)
+            {
+                IEnumerable<ProjectFile?> referenced = _preStagedFilesDict.Values
+                    .Concat(_registeredChangesDict.Values.SelectMany(c => new[] { c.SrcFile, c.DstFile }));
+                foreach (ProjectFile? file in referenced)
+                    foreach (string root in roots)
+                        if (file?.DataSrcPath != null
+                            && file.DataSrcPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                            inUse.Add(root);
+            }
+
+            foreach (string root in roots)
+            {
+                if (inUse.Contains(root)) continue;
+                if (TryDeleteDirectory(root))
+                    lock (_ownedDropRoots) _ownedDropRoots.Remove(root);
+            }
+        }
+
+        /// <summary>
+        /// Deletes <c>Drop_*</c> folders under <see cref="DropStagingRoot"/> created more than
+        /// <paramref name="maxAge"/> ago — leftovers of crashed or killed sessions. The age
+        /// guard keeps it from touching folders another running instance is still using.
+        /// </summary>
+        public static int PurgeStaleDropFolders(TimeSpan maxAge)
+        {
+            int deleted = 0;
+            try
+            {
+                string root = PathCompat.ToNetFrameworkLongPath(DropStagingRoot);
+                if (!Directory.Exists(root)) return 0;
+                DateTime cutoffUtc = DateTime.UtcNow - maxAge;
+                foreach (string dir in Directory.GetDirectories(root, "Drop_*"))
+                {
+                    if (Directory.GetCreationTimeUtc(dir) > cutoffUtc) continue;
+                    if (TryDeleteDirectory(dir)) deleted++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning($"PurgeStaleDropFolders: {ex.Message}");
+            }
+            return deleted;
+        }
+
+        private static bool TryDeleteDirectory(string dir)
+        {
+            try
+            {
+                string longDir = PathCompat.ToNetFrameworkLongPath(dir);
+                if (Directory.Exists(longDir)) Directory.Delete(longDir, recursive: true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning($"Could not delete drop folder '{dir}': {ex.Message}");
+                return false;
+            }
         }
         #endregion
 
@@ -1503,6 +1587,7 @@ namespace DeployAssistant.DataComponent
                 if (idenfitiedChange.DstFile != null)
                     _registeredChangesDict.Remove(idenfitiedChange.DstFile.DataRelPath);
             }
+            DeleteOwnedDropRoots(onlyUnreferenced: true);
             SrcProjectDataLoadedEventHandler?.Invoke(_srcProjectData);
             DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
             DataStagedEventHandler?.Invoke(_registeredChangesDict.Values.ToList());

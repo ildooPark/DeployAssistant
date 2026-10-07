@@ -292,6 +292,65 @@ namespace DeployAssistant.Tests.Integration
         }
 
         [Fact]
+        public async Task RequestClearStagedFiles_DeletesDropFolderOnlyOnceUnreferenced()
+        {
+            string subDir = Path.Combine(_projectDir, "sub");
+            Directory.CreateDirectory(subDir);
+            File.WriteAllText(Path.Combine(subDir, "engine.dll"), "engine v1");
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            string dropSrc = Path.Combine(Path.GetTempPath(), "DA_DropSrc_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dropSrc);
+            string droppedFile = Path.Combine(dropSrc, "engine.dll");
+            File.WriteAllText(droppedFile, "engine v2");
+            try
+            {
+                object? preStagedPayload = null;
+                mgr.FileChangesEventHandler += p => preStagedPayload = p;
+                await mgr.RequestDroppedFilesAsync(new[] { droppedFile });
+
+                var preStaged = Assert.IsAssignableFrom<System.Collections.ObjectModel.ObservableCollection<ProjectFile>>(preStagedPayload);
+                string dropRoot = Assert.Single(preStaged).DataSrcPath;
+                Assert.StartsWith(FileManager.DropStagingRoot, dropRoot, StringComparison.OrdinalIgnoreCase);
+                Assert.True(Directory.Exists(dropRoot));
+
+                mgr.RequestClearStagedFiles(keepDroppedFiles: true);
+                Assert.True(Directory.Exists(dropRoot));
+
+                mgr.RequestClearStagedFiles();
+                Assert.False(Directory.Exists(dropRoot));
+            }
+            finally
+            {
+                Directory.Delete(dropSrc, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void PurgeStaleDropFolders_DeletesOnlyFoldersOlderThanMaxAge()
+        {
+            string stale = Path.Combine(FileManager.DropStagingRoot, "Drop_test_stale_" + Guid.NewGuid().ToString("N"));
+            string fresh = Path.Combine(FileManager.DropStagingRoot, "Drop_test_fresh_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(stale);
+            Directory.CreateDirectory(fresh);
+            File.WriteAllText(Path.Combine(stale, "a.dll"), "x");
+            Directory.SetCreationTimeUtc(stale, DateTime.UtcNow.AddDays(-2));
+            try
+            {
+                FileManager.PurgeStaleDropFolders(TimeSpan.FromHours(24));
+
+                Assert.False(Directory.Exists(stale));
+                Assert.True(Directory.Exists(fresh));
+            }
+            finally
+            {
+                if (Directory.Exists(stale)) Directory.Delete(stale, recursive: true);
+                if (Directory.Exists(fresh)) Directory.Delete(fresh, recursive: true);
+            }
+        }
+
+        [Fact]
         public async Task RequestDroppedFiles_TwoSequentialDrops_ViewListKeepsBothFiles()
         {
             Directory.CreateDirectory(Path.Combine(_projectDir, "sub"));
