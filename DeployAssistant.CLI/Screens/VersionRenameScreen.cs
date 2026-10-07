@@ -51,40 +51,39 @@ internal sealed class VersionRenameScreen : Screen
     internal string LogText => _logInput.Text;
     internal int FocusedField => _focusedField;
 
+    public override string Title => "Rename";
+
+    public override IReadOnlyList<KeyHint> Hints => _phase == Phase.Done
+        ? new[] { new KeyHint("any key", "back") }
+        : new[] { new KeyHint("tab", "next field"), new KeyHint("enter", "submit"), new KeyHint("esc", "cancel") };
+
     public override void Render()
     {
         if (_phase == Phase.Done)
         {
-            AnsiConsole.MarkupLine($"  [bold]{TextStyle.SuccessGlyph} Version updated[/]");
-            AnsiConsole.MarkupLine($"  {Markup.Escape(_originalName)} → {TextStyle.Accent(Markup.Escape(_revision.UpdatedVersion ?? ""))}");
-            AnsiConsole.WriteLine();
+            var lines = new List<string>
+            {
+                $"{TextStyle.SuccessGlyph} [green bold]Version updated[/]",
+                $"{Markup.Escape(_originalName)} {Glyphs.Arrow} {TextStyle.Accent(Markup.Escape(_revision.UpdatedVersion ?? ""))}",
+            };
             foreach (string notice in _notices)
-                AnsiConsole.MarkupLine(TextStyle.Dim($"  {Markup.Escape(notice)}"));
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine(TextStyle.Dim("  Press any key to return."));
+                lines.Add(TextStyle.Dim(Markup.Escape(notice)));
+            Ui.Box("Rename", lines, Color.Green, "green bold");
             return;
         }
 
-        AnsiConsole.MarkupLine("  [bold]Rename revision[/]");
-        AnsiConsole.MarkupLine(TextStyle.Dim($"  Currently tagged {Markup.Escape(_originalName)}."));
-        AnsiConsole.WriteLine();
-
-        RenderField("Version name", _nameInput, _focusedField == 0);
-        RenderField("Update log  ", _logInput, _focusedField == 1);
-
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(TextStyle.Dim("  Tab next field · Enter submit · esc cancel"));
+        Ui.Section("Rename revision");
+        Ui.Note($"  Currently tagged {_originalName}.");
+        Ui.Blank();
+        Ui.FormField("Version name", _nameInput, _focusedField == 0, labelWidth: 12);
+        Ui.Blank();
+        Ui.FormField("Update log", _logInput, _focusedField == 1, labelWidth: 12);
 
         if (_lastError != null)
-            AnsiConsole.MarkupLine($"  [red]{TextStyle.ErrorGlyph} {Markup.Escape(_lastError)}[/]");
-    }
-
-    private static void RenderField(string label, LineInput input, bool focused)
-    {
-        string marker = focused ? TextStyle.SelectionMarker : " ";
-        string content = string.IsNullOrEmpty(input.Text) ? TextStyle.Dim("(empty)") : Markup.Escape(input.Text);
-        string suffix = focused ? "_" : "";
-        AnsiConsole.MarkupLine($" {marker}{label}: {content}{suffix}");
+        {
+            Ui.Blank();
+            Ui.Error(_lastError);
+        }
     }
 
     public override ScreenAction Handle(ConsoleKeyInfo key)

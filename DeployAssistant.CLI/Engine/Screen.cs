@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace DeployAssistant.CLI.Engine
 {
@@ -17,8 +18,18 @@ namespace DeployAssistant.CLI.Engine
         /// </summary>
         public virtual void OnEnter() { }
 
-        /// <summary>Emit Spectre.Console markup to the console.</summary>
+        /// <summary>
+        /// Emit the screen body as Spectre.Console markup. The frame (header, breadcrumb,
+        /// footer) is drawn around it; size content from <see cref="Ui.Width"/> and
+        /// <see cref="Ui.BodyHeight"/>.
+        /// </summary>
         public abstract void Render();
+
+        /// <summary>Breadcrumb segment shown in the header; empty to stay out of the trail.</summary>
+        public virtual string Title => "";
+
+        /// <summary>Key bindings for the footer, in priority order (the tail drops first on narrow windows).</summary>
+        public virtual IReadOnlyList<KeyHint> Hints => Array.Empty<KeyHint>();
 
         /// <summary>Translate one keystroke into a transition.</summary>
         public abstract ScreenAction Handle(ConsoleKeyInfo key);

@@ -27,27 +27,40 @@ internal sealed class PathPickerScreen : Screen
         _input.CandidateProvider = candidates;
     }
 
+    public override string Title => _mode == Mode.Switch ? "Open" : "Initialize";
+
+    public override IReadOnlyList<KeyHint> Hints => _input.CandidateMode
+        ? new[] { new KeyHint(Glyphs.UpDown, "pick"), new KeyHint("enter", "use folder"), new KeyHint("esc", "close list") }
+        : new[] { new KeyHint("tab", "complete"), new KeyHint("enter", _mode == Mode.Switch ? "open" : "initialize"), new KeyHint("esc", "cancel") };
+
     public override void Render()
     {
-        AnsiConsole.MarkupLine(_mode == Mode.Switch
-            ? "Open project at:"
-            : "Initialize new project at:");
-        AnsiConsole.MarkupLine($"[cyan]>[/] {Markup.Escape(_input.Text)}[underline cyan] [/]");
+        Ui.Section(_mode == Mode.Switch ? "Open project" : "Initialize new project");
+        Ui.Note(_mode == Mode.Switch
+            ? "  Folder that DeployAssistant already manages (contains ProjectMetaData.bin)."
+            : "  Folder to scan and record as the first version.");
+        Ui.Blank();
+        Ui.FormField("Folder", _input, focused: true, labelWidth: 6);
+
+        if (_error is not null)
+        {
+            Ui.Blank();
+            Ui.Error(_error);
+        }
 
         if (_input.CandidateMode)
         {
-            for (int i = 0; i < _input.Candidates.Count; i++)
-            {
-                string marker = i == _input.CandidateIndex ? TextStyle.SelectionMarker : " ";
-                AnsiConsole.MarkupLine($"  {marker} {Markup.Escape(_input.Candidates[i])}");
-            }
+            // Section, note, blank, field, blank, list section — the rest is the window.
+            int rows = Ui.ListRows(reservedRows: 6);
+            var candidates = _input.Candidates;
+            int top = Math.Max(0, Math.Min(_input.CandidateIndex - rows / 2, candidates.Count - rows));
+            int last = Math.Min(candidates.Count, top + rows);
+            Ui.Blank();
+            Ui.Section("Folders", Ui.Range(top, last - top, candidates.Count));
+            var cols = new[] { new Col("Name", isPath: true) };
+            for (int i = top; i < last; i++)
+                Ui.TableRow(cols, new (string, string?)[] { (candidates[i], null) }, selected: i == _input.CandidateIndex);
         }
-
-        if (_error is not null)
-            AnsiConsole.MarkupLine($"{TextStyle.ErrorGlyph} {Markup.Escape(_error)}");
-
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(TextStyle.Dim("Tab complete · ↑↓ pick · enter open · esc cancel"));
     }
 
     public override ScreenAction Handle(ConsoleKeyInfo key)

@@ -15,41 +15,61 @@ internal sealed class IntegrityResultScreen : Screen
     private readonly List<ProjectFile> _files;
     private SelectableList _list;
     private string? _lastError;
-    private const int ViewportHeight = 12;
+
 
     public IntegrityResultScreen(MetaDataManager mgr, IEnumerable<ProjectFile> files)
     {
         _mgr = mgr;
         _files = files.ToList();
-        _list = new SelectableList(_files.Count, ViewportHeight);
+        _list = new SelectableList(_files.Count, 12);
     }
+
+    public override string Title => "Integrity";
+
+    public override IReadOnlyList<KeyHint> Hints => _files.Count == 0
+        ? new[] { new KeyHint("any key", "back") }
+        : new[]
+        {
+            new KeyHint(Glyphs.UpDown, "move"),
+            new KeyHint("r", "revert"),
+            new KeyHint("u", "commit"),
+            new KeyHint("PgUp/PgDn", "page"),
+            new KeyHint("esc", "back"),
+        };
 
     public override void Render()
     {
         if (_files.Count == 0)
         {
-            AnsiConsole.MarkupLine($"{TextStyle.SuccessGlyph} All files match — no deviations detected.");
-            AnsiConsole.MarkupLine(TextStyle.Dim("Press any key to return."));
+            Ui.Blank();
+            Ui.Box("Integrity check", new[]
+            {
+                $"{TextStyle.SuccessGlyph} [green]All files match the main version.[/]",
+                TextStyle.Dim("No deviations detected."),
+            }, Color.Green, "green bold");
             return;
         }
 
-        AnsiConsole.MarkupLine(BuildSummary());
-        AnsiConsole.MarkupLine(TextStyle.Dim("─────────────────────────────────────────────"));
-
+        // Summary, blank, section line, blank-or-error below the list.
+        _list.SetViewportHeight(Ui.ListRows(reservedRows: 4));
         int top = _list.ViewportTop;
-        int last = Math.Min(_files.Count, top + ViewportHeight);
+        int last = Math.Min(_files.Count, top + _list.ViewportHeight);
+
+        Ui.Line(BuildSummary());
+        Ui.Blank();
+        Ui.Section("Changed files", Ui.Range(top, last - top, _files.Count));
+        var cols = new[] { new Col("State", 5), new Col("Path", isPath: true) };
         for (int i = top; i < last; i++)
         {
-            string row = TextStyle.FormatFileState(_files[i].DataState, _files[i].DataRelPath);
-            string marker = i == _list.SelectedIndex ? TextStyle.SelectionMarker : " ";
-            AnsiConsole.MarkupLine($" {marker}{row}");
+            var (label, color) = TextStyle.StateBadge(_files[i].DataState);
+            Ui.TableRow(cols, new (string, string?)[] { (label, $"{color} bold"), (_files[i].DataRelPath, color) },
+                        selected: i == _list.SelectedIndex);
         }
-        AnsiConsole.MarkupLine(TextStyle.Dim("─────────────────────────────────────────────"));
-        AnsiConsole.MarkupLine(TextStyle.Dim("↑↓ move · d/u half-page · r revert · u update · esc back"));
 
         if (_lastError != null)
         {
-            AnsiConsole.MarkupLine($"  [red]{_lastError}[/]");
+            Ui.Blank();
+            Ui.Error(_lastError);
         }
     }
 
@@ -82,7 +102,7 @@ internal sealed class IntegrityResultScreen : Screen
             }
             else
             {
-                _lastError = $"Revert failed: {Markup.Escape(selected.DataRelPath)} (backup may be missing)";
+                _lastError = $"Revert failed: {selected.DataRelPath} (backup may be missing)";
             }
             return ScreenAction.StayAction;
         }
@@ -117,6 +137,9 @@ internal sealed class IntegrityResultScreen : Screen
         int del = Count(DataState.Deleted);
         int add = Count(DataState.Added);
         int rst = Count(DataState.Restored);
-        return $"{mod} modified · {del} deleted · {add} added · {rst} restored";
+        string Chip(int n, string label, string color) =>
+            n > 0 ? $"[{color} bold]{n}[/] [{color}]{label}[/]" : TextStyle.Dim($"0 {label}");
+        return "  " + string.Join("   ", Chip(mod, "modified", "yellow"), Chip(del, "deleted", "red"),
+                                         Chip(add, "added", "green"), Chip(rst, "restored", "fuchsia"));
     }
 }

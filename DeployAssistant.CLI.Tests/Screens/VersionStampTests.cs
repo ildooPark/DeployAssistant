@@ -1,5 +1,7 @@
-using System;
-using System.IO;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+using DeployAssistant.CLI.Engine;
 using DeployAssistant.CLI.Screens;
 using DeployAssistant.DataComponent;
 using DeployAssistant.Services;
@@ -9,11 +11,13 @@ using Xunit;
 namespace DeployAssistant.CLI.Tests.Screens;
 
 /// <summary>
-/// The CLI version is surfaced inside the TUI (not only behind --version), so both the
-/// project card and the top menu must render it.
+/// The CLI version is surfaced inside the TUI (not only behind --version): the frame header
+/// carries it on every screen, including the no-project landing menu.
 /// </summary>
 public class VersionStampTests
 {
+    private static readonly Regex AnsiEscape = new(@"\x1b\[[0-9;?]*[A-Za-z]");
+
     private static MetaDataManager BuildManager()
     {
         var mgr = new MetaDataManager(new NullDialogService());
@@ -21,57 +25,31 @@ public class VersionStampTests
         return mgr;
     }
 
-    /// <summary>Renders through a throwaway plain-text console so the output can be asserted on.</summary>
-    private static string Capture(Action render)
+    private static string Compose(Screen screen) =>
+        string.Join("\n", FrameRenderer.Compose(new List<Screen> { screen }, 100, 30,
+                new FrameRenderer.Target(ansi: true, ColorSystem.Standard))
+            .Select(l => AnsiEscape.Replace(l, "")));
+
+    [Fact]
+    public void MainScreen_Frame_ShowsTheCliVersion()
     {
-        var original = AnsiConsole.Console;
-        var writer = new StringWriter();
-        try
-        {
-            AnsiConsole.Console = AnsiConsole.Create(new AnsiConsoleSettings
-            {
-                Ansi = AnsiSupport.No,
-                ColorSystem = ColorSystemSupport.NoColors,
-                Out = new AnsiConsoleOutput(writer),
-            });
-            render();
-        }
-        finally
-        {
-            AnsiConsole.Console = original;
-        }
-        return writer.ToString();
+        Assert.Contains(CliVersion.Banner, Compose(new MainScreen(BuildManager())));
     }
 
     [Fact]
-    public void MainScreen_Render_ShowsTheCliVersion()
+    public void TopMenuScreen_Frame_ShowsTheCliVersion()
     {
-        var screen = new MainScreen(BuildManager());
-
-        string output = Capture(screen.Render);
-
-        Assert.Contains(CliVersion.Banner, output);
+        Assert.Contains(CliVersion.Banner, Compose(new TopMenuScreen(loaded: false)));
     }
 
     [Fact]
-    public void TopMenuScreen_Render_ShowsTheCliVersion()
+    public void MainScreen_Frame_DoesNotLeakMarkupTags()
     {
-        var screen = new TopMenuScreen(loaded: false);
+        // Styled text must come out as plain text once markup is parsed; a leaked
+        // "[grey]" would mean a tag was escaped instead of applied.
+        string output = Compose(new MainScreen(BuildManager()));
 
-        string output = Capture(screen.Render);
-
-        Assert.Contains(CliVersion.Banner, output);
-    }
-
-    [Fact]
-    public void MainScreen_Render_DoesNotLeakMarkupTags()
-    {
-        // A dim version line must come out as plain text once markup is parsed;
-        // a leaked "[dim]" would mean the tag was escaped instead of applied.
-        var screen = new MainScreen(BuildManager());
-
-        string output = Capture(screen.Render);
-
-        Assert.DoesNotContain("[dim]", output);
+        Assert.DoesNotContain("[grey]", output);
+        Assert.DoesNotContain("[aqua", output);
     }
 }

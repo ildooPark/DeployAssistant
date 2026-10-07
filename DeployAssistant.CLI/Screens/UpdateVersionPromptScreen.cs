@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using DeployAssistant.CLI.Engine;
 using DeployAssistant.CLI.Engine.Widgets;
 using DeployAssistant.DataComponent;
@@ -25,28 +26,27 @@ internal sealed class UpdateVersionPromptScreen : Screen
         _focusedField = 0;
     }
 
+    public override string Title => "New version";
+
+    public override IReadOnlyList<KeyHint> Hints => new[]
+    {
+        new KeyHint("tab", "next field"), new KeyHint("enter", _focusedField == 0 ? "next" : "submit"), new KeyHint("esc", "cancel"),
+    };
+
     public override void Render()
     {
-        AnsiConsole.MarkupLine($"  [bold]Update as new version[/]");
-        AnsiConsole.MarkupLine($"  [dim]{_changeCount} detected change(s) will be committed as a new revision.[/]");
-        AnsiConsole.WriteLine();
-
-        RenderField("Updater name", _updaterInput, _focusedField == 0);
-        RenderField("Update log",   _logInput,     _focusedField == 1);
-
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(TextStyle.Dim("  Tab next field · Enter submit · esc cancel"));
+        Ui.Section("Commit as new version");
+        Ui.Note($"  {_changeCount} detected change(s) will be committed as a new revision.");
+        Ui.Blank();
+        Ui.FormField("Updater name", _updaterInput, _focusedField == 0, labelWidth: 12);
+        Ui.Blank();
+        Ui.FormField("Update log", _logInput, _focusedField == 1, labelWidth: 12);
 
         if (_lastError != null)
-            AnsiConsole.MarkupLine($"  [red]{Markup.Escape(_lastError)}[/]");
-    }
-
-    private static void RenderField(string label, LineInput input, bool focused)
-    {
-        string marker = focused ? TextStyle.SelectionMarker : " ";
-        string content = string.IsNullOrEmpty(input.Text) ? TextStyle.Dim("(empty)") : Markup.Escape(input.Text);
-        string suffix = focused ? "_" : "";
-        AnsiConsole.MarkupLine($" {marker}{label}: {content}{suffix}");
+        {
+            Ui.Blank();
+            Ui.Error(_lastError);
+        }
     }
 
     public override ScreenAction Handle(ConsoleKeyInfo key)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using DeployAssistant.CLI.Engine;
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
@@ -11,23 +12,41 @@ internal sealed class MainScreen : Screen
     private readonly MetaDataManager _mgr;
     private int _selected;
 
-    private static readonly string[] MenuItems = { "Integrity check", "List revisions" };
+    private static readonly (string Label, string Description)[] MenuItems =
+    {
+        ("Integrity check", "hash the working folder against the main version"),
+        ("List revisions", "browse history, checkout, rename or delete versions"),
+    };
 
     public MainScreen(MetaDataManager mgr) { _mgr = mgr; }
 
+    public override string Title => _mgr.ProjectMetaData?.ProjectName ?? "Project";
+
+    public override IReadOnlyList<KeyHint> Hints => new[]
+    {
+        new KeyHint(Glyphs.UpDown, "move"),
+        new KeyHint("enter", "open"),
+        new KeyHint("m", "projects"),
+        new KeyHint("q", "quit"),
+    };
+
     public override void Render()
     {
-        AnsiConsole.Write(BuildCard());
-        AnsiConsole.WriteLine();
-        for (int i = 0; i < MenuItems.Length; i++)
+        var pd = _mgr.MainProjectData;
+        int revCount = _mgr.ProjectMetaData?.ProjectDataList.Count ?? 0;
+        string updated = pd != null ? $"{pd.UpdatedTime:yyyy-MM-dd HH:mm}  by {pd.UpdaterName}" : "";
+
+        Ui.Card(_mgr.ProjectMetaData?.ProjectName ?? "Unknown", new[]
         {
-            string marker = i == _selected ? TextStyle.SelectionMarker : " ";
-            string label = i == _selected ? TextStyle.Accent(MenuItems[i]) : MenuItems[i];
-            AnsiConsole.MarkupLine($" {marker} {label}");
-        }
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(TextStyle.Dim("─────────────────────────────────────"));
-        AnsiConsole.MarkupLine(TextStyle.Dim("↑↓ move · enter select · m menu · q quit"));
+            new CardRow("Path", pd?.ProjectPath ?? "", isPath: true),
+            new CardRow("Version", pd?.UpdatedVersion ?? "Undefined", style: "aqua bold", note: "main"),
+            new CardRow("Updated", updated),
+            new CardRow("Files", $"{pd?.ProjectFiles.Count ?? 0}", note: $"{revCount} revision(s)"),
+        }, TextStyle.AccentColor);
+        Ui.Blank();
+        Ui.Section("Actions");
+        Ui.Blank();
+        Ui.Menu(MenuItems, _selected);
     }
 
     public override ScreenAction Handle(ConsoleKeyInfo key)
@@ -57,23 +76,5 @@ internal sealed class MainScreen : Screen
             'q' or 'Q' => ScreenAction.ExitAction,
             _ => ScreenAction.StayAction,
         };
-    }
-
-    private Panel BuildCard()
-    {
-        var pd = _mgr.MainProjectData;
-        int revCount = _mgr.ProjectMetaData?.ProjectDataList.Count ?? 0;
-        string version = pd?.UpdatedVersion ?? "Undefined";
-        string body =
-            $"{TextStyle.Bold("Path   ")}  {Markup.Escape(pd?.ProjectPath ?? "")}\n" +
-            $"{TextStyle.Bold("Version")}  {TextStyle.Accent(Markup.Escape(version))}   {TextStyle.Dim("← main")}\n" +
-            $"{TextStyle.Bold("Updated")}  {pd?.UpdatedTime:yyyy-MM-dd HH:mm}  by {Markup.Escape(pd?.UpdaterName ?? "")}\n" +
-            $"{TextStyle.Bold("Files  ")}  {pd?.ProjectFiles.Count ?? 0}   {TextStyle.Dim($"({revCount} revision(s))")}\n" +
-            // Build stamp — keeps the running CLI version visible without a --version round trip.
-            $"\n{TextStyle.Dim(Markup.Escape(CliVersion.Banner))}";
-
-        return new Panel(body)
-            .Header(TextStyle.Accent(Markup.Escape(_mgr.ProjectMetaData?.ProjectName ?? "Unknown")))
-            .BorderColor(TextStyle.AccentColor);
     }
 }

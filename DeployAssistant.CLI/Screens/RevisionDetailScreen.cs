@@ -63,61 +63,98 @@ internal sealed class RevisionDetailScreen : Screen
         _diffList = new SelectableList(diff.Count, DiffViewportHeight);
     }
 
+    public override string Title => $"#{RevisionNumber} {_revision.UpdatedVersion}";
+
+    private int RevisionNumber
+    {
+        get
+        {
+            var allRevisions = _mgr.ProjectMetaData?.ProjectDataList?.ToList();
+            return allRevisions != null ? allRevisions.IndexOf(_revision) + 1 : 0;
+        }
+    }
+
+    public override IReadOnlyList<KeyHint> Hints
+    {
+        get
+        {
+            var hints = new List<KeyHint>();
+            if (_diff is { Count: > 0 }) hints.Add(new KeyHint(Glyphs.UpDown, "move"));
+            if (!_isCurrent) hints.Add(new KeyHint("c", "checkout"));
+            hints.Add(new KeyHint("r", "rename"));
+            hints.Add(new KeyHint("x", "delete"));
+            hints.Add(new KeyHint("esc", "back"));
+            return hints;
+        }
+    }
+
     public override void Render()
     {
-        // Header block
-        var allRevisions = _mgr.ProjectMetaData?.ProjectDataList?.ToList();
-        int revisionNumber = allRevisions != null ? allRevisions.IndexOf(_revision) + 1 : 0;
-        string currentMarker = _isCurrent ? "  " + TextStyle.Accent("★ current") : "";
-        AnsiConsole.MarkupLine($"  [bold]Revision #{revisionNumber}[/]  {Markup.Escape(_revision.UpdatedVersion ?? "")}{currentMarker}");
-        AnsiConsole.MarkupLine($"  Updated: {_revision.UpdatedTime:yyyy-MM-dd HH:mm} by {Markup.Escape(_revision.UpdaterName ?? "")}");
-        AnsiConsole.MarkupLine($"  Changes: {_revision.NumberOfChanges} files");
-        AnsiConsole.WriteLine();
+        Ui.Card($"Revision #{RevisionNumber}", new[]
+        {
+            new CardRow("Version", _revision.UpdatedVersion ?? "", style: "aqua bold", note: _isCurrent ? "current main" : null),
+            new CardRow("Updated", $"{_revision.UpdatedTime:yyyy-MM-dd HH:mm}  by {_revision.UpdaterName}"),
+            new CardRow("Changes", $"{_revision.NumberOfChanges} file(s)"),
+        }, _isCurrent ? TextStyle.AccentColor : TextStyle.FrameColor);
 
-        // Changelog
+        // The change log lists one line per touched file, so it is capped to a share of the
+        // window height instead of pushing the diff off screen.
         string changelog = !string.IsNullOrWhiteSpace(_revision.ChangeLog)
             ? _revision.ChangeLog
-            : (!string.IsNullOrWhiteSpace(_revision.UpdateLog) ? _revision.UpdateLog : "(no changelog)");
-        AnsiConsole.MarkupLine("  [bold]Change log:[/]");
-        AnsiConsole.MarkupLine($"    {Markup.Escape(changelog)}");
-        AnsiConsole.WriteLine();
+            : (!string.IsNullOrWhiteSpace(_revision.UpdateLog) ? _revision.UpdateLog : "(no change log)");
+        string[] logLines = changelog.Replace("\r\n", "\n").Split('\n')
+            .Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
+        int logBudget = Math.Max(2, Math.Min(6, Ui.BodyHeight / 4));
+        int logShown = logLines.Length > logBudget ? logBudget - 1 : logLines.Length;
 
-        // Diff block
+        Ui.Blank();
+        Ui.Section("Change log", logLines.Length > logShown ? $"{logShown} of {logLines.Length} lines" : null);
+        foreach (string line in logLines.Take(logShown))
+            Ui.Line("   " + Markup.Escape(Ui.Fit(line.Trim(), Ui.Width - 3)));
+        if (logLines.Length > logShown)
+            Ui.Note($"   +{logLines.Length - logShown} more");
+        Ui.Blank();
+
         if (_isCurrent)
         {
-            AnsiConsole.MarkupLine(TextStyle.Dim("  (this is the current revision — nothing to checkout)"));
+            Ui.Section("Checkout");
+            Ui.Note("   This is the current main version - nothing to check out.");
         }
         else if (_diff is null)
         {
-            AnsiConsole.MarkupLine(TextStyle.Dim("  Computing diff..."));
+            Ui.Section("Checkout");
+            Ui.Note("   Computing diff...");
         }
         else if (_diff.Count == 0)
         {
-            AnsiConsole.MarkupLine(TextStyle.Dim("  No file differences vs current."));
+            Ui.Section("Checkout");
+            Ui.Note("   No file differences against the current main version.");
         }
         else
         {
-            AnsiConsole.MarkupLine($"  [bold]Files that would change on checkout ({_diff.Count}):[/]");
-            int top = _diffList!.ViewportTop;
-            int last = Math.Min(_diff.Count, top + DiffViewportHeight);
+            // card(5) + blank + log section + log lines + blank + diff section + error line
+            int reserved = 5 + 1 + 1 + logShown + (logLines.Length > logShown ? 1 : 0) + 1 + 1 + 2;
+            _diffList!.SetViewportHeight(Ui.ListRows(reserved));
+            int top = _diffList.ViewportTop;
+            int last = Math.Min(_diff.Count, top + _diffList.ViewportHeight);
+
+            Ui.Section("Files that change on checkout", Ui.Range(top, last - top, _diff.Count));
+            var cols = new[] { new Col("State", 5), new Col("Path", isPath: true) };
             for (int i = top; i < last; i++)
             {
                 var cf = _diff[i];
                 var pf = cf.DstFile ?? cf.SrcFile;
                 if (pf == null) continue;
-                string row = TextStyle.FormatFileState(pf.DataState, pf.DataRelPath);
-                string marker = i == _diffList.SelectedIndex ? TextStyle.SelectionMarker : " ";
-                AnsiConsole.MarkupLine($"   {marker}{row}");
+                var (label, color) = TextStyle.StateBadge(pf.DataState);
+                Ui.TableRow(cols, new (string, string?)[] { (label, $"{color} bold"), (pf.DataRelPath, color) },
+                            selected: i == _diffList.SelectedIndex);
             }
         }
 
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(TextStyle.Dim("  ↑↓ move · d/u half-page · c checkout"));
-        AnsiConsole.MarkupLine(TextStyle.Dim("  r rename · x delete · esc back"));
-
         if (_lastError != null)
         {
-            AnsiConsole.MarkupLine($"  [red]{_lastError}[/]");
+            Ui.Blank();
+            Ui.Error(_lastError);
         }
     }
 

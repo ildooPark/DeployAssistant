@@ -115,7 +115,7 @@ internal sealed class CheckoutGateScreen : Screen
                 {
                     lock (progressLock)
                     {
-                        activeTask = ctx.AddTask("[cyan]Pre-checkout integrity check[/]",
+                        activeTask = ctx.AddTask("[aqua]Pre-checkout integrity check[/]",
                             new ProgressTaskSettings { AutoStart = true, MaxValue = 1 });
                     }
                     _mgr.RequestProjectIntegrityCheck(forceFullHash: true);
@@ -149,6 +149,24 @@ internal sealed class CheckoutGateScreen : Screen
         }
     }
 
+    public override string Title => "Checkout";
+
+    public override IReadOnlyList<KeyHint> Hints => _phase switch
+    {
+        Phase.Clean => new[] { new KeyHint("y", "checkout"), new KeyHint("n/esc", "cancel") },
+        Phase.Dirty when _mode == CheckoutMode.CleanRestore => new[]
+        {
+            new KeyHint(Glyphs.UpDown, "move"), new KeyHint("y", "safe checkout"), new KeyHint("esc", "cancel"),
+        },
+        Phase.Dirty => new[]
+        {
+            new KeyHint(Glyphs.UpDown, "move"), new KeyHint("d", "discard & checkout"),
+            new KeyHint("u", "half-page up"), new KeyHint("esc", "cancel"),
+        },
+        Phase.Error => new[] { new KeyHint("any key", "back") },
+        _ => Array.Empty<KeyHint>(),
+    };
+
     public override void Render()
     {
         switch (_phase)
@@ -158,46 +176,54 @@ internal sealed class CheckoutGateScreen : Screen
                 return;
 
             case Phase.Clean:
-                AnsiConsole.MarkupLine($"  [bold]{ModeTitle}[/]");
-                AnsiConsole.MarkupLine($"  Restore project to [cyan]{Markup.Escape(_target.UpdatedVersion ?? "")}[/]?");
-                AnsiConsole.MarkupLine($"  Updated: {_target.UpdatedTime:yyyy-MM-dd HH:mm} by {Markup.Escape(_target.UpdaterName ?? "")}");
-                AnsiConsole.MarkupLine($"  [dim]{TextStyle.SuccessGlyph} No local modifications detected.[/]");
+                Ui.Card(ModeTitle, new[]
+                {
+                    new CardRow("Target", _target.UpdatedVersion ?? "", style: "aqua bold"),
+                    new CardRow("Updated", $"{_target.UpdatedTime:yyyy-MM-dd HH:mm}  by {_target.UpdaterName}"),
+                    new CardRow("Working", "no local modifications", style: "green"),
+                }, TextStyle.AccentColor);
+                Ui.Blank();
                 if (_mode == CheckoutMode.CleanRestore)
-                    AnsiConsole.MarkupLine(TextStyle.Dim("  Safe checkout re-hashes the working directory against the target snapshot."));
-                AnsiConsole.WriteLine();
-                AnsiConsole.MarkupLine(TextStyle.Dim("  y checkout · n/esc cancel"));
+                    Ui.Note("  Safe checkout re-hashes the working directory against the target snapshot.");
+                Ui.Line($"  Restore the project to {TextStyle.Accent(Markup.Escape(_target.UpdatedVersion ?? ""))}?");
                 return;
 
             case Phase.Dirty:
-                AnsiConsole.MarkupLine($"  [bold yellow]Local modifications detected[/]");
-                if (_mode == CheckoutMode.CleanRestore)
-                    AnsiConsole.MarkupLine($"  Safe checkout to [cyan]{Markup.Escape(_target.UpdatedVersion ?? "")}[/] will repair {_modifications.Count} drifted file(s):");
-                else
-                    AnsiConsole.MarkupLine($"  Restoring to [cyan]{Markup.Escape(_target.UpdatedVersion ?? "")}[/] requires discarding {_modifications.Count} change(s):");
-                AnsiConsole.WriteLine();
+            {
+                string verb = _mode == CheckoutMode.CleanRestore
+                    ? $"Safe checkout will repair {_modifications.Count} drifted file(s)."
+                    : $"Checkout requires discarding {_modifications.Count} local change(s).";
+                Ui.Box("Local modifications detected", new[]
+                {
+                    $"Target  {TextStyle.Accent(Markup.Escape(Ui.Fit(_target.UpdatedVersion ?? "", Ui.Width - 14)))}",
+                    Markup.Escape(verb),
+                }, Color.Yellow, "yellow bold");
+                Ui.Blank();
 
-                int top = _modList!.ViewportTop;
-                int last = Math.Min(_modifications.Count, top + DiffViewportHeight);
+                // box(4) + blank + section
+                _modList!.SetViewportHeight(Ui.ListRows(reservedRows: 6));
+                int top = _modList.ViewportTop;
+                int last = Math.Min(_modifications.Count, top + _modList.ViewportHeight);
+                Ui.Section("Local changes", Ui.Range(top, last - top, _modifications.Count));
+                var cols = new[] { new Col("State", 5), new Col("Path", isPath: true) };
                 for (int i = top; i < last; i++)
                 {
                     var pf = _modifications[i];
-                    string row = TextStyle.FormatFileState(pf.DataState, pf.DataRelPath);
-                    string marker = i == _modList.SelectedIndex ? TextStyle.SelectionMarker : " ";
-                    AnsiConsole.MarkupLine($"   {marker}{row}");
+                    var (label, color) = TextStyle.StateBadge(pf.DataState);
+                    Ui.TableRow(cols, new (string, string?)[] { (label, $"{color} bold"), (pf.DataRelPath, color) },
+                                selected: i == _modList.SelectedIndex);
                 }
-                AnsiConsole.WriteLine();
-                AnsiConsole.MarkupLine(_mode == CheckoutMode.CleanRestore
-                    ? TextStyle.Dim("  ↑↓ move · d/u half-page · y safe checkout · esc cancel")
-                    : TextStyle.Dim("  ↑↓ move · u half-page up · d discard & checkout · esc cancel"));
                 return;
+            }
 
             case Phase.CheckingOut:
-                AnsiConsole.MarkupLine("  [cyan]Working...[/]");
+                Ui.Blank();
+                Ui.Line($"  [aqua]Checking out {Markup.Escape(_target.UpdatedVersion ?? "")}...[/]");
                 return;
 
             case Phase.Error:
-                AnsiConsole.MarkupLine($"  [red]Error: {Markup.Escape(_errorMessage ?? "Unknown error")}[/]");
-                AnsiConsole.MarkupLine(TextStyle.Dim("  Press any key to return."));
+                Ui.Box("Checkout failed", new[] { $"[red]{Markup.Escape(_errorMessage ?? "Unknown error")}[/]" },
+                       Color.Red, "red bold");
                 return;
         }
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using DeployAssistant.CLI.Engine;
 using DeployAssistant.DataComponent;
@@ -27,9 +28,9 @@ internal sealed class InitRunScreen : Screen
         {
             bool completedInTime = false;
             AnsiConsole.Status()
-                .Spinner(Spinner.Known.Dots)
-                .SpinnerStyle(Style.Parse("cyan"))
-                .Start($"[cyan]Initializing project at:[/] {Markup.Escape(_path)}", _ =>
+                .Spinner(Term.Unicode ? Spinner.Known.Dots : Spinner.Known.Ascii)
+                .SpinnerStyle(Style.Parse("aqua"))
+                .Start($"[aqua]Initializing project at[/] {Markup.Escape(Ui.FitPath(_path, Ui.Width - 30))}", _ =>
                 {
                     mgr.RequestProjectInitialization(_path);
                     completedInTime = done.Wait(TimeSpan.FromMinutes(5));
@@ -59,13 +60,15 @@ internal sealed class InitRunScreen : Screen
         }
     }
 
+    public override string Title => "Initialize";
+
+    public override IReadOnlyList<KeyHint> Hints =>
+        _error is not null ? new[] { new KeyHint("any key", "back") } : Array.Empty<KeyHint>();
+
     public override void Render()
     {
         if (_error is not null)
-        {
-            AnsiConsole.MarkupLine($"{TextStyle.ErrorGlyph} {Markup.Escape(_error)}");
-            AnsiConsole.MarkupLine(TextStyle.Dim("Press any key to return."));
-        }
+            Ui.Box("Initialization failed", new[] { $"[red]{Markup.Escape(_error)}[/]" }, Color.Red, "red bold");
     }
 
     public override ScreenAction? AutoAdvance() =>
