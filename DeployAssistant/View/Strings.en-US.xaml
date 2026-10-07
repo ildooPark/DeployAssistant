@@ -225,6 +225,7 @@
     <sys:String x:Key="S.Dlg.ErrorTitle">Error</sys:String>
     <sys:String x:Key="S.Dlg.PickSrcFolder">Set Deploy Source Directory</sys:String>
     <sys:String x:Key="S.Dlg.SetSrcPath">Please set the source deploy path first.</sys:String>
+    <sys:String x:Key="S.Dlg.SrcPathMissing">The source deploy folder no longer exists.</sys:String>
     <sys:String x:Key="S.Dlg.RevertAllConfirm">Revert all {0} integrity-detected change(s) back to the current version?</sys:String>
     <sys:String x:Key="S.Dlg.RevertChangeTitle">Revert Change</sys:String>
     <sys:String x:Key="S.Dlg.RevertOnlyIntegrity">Only applicable to files flagged by the integrity check.</sys:String>

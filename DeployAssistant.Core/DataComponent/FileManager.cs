@@ -1281,6 +1281,8 @@ namespace DeployAssistant.DataComponent
             => file.DataSrcPath != null
                && file.DataSrcPath.StartsWith(DropStagingRoot, StringComparison.OrdinalIgnoreCase);
 
+        public bool HasProjectLoaded => _dstProjectData != null;
+
         public void RegisterDroppedFiles(string[]? filePaths)
         {
             if (_dstProjectData == null)
@@ -1288,10 +1290,34 @@ namespace DeployAssistant.DataComponent
                 Trace.TraceWarning("RegisterDroppedFiles: no project loaded");
                 return;
             }
+            DroppedFilesCopy? copy = CopyDroppedFilesToStaging(filePaths);
+            if (copy != null) RegisterStagedDrop(copy);
+        }
+
+        /// <summary>Result of <see cref="CopyDroppedFilesToStaging"/>: the drop folder and the copies made in it.</summary>
+        public sealed class DroppedFilesCopy
+        {
+            public DroppedFilesCopy(string dropRoot, string[] copiedFiles)
+            {
+                DropRoot = dropRoot;
+                CopiedFiles = copiedFiles;
+            }
+            public string DropRoot { get; }
+            public string[] CopiedFiles { get; }
+        }
+
+        /// <summary>
+        /// Copies dropped files into a fresh folder under <see cref="DropStagingRoot"/>.
+        /// Touches no manager state, so it is safe to run off the UI thread; hand the
+        /// result to <see cref="RegisterStagedDrop"/> on the caller's thread. Returns
+        /// null when nothing could be copied.
+        /// </summary>
+        public static DroppedFilesCopy? CopyDroppedFilesToStaging(string[]? filePaths)
+        {
             string[] files = (filePaths ?? Array.Empty<string>())
                 .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(PathCompat.ToNetFrameworkLongPath(p)))
                 .ToArray();
-            if (files.Length == 0) return;
+            if (files.Length == 0) return null;
 
             string dropRoot = Path.Combine(DropStagingRoot, "Drop_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(PathCompat.ToNetFrameworkLongPath(dropRoot));
@@ -1309,8 +1335,18 @@ namespace DeployAssistant.DataComponent
                     Trace.TraceWarning($"RegisterDroppedFiles: skipped '{file}' ({ex.Message})");
                 }
             }
-            if (copied.Count == 0) return;
-            HandleAbnormalFiles(dropRoot, copied.ToArray());
+            return copied.Count == 0 ? null : new DroppedFilesCopy(dropRoot, copied.ToArray());
+        }
+
+        /// <summary>Allocates files already copied by <see cref="CopyDroppedFilesToStaging"/>.</summary>
+        public void RegisterStagedDrop(DroppedFilesCopy copy)
+        {
+            if (_dstProjectData == null)
+            {
+                Trace.TraceWarning("RegisterStagedDrop: no project loaded");
+                return;
+            }
+            HandleAbnormalFiles(copy.DropRoot, copy.CopiedFiles);
         }
         #endregion
 

@@ -890,6 +890,27 @@ namespace DeployAssistant.DataComponent
             _fileManager.RegisterDroppedFiles(filePaths);
         }
 
+        /// <summary>
+        /// <see cref="RequestDroppedFiles"/> with the file copy moved to a worker thread, so a
+        /// large drop no longer freezes the UI. Allocation (and any destination picker) runs
+        /// back on the calling thread once the copy finishes.
+        /// </summary>
+        public async Task RequestDroppedFilesAsync(string[]? filePaths)
+        {
+            if (!_fileManager.HasProjectLoaded || CurrentState != MetaDataState.Idle) return;
+            FileManager.DroppedFilesCopy? copy;
+            CurrentState = MetaDataState.Processing;
+            try
+            {
+                copy = await Task.Run(() => FileManager.CopyDroppedFilesToStaging(filePaths));
+            }
+            finally
+            {
+                CurrentState = MetaDataState.Idle;
+            }
+            if (copy != null) _fileManager.RegisterStagedDrop(copy);
+        }
+
         /// <summary>Fires with a copy of the current ignore list; also re-fired after every successful save.</summary>
         public event Action<List<RecordedFile>>? IgnoreEntriesEventHandler;
 

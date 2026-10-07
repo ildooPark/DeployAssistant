@@ -134,7 +134,7 @@ namespace DeployAssistant.ViewModel
         // UI per event would freeze WPF, and net472's gen0 budget punishes per-event garbage.
         // Workers only enqueue; a 10 Hz UI-thread timer drains in batches into a 200-row ring.
         private const int BusyLogCapacity = 200;
-        private const int BusyFlushBatchLimit = 500;
+        private const int BusyFlushDisplayLimit = 25;
         private readonly ConcurrentQueue<KeyValuePair<string, IntegrityFileOutcome>> _busyLogQueue = new();
         private System.Windows.Threading.DispatcherTimer? _busyFlushTimer;
         private int _busyCompleted;
@@ -238,8 +238,16 @@ namespace DeployAssistant.ViewModel
 
         private void BusyFlushTick(object? sender, EventArgs e)
         {
-            int drained = 0;
-            while (drained < BusyFlushBatchLimit && _busyLogQueue.TryDequeue(out var item))
+            // ObservableCollection notifies per item and the log panel is not virtualized, so
+            // every Add/RemoveAt builds or tears down a row. Drain the whole queue but show only
+            // the newest few entries per tick; at thousands of files/s nobody can read more.
+            var tail = new Queue<KeyValuePair<string, IntegrityFileOutcome>>(BusyFlushDisplayLimit);
+            while (_busyLogQueue.TryDequeue(out var queued))
+            {
+                if (tail.Count == BusyFlushDisplayLimit) tail.Dequeue();
+                tail.Enqueue(queued);
+            }
+            foreach (var item in tail)
             {
                 string label = item.Value switch
                 {
@@ -252,7 +260,6 @@ namespace DeployAssistant.ViewModel
                 };
                 BusyLog.Add(new BusyLogEntry(item.Key, item.Value, label));
                 if (BusyLog.Count > BusyLogCapacity) BusyLog.RemoveAt(0);
-                drained++;
             }
 
             int total = Interlocked.CompareExchange(ref _busyTotal, 0, 0);

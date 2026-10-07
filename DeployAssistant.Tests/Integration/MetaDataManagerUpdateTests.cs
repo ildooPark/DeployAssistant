@@ -259,6 +259,39 @@ namespace DeployAssistant.Tests.Integration
         }
 
         [Fact]
+        public async Task RequestDroppedFilesAsync_SingleNameMatch_PreStagesAndReturnsToIdle()
+        {
+            string subDir = Path.Combine(_projectDir, "sub");
+            Directory.CreateDirectory(subDir);
+            File.WriteAllText(Path.Combine(subDir, "engine.dll"), "engine v1");
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            string dropSrc = Path.Combine(Path.GetTempPath(), "DA_DropSrc_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dropSrc);
+            string droppedFile = Path.Combine(dropSrc, "engine.dll");
+            File.WriteAllText(droppedFile, "engine v2");
+            try
+            {
+                object? preStagedPayload = null;
+                var states = new List<MetaDataState>();
+                mgr.FileChangesEventHandler += p => preStagedPayload = p;
+                mgr.ManagerStateEventHandler += s => states.Add(s);
+
+                await mgr.RequestDroppedFilesAsync(new[] { droppedFile });
+
+                var preStaged = Assert.IsAssignableFrom<System.Collections.ObjectModel.ObservableCollection<ProjectFile>>(preStagedPayload);
+                Assert.Contains(preStaged, f => f.DataRelPath == Path.Combine("sub", "engine.dll"));
+                Assert.Equal(new[] { MetaDataState.Processing, MetaDataState.Idle }, states);
+                Assert.Equal(MetaDataState.Idle, mgr.CurrentState);
+            }
+            finally
+            {
+                Directory.Delete(dropSrc, recursive: true);
+            }
+        }
+
+        [Fact]
         public async Task RequestDroppedFiles_TwoSequentialDrops_ViewListKeepsBothFiles()
         {
             Directory.CreateDirectory(Path.Combine(_projectDir, "sub"));

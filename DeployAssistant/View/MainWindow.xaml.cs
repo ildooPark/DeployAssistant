@@ -224,7 +224,29 @@ namespace DeployAssistant.View
         //  Filter handler for the Project Files panel                        //
         // ------------------------------------------------------------------ //
 
+        // Filtering re-scans every file and the folder view rebuilds its whole tree, so run it
+        // once the user pauses typing instead of on every keystroke.
+        private System.Windows.Threading.DispatcherTimer? _fileFilterDebounce;
+
         private void FileFilterKeyword_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (_fileFilterDebounce == null)
+            {
+                _fileFilterDebounce = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(250)
+                };
+                _fileFilterDebounce.Tick += (_, _) =>
+                {
+                    _fileFilterDebounce.Stop();
+                    ApplyFileFilter();
+                };
+            }
+            _fileFilterDebounce.Stop();
+            _fileFilterDebounce.Start();
+        }
+
+        private void ApplyFileFilter()
         {
             ProjectMainFileList.Items.Filter = FilterFilesMethod;
             if (ProjectFileTree.Visibility == Visibility.Visible)
