@@ -6,8 +6,11 @@
         xmlns:local="clr-namespace:DeployAssistant.View"
         mc:Ignorable="d"
         Title="Deploy Assistant" Height="900" Width="1600"
-        MinHeight="700"
-        MinWidth="1100"
+        MinHeight="600"
+        MinWidth="960"
+        FontFamily="Segoe UI, Malgun Gothic"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
         Icon="/app.ico"
         AllowDrop="True"
         DragEnter="Window_DragEnter"
@@ -48,6 +51,12 @@
         </Style>
     </Window.Resources>
 
+    <Window.InputBindings>
+        <KeyBinding Key="M" Modifiers="Control" Command="{Binding ToggleCompact}"/>
+        <KeyBinding Key="F5" Command="{Binding FileTrackVM.CheckProjectIntegrity}"/>
+        <KeyBinding Key="F5" Modifiers="Control" Command="{Binding FileTrackVM.CheckProjectIntegrityFull}"/>
+    </Window.InputBindings>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -56,6 +65,7 @@
         </Grid.RowDefinitions>
 
         <Menu Grid.Row="0" Background="#F7F7F7" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1"
+              Visibility="{Binding IsFull, Converter={StaticResource BoolToVis}}"
               FontSize="{StaticResource FsBody}" Padding="2,1">
             <MenuItem x:Name="ProjectMenu" Header="{DynamicResource S.Menu.Project}"
                       SubmenuOpened="ProjectMenu_SubmenuOpened">
@@ -83,7 +93,8 @@
         <!-- ═══════════════════════════════════════════════════════
              Header ToolBar
         ════════════════════════════════════════════════════════════ -->
-        <Border Grid.Row="1" Background="#F0F0F0" BorderBrush="#D0D0D0" BorderThickness="0,0,0,1" Padding="6,4">
+        <Border Grid.Row="1" Background="#F0F0F0" BorderBrush="#D0D0D0" BorderThickness="0,0,0,1" Padding="6,4"
+                Visibility="{Binding IsFull, Converter={StaticResource BoolToVis}}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -125,6 +136,12 @@
 
                 <!-- Language + state badge -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Margin="4,0" Padding="10,3"
+                            FontSize="{StaticResource FsBody}"
+                            Content="{DynamicResource S.Compact.Enter}"
+                            ToolTip="{DynamicResource S.Compact.EnterTooltip}"
+                            Command="{Binding ToggleCompact}"
+                            Style="{StaticResource ToolbarButtonStyle}"/>
                     <ComboBox x:Name="LanguageSelect"
                               Width="82" Margin="4,0"
                               VerticalAlignment="Center"
@@ -146,13 +163,15 @@
         <!-- ═══════════════════════════════════════════════════════
              Workspace — History/DiffLog | Tabs | Staging/Actions
         ════════════════════════════════════════════════════════════ -->
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="2" Visibility="{Binding IsFull, Converter={StaticResource BoolToVis}}">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="420" MinWidth="300"/>
+                <!-- Proportional (420 : 840 : 330 = the 1600-wide default) so all three panels
+                     shrink together down to the 960 minimum instead of clipping the right one. -->
+                <ColumnDefinition Width="420*" MinWidth="300"/>
                 <ColumnDefinition Width="5"/>
-                <ColumnDefinition Width="*" MinWidth="400"/>
+                <ColumnDefinition Width="840*" MinWidth="400"/>
                 <ColumnDefinition Width="5"/>
-                <ColumnDefinition Width="330" MinWidth="240"/>
+                <ColumnDefinition Width="330*" MinWidth="240"/>
             </Grid.ColumnDefinitions>
 
             <!-- LEFT: Version History (top) + Diff Log (bottom) -->
@@ -926,6 +945,219 @@
         </Grid>
 
 
+        <!-- ═══════════════════════════════════════════════════════
+             Compact layout (Ctrl+M): project, check, last result, commit, revisions.
+             Same view models as the full layout; only one of the two is visible.
+        ════════════════════════════════════════════════════════════ -->
+        <Grid Grid.RowSpan="3" Background="White"
+              Visibility="{Binding IsCompact, Converter={StaticResource BoolToVis}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header: project, pin, back to full -->
+            <Border Grid.Row="0" Background="#F0F0F0" BorderBrush="#D0D0D0" BorderThickness="0,0,0,1" Padding="12,8">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Margin="6,0,0,0" Padding="10,3"
+                            FontSize="{StaticResource FsBody}"
+                            Content="{DynamicResource S.Compact.Expand}"
+                            ToolTip="Ctrl+M"
+                            Command="{Binding ToggleCompact}"
+                            Style="{StaticResource ToolbarButtonStyle}"/>
+                    <ToggleButton DockPanel.Dock="Right" Padding="10,3"
+                                  FontSize="{StaticResource FsBody}"
+                                  Content="{DynamicResource S.Compact.Pin}"
+                                  ToolTip="{DynamicResource S.Compact.PinTooltip}"
+                                  IsChecked="{Binding IsCompactPinned}"/>
+                    <TextBlock Text="{Binding MetaDataVM.ProjectName}" VerticalAlignment="Center"
+                               FontSize="{StaticResource FsTitle}" FontWeight="SemiBold" Foreground="#212121"
+                               TextTrimming="CharacterEllipsis"/>
+                </DockPanel>
+            </Border>
+
+            <!-- Main version, state, the check itself -->
+            <StackPanel Grid.Row="1" Margin="16,12,16,0">
+                <DockPanel>
+                    <Border DockPanel.Dock="Right" CornerRadius="4" Padding="8,2"
+                            Style="{StaticResource StateBadgeStyle}">
+                        <TextBlock Text="{Binding MetaDataVM.CurrentMetaDataState}"
+                                   FontSize="{StaticResource FsCaption}" Foreground="White" FontWeight="SemiBold"/>
+                    </Border>
+                    <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FsHeader}" Foreground="#616161"
+                               TextTrimming="CharacterEllipsis">
+                        <Run Text="{DynamicResource S.VersionLabel}"/>
+                        <Run Text="{Binding MetaDataVM.CurrentVersion, Mode=OneWay}" FontWeight="Bold" Foreground="#00796B"/>
+                    </TextBlock>
+                </DockPanel>
+                <Button Margin="0,12,0,0" Height="44"
+                        FontSize="{StaticResource FsHeader}" FontWeight="SemiBold"
+                        Content="{DynamicResource S.IntegrityCheck}"
+                        Command="{Binding FileTrackVM.CheckProjectIntegrity}"
+                        Style="{StaticResource DeployButtonStyle}"/>
+                <TextBlock Margin="0,6,0,0" HorizontalAlignment="Center"
+                           FontSize="{StaticResource FsCaption}" Foreground="#757575"
+                           Text="{DynamicResource S.Compact.Keys}"/>
+            </StackPanel>
+
+            <!-- Last result, or the revisions picker in its place -->
+            <Grid Grid.Row="2" Margin="16,14,16,0">
+                <DockPanel Visibility="{Binding CompactVM.IsRevisionsOpen, Converter={StaticResource InverseBoolToVis}}">
+                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,4"
+                               FontSize="{StaticResource FsCaption}" Foreground="#757575"
+                               Text="{DynamicResource S.Compact.LastResult}"/>
+                    <Border BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="6" Padding="12,10">
+                        <Grid>
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap"
+                                       TextAlignment="Center" Foreground="#9E9E9E" FontSize="{StaticResource FsBody}"
+                                       Text="{DynamicResource S.Compact.NoCheck}"
+                                       Visibility="{Binding CompactVM.HasResult, Converter={StaticResource InverseBoolToVis}}"/>
+
+                            <StackPanel VerticalAlignment="Center"
+                                        Visibility="{Binding CompactVM.IsClean, Converter={StaticResource BoolToVis}}">
+                                <TextBlock HorizontalAlignment="Center" FontSize="{StaticResource FsTitle}"
+                                           FontWeight="SemiBold" Foreground="#2E7D32">
+                                    <Run Text="✓ "/><Run Text="{DynamicResource S.Compact.AllMatch}"/>
+                                </TextBlock>
+                                <TextBlock HorizontalAlignment="Center" Margin="0,4,0,0"
+                                           FontSize="{StaticResource FsCaption}" Foreground="#757575"
+                                           Text="{Binding CompactVM.ResultDetail}"/>
+                            </StackPanel>
+
+                            <DockPanel Visibility="{Binding CompactVM.HasChanges, Converter={StaticResource BoolToVis}}">
+                                <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8"
+                                           FontSize="{StaticResource FsBody}" FontWeight="SemiBold">
+                                    <Run Text="{Binding CompactVM.ModifiedCount, Mode=OneWay}" Foreground="#E65100"/> <Run Text="{DynamicResource S.Compact.Modified}" Foreground="#E65100"/>
+                                    <Run Text="   "/><Run Text="{Binding CompactVM.AddedCount, Mode=OneWay}" Foreground="#2E7D32"/> <Run Text="{DynamicResource S.Compact.Added}" Foreground="#2E7D32"/>
+                                    <Run Text="   "/><Run Text="{Binding CompactVM.DeletedCount, Mode=OneWay}" Foreground="#C62828"/> <Run Text="{DynamicResource S.Compact.Deleted}" Foreground="#C62828"/>
+                                </TextBlock>
+                                <TextBlock DockPanel.Dock="Bottom" Margin="0,6,0,0" FontSize="{StaticResource FsBody}">
+                                    <Hyperlink Command="{Binding CompactVM.ShowAll}"><Run Text="{DynamicResource S.Compact.ShowAll}"/></Hyperlink>
+                                </TextBlock>
+                                <TextBlock DockPanel.Dock="Bottom" Margin="0,6,0,0"
+                                           FontSize="{StaticResource FsCaption}" Foreground="#757575"
+                                           Text="{Binding CompactVM.ResultDetail}"/>
+                                <ItemsControl ItemsSource="{Binding CompactVM.TopChanges}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <DockPanel Margin="0,2">
+                                                <Border x:Name="Badge" DockPanel.Dock="Left" Width="40" Margin="0,0,8,0"
+                                                        CornerRadius="3" BorderThickness="1"
+                                                        Background="#FFF8E1" BorderBrush="#F9A825">
+                                                    <TextBlock Text="{Binding Badge}" HorizontalAlignment="Center"
+                                                               FontSize="{StaticResource FsCaption}" FontWeight="SemiBold"
+                                                               Foreground="#212121"/>
+                                                </Border>
+                                                <TextBlock TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                           FontSize="{StaticResource FsBody}"
+                                                           ToolTip="{Binding Folder}">
+                                                    <Run Text="{Binding Name, Mode=OneWay}" Foreground="#212121"/>
+                                                    <Run Text="{Binding Folder, Mode=OneWay}" Foreground="#9E9E9E"/>
+                                                </TextBlock>
+                                            </DockPanel>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Kind}" Value="Added">
+                                                    <Setter TargetName="Badge" Property="Background" Value="#E8F5E9"/>
+                                                    <Setter TargetName="Badge" Property="BorderBrush" Value="#43A047"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind}" Value="Deleted">
+                                                    <Setter TargetName="Badge" Property="Background" Value="#FFEBEE"/>
+                                                    <Setter TargetName="Badge" Property="BorderBrush" Value="#E53935"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind}" Value="Restored">
+                                                    <Setter TargetName="Badge" Property="Background" Value="#F3E5F5"/>
+                                                    <Setter TargetName="Badge" Property="BorderBrush" Value="#8E24AA"/>
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </DockPanel>
+                        </Grid>
+                    </Border>
+                </DockPanel>
+
+                <DockPanel Visibility="{Binding CompactVM.IsRevisionsOpen, Converter={StaticResource BoolToVis}}">
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+                        <Button DockPanel.Dock="Right" Padding="8,1"
+                                FontSize="{StaticResource FsCaption}"
+                                Content="{DynamicResource S.Compact.Back}"
+                                Command="{Binding CompactVM.HideRevisions}"
+                                Style="{StaticResource ActionButtonStyle}"/>
+                        <TextBlock VerticalAlignment="Center"
+                                   FontSize="{StaticResource FsCaption}" Foreground="#757575"
+                                   Text="{DynamicResource S.VersionHistory}"/>
+                    </DockPanel>
+                    <Button DockPanel.Dock="Bottom" Margin="0,8,0,0" Height="32"
+                            FontSize="{StaticResource FsBody}"
+                            Content="{DynamicResource S.Checkout}"
+                            Command="{Binding BackupVM.CheckoutBackup}"
+                            Style="{StaticResource ActionButtonStyle}"/>
+                    <ListBox ItemsSource="{Binding BackupVM.BackupProjectDataList}"
+                             SelectedItem="{Binding BackupVM.SelectedItem}"
+                             BorderBrush="#E0E0E0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="2,3">
+                                    <TextBlock DockPanel.Dock="Right" Margin="8,0,0,0"
+                                               FontSize="{StaticResource FsCaption}" Foreground="#757575"
+                                               Text="{Binding UpdatedTime, StringFormat={}{0:yyyy-MM-dd HH:mm}}"/>
+                                    <TextBlock Text="{Binding UpdatedVersion}" FontWeight="SemiBold"
+                                               FontSize="{StaticResource FsBody}" TextTrimming="CharacterEllipsis"/>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Grid>
+
+            <!-- Commit (fields appear only when the check found changes) + revisions -->
+            <StackPanel Grid.Row="3" Margin="16,10,16,0"
+                        Visibility="{Binding CompactVM.IsRevisionsOpen, Converter={StaticResource InverseBoolToVis}}">
+                <Grid Margin="0,0,0,4"
+                      Visibility="{Binding CompactVM.HasChanges, Converter={StaticResource BoolToVis}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Label Grid.Row="0" Grid.Column="0" Padding="0,2" FontSize="{StaticResource FsBody}"
+                           Content="{DynamicResource S.Updater}"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Margin="0,2" FontSize="{StaticResource FsBody}"
+                             Text="{Binding MetaDataVM.UpdaterName}"/>
+                    <Label Grid.Row="1" Grid.Column="0" Padding="0,2" FontSize="{StaticResource FsBody}"
+                           Content="{DynamicResource S.Log}"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Margin="0,2" FontSize="{StaticResource FsBody}"
+                             Text="{Binding MetaDataVM.UpdateLog}"/>
+                </Grid>
+                <UniformGrid Columns="2">
+                    <Button Margin="0,0,4,0" Height="34" FontSize="{StaticResource FsBody}"
+                            Content="{DynamicResource S.Deploy}"
+                            Command="{Binding MetaDataVM.ConductUpdate}"
+                            IsEnabled="{Binding CompactVM.HasChanges}"
+                            Style="{StaticResource DeployButtonStyle}"/>
+                    <Button Margin="4,0,0,0" Height="34" FontSize="{StaticResource FsBody}"
+                            Content="{DynamicResource S.VersionHistory}"
+                            Command="{Binding CompactVM.ShowRevisions}"
+                            Style="{StaticResource ActionButtonStyle}"/>
+                </UniformGrid>
+            </StackPanel>
+
+            <Border Grid.Row="4" Margin="0,12,0,0" Padding="16,8"
+                    BorderBrush="#E0E0E0" BorderThickness="0,1,0,0">
+                <TextBlock FontSize="{StaticResource FsCaption}" Foreground="#757575"
+                           TextTrimming="CharacterEllipsis"
+                           Text="{DynamicResource S.Drop.Hint}"/>
+            </Border>
+        </Grid>
+
         <!-- Drop overlay: shown only while files are dragged over the window and a
              project is loaded. Hit-test invisible — the Window handles the drop. -->
         <Grid x:Name="DropOverlay"
@@ -956,7 +1188,19 @@
               Visibility="{Binding MetaDataVM.IsBusy, Converter={StaticResource BoolToVis}}">
             <Border HorizontalAlignment="Center" VerticalAlignment="Center"
                     Background="#FFFFFF" BorderBrush="#BDBDBD" BorderThickness="1"
-                    CornerRadius="6" Padding="24,18" MinWidth="440" MaxWidth="560">
+                    CornerRadius="6" Padding="24,18" MaxWidth="560">
+                <Border.Style>
+                    <!-- The compact window is narrower than the full-mode card. -->
+                    <Style TargetType="Border">
+                        <Setter Property="MinWidth" Value="440"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCompact}" Value="True">
+                                <Setter Property="MinWidth" Value="0"/>
+                                <Setter Property="Margin" Value="12"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <StackPanel>
                     <TextBlock Text="{Binding MetaDataVM.BusyTitle}"
                                FontSize="{StaticResource FsTitle}" FontWeight="SemiBold" Foreground="#212121"/>
