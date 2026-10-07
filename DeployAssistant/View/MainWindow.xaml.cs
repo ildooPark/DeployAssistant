@@ -29,6 +29,7 @@ namespace DeployAssistant.View
             var mainVM = new MainViewModel(services);
             SubscribeToViewModelEvents(mainVM);
             this.DataContext = mainVM;
+            InitWindowLayout(services.MetaDataManager, mainVM);
 
             LanguageSelect.SelectedIndex = ((App)Application.Current).CurrentLanguage == "en-US" ? 1 : 0;
             _languageSelectReady = true;
@@ -89,6 +90,7 @@ namespace DeployAssistant.View
             var app = (App)Application.Current;
             app.ApplyLanguage(code);
             app.Services?.MetaDataManager.RequestSaveLanguage(code);
+            (DataContext as MainViewModel)?.CompactVM.RefreshLocalizedText();
         }
 
         private void SubscribeToViewModelEvents(MainViewModel mainVM)
@@ -144,6 +146,8 @@ namespace DeployAssistant.View
         private void OpenIntegrityLogWindowFromFileTrack(ProjectData? projData, string changeLog, ObservableCollection<ProjectFile> fileList)
         {
             if (projData == null) return;
+            // Compact mode shows the result inline; its "Show all" switches to full and calls back here.
+            if ((DataContext as MainViewModel)?.IsCompact == true) return;
             var outcomes = (DataContext as MainViewModel)?.FileTrackVM.IntegrityOutcomesSnapshot;
             var window = new IntegrityLogWindow(projData, changeLog, fileList, outcomes);
             window.Owner = this;

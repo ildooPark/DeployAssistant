@@ -281,4 +281,22 @@
     <sys:String x:Key="S.Menu.Settings">설정(_S)</sys:String>
     <sys:String x:Key="S.Menu.FastCheckPercent">빠른 검사 해시 비율</sys:String>
     <sys:String x:Key="S.Menu.FastCheckTooltip">일반 무결성 검사에서 전체 MD5 해시를 계산할 파일의 비율입니다. 나머지는 크기·버전 메타데이터로 검증됩니다. Checkout 게이트는 항상 100% 해시합니다.</sys:String>
+
+    <!-- Compact mode (4.1.0) -->
+    <sys:String x:Key="S.Compact.Enter">간단히 보기</sys:String>
+    <sys:String x:Key="S.Compact.EnterTooltip">작은 창으로 전환 (Ctrl+M)</sys:String>
+    <sys:String x:Key="S.Compact.Expand">전체 보기</sys:String>
+    <sys:String x:Key="S.Compact.Pin">고정</sys:String>
+    <sys:String x:Key="S.Compact.PinTooltip">이 창을 항상 다른 창 위에 표시</sys:String>
+    <sys:String x:Key="S.Compact.Keys">F5 빠른 검사 · Ctrl+F5 전체 해시</sys:String>
+    <sys:String x:Key="S.Compact.LastResult">최근 검사 결과</sys:String>
+    <sys:String x:Key="S.Compact.NoCheck">아직 무결성 검사를 실행하지 않았습니다.</sys:String>
+    <sys:String x:Key="S.Compact.AllMatch">모든 파일이 일치합니다</sys:String>
+    <sys:String x:Key="S.Compact.ShowAll">전체 보기에서 모두 보기 →</sys:String>
+    <sys:String x:Key="S.Compact.Back">뒤로</sys:String>
+    <sys:String x:Key="S.Compact.Modified">수정</sys:String>
+    <sys:String x:Key="S.Compact.Added">추가</sys:String>
+    <sys:String x:Key="S.Compact.Deleted">삭제</sys:String>
+    <sys:String x:Key="S.Compact.FullHashAt">전체 해시 · {0:HH:mm}</sys:String>
+    <sys:String x:Key="S.Compact.FastCheckAt">빠른 검사, {0}% 샘플 · {1:HH:mm}</sys:String>
 </ResourceDictionary>

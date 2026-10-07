@@ -18,7 +18,10 @@ namespace DeployAssistant.Model
         /// integrity check (the rest are verified by size/version metadata). 100 = full hash.
         /// Checkout gates always force 100 regardless. Additive.</summary>
         public int? FastIntegritySamplePercent { get; set; }
-        
+        /// <summary>GUI window mode, per-mode bounds and compact pin (4.1.0+). Additive: configs
+        /// written before it load with Full-mode defaults, and older builds ignore it.</summary>
+        public WindowLayoutData? WindowLayout { get; set; }
+
         public LocalConfigData(string? LastOpenedDstPath) 
         {
             this.LastOpenedDstPath = LastOpenedDstPath;
