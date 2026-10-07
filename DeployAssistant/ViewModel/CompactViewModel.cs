@@ -108,6 +108,9 @@ namespace DeployAssistant.ViewModel
         {
             int percent = _metaDataManager.LastIntegritySamplePercent;
             ProjectData? project = _metaDataManager.MainProjectData;
+            // With no project loaded the check refuses and reports an empty list; that is not
+            // "all files match".
+            if (project == null) return;
             DateTime finishedAt = DateTime.Now;
             _uiDispatcher.Invoke(() => ApplyResult(changeLog, files, percent, project, finishedAt));
         }

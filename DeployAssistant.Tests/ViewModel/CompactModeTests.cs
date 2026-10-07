@@ -139,27 +139,44 @@ namespace DeployAssistant.Tests.ViewModel
 
     public class WindowPlacementTests
     {
+        // Work areas in DIPs, each already divided by its monitor's DPI.
         // 1366 x 768 at 125% scaling: about 1093 x 614 DIP, minus a 40 DIP taskbar.
         private static readonly Rect SmallLaptop = new Rect(0, 0, 1093, 574);
         private static readonly Rect FullHd = new Rect(0, 0, 1920, 1040);
-        private static readonly Rect FullHdScreen = new Rect(0, 0, 1920, 1080);
+        // Windows Sandbox / RDP: 1624 x 834 px work area at 125% = 1299 x 667 DIP.
+        private static readonly Rect Sandbox125 = new Rect(0, 0, 1624 / 1.25, 834 / 1.25);
+        // A second 1920 x 1080 monitor to the right of the primary.
+        private static readonly Rect RightMonitor = new Rect(1920, 0, 1920, 1040);
+
+        private static Rect[] Areas(params Rect[] areas) => areas;
 
         [Fact]
         public void NoSavedBounds_FullMode_FitsASmallLaptop()
         {
-            Size min = new Size(Math.Min(WindowPlacement.FullMinSize.Width, SmallLaptop.Width),
-                                Math.Min(WindowPlacement.FullMinSize.Height, SmallLaptop.Height));
+            Size min = WindowPlacement.MinSizeFor(compact: false, SmallLaptop);
 
-            Rect r = WindowPlacement.Fit(null, WindowPlacement.FullDefaultSize, min, SmallLaptop, SmallLaptop);
+            Rect r = WindowPlacement.Fit(null, WindowPlacement.FullDefaultSize, min, Areas(SmallLaptop));
 
-            Assert.True(r.Width <= SmallLaptop.Width && r.Height <= SmallLaptop.Height, r.ToString());
-            Assert.True(r.Left >= 0 && r.Top >= 0, r.ToString());
+            Assert.True(SmallLaptop.Contains(r), r.ToString());
+        }
+
+        [Fact]
+        public void FirstLaunch_At125PercentInASandbox_FitsTheScreen()
+        {
+            // Regression: SystemParameters.WorkArea reported 1624 DIP here, and a 1600 DIP
+            // window opened 2000 px wide on a 1624 px screen.
+            Size min = WindowPlacement.MinSizeFor(compact: false, Sandbox125);
+
+            Rect r = WindowPlacement.Fit(null, WindowPlacement.FullDefaultSize, min, Areas(Sandbox125));
+
+            Assert.True(Sandbox125.Contains(r), r.ToString());
+            Assert.True(r.Width * 1.25 <= 1624, $"{r.Width * 1.25} px wide");
         }
 
         [Fact]
         public void NoSavedBounds_CompactMode_IsCentredAtDefaultSize()
         {
-            Rect r = WindowPlacement.Fit(null, WindowPlacement.CompactDefaultSize, WindowPlacement.CompactMinSize, FullHd, FullHdScreen);
+            Rect r = WindowPlacement.Fit(null, WindowPlacement.CompactDefaultSize, WindowPlacement.CompactMinSize, Areas(FullHd));
 
             Assert.Equal(380, r.Width);
             Assert.Equal(600, r.Height);
@@ -171,20 +188,41 @@ namespace DeployAssistant.Tests.ViewModel
         {
             var saved = new WindowBounds { Left = 1500, Top = 300, Width = 400, Height = 620 };
 
-            Rect r = WindowPlacement.Fit(saved, WindowPlacement.CompactDefaultSize, WindowPlacement.CompactMinSize, FullHd, FullHdScreen);
+            Rect r = WindowPlacement.Fit(saved, WindowPlacement.CompactDefaultSize, WindowPlacement.CompactMinSize, Areas(FullHd));
 
             Assert.Equal(new Rect(1500, 300, 400, 620), r);
         }
 
         [Fact]
-        public void SavedBoundsOnADisconnectedMonitor_AreRecentred()
+        public void SavedBoundsOnASecondMonitor_StayThere()
         {
-            // Saved on a second monitor to the right that is no longer plugged in.
             var saved = new WindowBounds { Left = 2600, Top = 200, Width = 380, Height = 600 };
 
-            Rect r = WindowPlacement.Fit(saved, WindowPlacement.CompactDefaultSize, WindowPlacement.CompactMinSize, FullHd, FullHdScreen);
+            Rect r = WindowPlacement.Fit(saved, WindowPlacement.CompactDefaultSize, WindowPlacement.CompactMinSize, Areas(FullHd, RightMonitor));
 
-            Assert.True(FullHdScreen.Contains(r), r.ToString());
+            Assert.Equal(new Rect(2600, 200, 380, 600), r);
+        }
+
+        [Fact]
+        public void SavedBoundsOnADisconnectedMonitor_AreRecentred()
+        {
+            // Saved on the right-hand monitor, which is no longer plugged in.
+            var saved = new WindowBounds { Left = 2600, Top = 200, Width = 380, Height = 600 };
+
+            Rect r = WindowPlacement.Fit(saved, WindowPlacement.CompactDefaultSize, WindowPlacement.CompactMinSize, Areas(FullHd));
+
+            Assert.True(FullHd.Contains(r), r.ToString());
+        }
+
+        [Fact]
+        public void SavedBoundsLargerThanTheMonitor_AreShrunkAndKeptInside()
+        {
+            // Saved at 1600 x 900 on a big screen, reopened on the small laptop.
+            var saved = new WindowBounds { Left = 200, Top = 100, Width = 1600, Height = 900 };
+
+            Rect r = WindowPlacement.Fit(saved, WindowPlacement.FullDefaultSize, WindowPlacement.MinSizeFor(false, SmallLaptop), Areas(SmallLaptop));
+
+            Assert.True(SmallLaptop.Contains(r), r.ToString());
         }
 
         [Fact]
@@ -192,7 +230,7 @@ namespace DeployAssistant.Tests.ViewModel
         {
             var saved = new WindowBounds { Left = 100, Top = -300, Width = 380, Height = 600 };
 
-            Rect r = WindowPlacement.Fit(saved, WindowPlacement.CompactDefaultSize, WindowPlacement.CompactMinSize, FullHd, FullHdScreen);
+            Rect r = WindowPlacement.Fit(saved, WindowPlacement.CompactDefaultSize, WindowPlacement.CompactMinSize, Areas(FullHd));
 
             Assert.True(r.Top >= 0, r.ToString());
         }
@@ -202,10 +240,47 @@ namespace DeployAssistant.Tests.ViewModel
         {
             var saved = new WindowBounds { Left = 10, Top = 10, Width = 100, Height = 100 };
 
-            Rect r = WindowPlacement.Fit(saved, WindowPlacement.CompactDefaultSize, WindowPlacement.CompactMinSize, FullHd, FullHdScreen);
+            Rect r = WindowPlacement.Fit(saved, WindowPlacement.CompactDefaultSize, WindowPlacement.CompactMinSize, Areas(FullHd));
 
             Assert.Equal(WindowPlacement.CompactMinSize.Width, r.Width);
             Assert.Equal(WindowPlacement.CompactMinSize.Height, r.Height);
+        }
+
+        [Fact]
+        public void KeepInside_SlidesAnOverhangingWindowBackOn()
+        {
+            Rect r = WindowPlacement.KeepInside(new Rect(1000, 500, 600, 400), new Rect(0, 0, 1299, 667));
+
+            Assert.Equal(new Rect(699, 267, 600, 400), r);
+        }
+    }
+
+    public class CompactIntegrityWithoutProjectTests
+    {
+        [Fact]
+        public void IntegrityCheck_WithNoProjectLoaded_IsNotReportedAsClean()
+        {
+            // Regression: the refused check reports an empty list, which compact mode showed
+            // as "All files match".
+            var manager = new MetaDataManager(new FakeDialogService());
+            manager.Awake();
+            var vm = new CompactViewModel(manager, new ImmediateUiDispatcher());
+
+            manager.RequestProjectIntegrityCheck();
+
+            Assert.False(vm.HasResult);
+            Assert.False(vm.IsClean);
+        }
+
+        [Fact]
+        public void IntegrityCommand_IsDisabled_UntilAProjectLoads()
+        {
+            var manager = new MetaDataManager(new FakeDialogService());
+            manager.Awake();
+            var vm = new FileTrackViewModel(manager, new FakeDialogService(), new ImmediateUiDispatcher());
+
+            Assert.False(vm.CheckProjectIntegrity.CanExecute(null));
+            Assert.False(vm.CheckProjectIntegrityFull.CanExecute(null));
         }
     }
 

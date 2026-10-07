@@ -1,6 +1,8 @@
 using DeployAssistant.DataComponent;
 using DeployAssistant.Model;
+using DeployAssistant.Services.Wpf;
 using DeployAssistant.ViewModel;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Windows;
 
@@ -23,6 +25,8 @@ namespace DeployAssistant.View
             vm.IsCompactPinned = _layout.CompactPinned;
             vm.IsCompact = _layout.IsCompact;
             ApplyMode(vm.IsCompact, vm.IsCompactPinned);
+            SourceInitialized += (_, _) => ClampToCurrentMonitor();
+            Loaded += (_, _) => ClampToCurrentMonitor();   // after any startup DPI change has landed
 
             vm.PropertyChanged += OnLayoutPropertyChanged;
             vm.CompactVM.ShowAllRequested += () =>
@@ -53,27 +57,62 @@ namespace DeployAssistant.View
         private void ApplyMode(bool compact, bool pinned)
         {
             WindowState = WindowState.Normal;
-            Rect work = SystemParameters.WorkArea;
-            Size min = compact
-                ? WindowPlacement.CompactMinSize
-                : new Size(System.Math.Min(WindowPlacement.FullMinSize.Width, work.Width),
-                           System.Math.Min(WindowPlacement.FullMinSize.Height, work.Height));
+            IReadOnlyList<Rect> areas = MonitorWorkAreas.AllInDips();
+            if (areas.Count == 0) areas = new[] { SystemParameters.WorkArea };
+            Rect primary = areas[0];
+            Size min = WindowPlacement.MinSizeFor(compact, primary);
             MinWidth = min.Width;
             MinHeight = min.Height;
 
             WindowBounds? saved = compact ? _layout.Compact : _layout.Full;
-            Rect virtualScreen = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
-                                          SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
             Rect target = WindowPlacement.Fit(saved,
                 compact ? WindowPlacement.CompactDefaultSize : WindowPlacement.FullDefaultSize,
-                min, work, virtualScreen);
+                min, areas);
             Left = target.Left;
             Top = target.Top;
             Width = target.Width;
             Height = target.Height;
+            LayoutTrace($"apply {(compact ? "compact" : "full")}: areas=[{string.Join(" | ", areas)}] min={min} " +
+                        $"saved={(saved == null ? "none" : $"{saved.Left},{saved.Top},{saved.Width},{saved.Height}")} target={target}");
 
             if (!compact && saved?.Maximized == true) WindowState = WindowState.Maximized;
             Topmost = compact && pinned;
+            ClampToCurrentMonitor();
+        }
+
+        /// <summary>
+        /// Opt-in layout diagnostics: with DA_LAYOUT_TRACE set to a file path, every placement
+        /// decision is appended there. For "the window opens off-screen" reports from a PC we
+        /// cannot reproduce on.
+        /// </summary>
+        private static void LayoutTrace(string message)
+        {
+            string? path = System.Environment.GetEnvironmentVariable("DA_LAYOUT_TRACE");
+            if (string.IsNullOrEmpty(path)) return;
+            try { System.IO.File.AppendAllText(path, $"{System.DateTime.Now:HH:mm:ss.fff} {message}{System.Environment.NewLine}"); }
+            catch (System.Exception) { }
+        }
+
+        /// <summary>
+        /// Once the window has a handle its real DPI is known: re-fit it into the work area of
+        /// the monitor it actually landed on. The placement above runs before the window exists,
+        /// so on a monitor whose scale differs from the one it was computed for it can still
+        /// spill over an edge.
+        /// </summary>
+        private void ClampToCurrentMonitor()
+        {
+            if (WindowState != WindowState.Normal) return;
+            Rect? found = MonitorWorkAreas.ForWindow(this);
+            if (found is not Rect area) { LayoutTrace("clamp: no monitor yet"); return; }
+            MinWidth = System.Math.Min(MinWidth, area.Width);
+            MinHeight = System.Math.Min(MinHeight, area.Height);
+            var before = new Rect(Left, Top, Width, Height);
+            Rect fitted = WindowPlacement.KeepInside(before, area);
+            Left = fitted.Left;
+            Top = fitted.Top;
+            Width = fitted.Width;
+            Height = fitted.Height;
+            LayoutTrace($"clamp: area={area} {before} -> {fitted}");
         }
 
         private void StoreBounds(bool compact)
@@ -102,27 +141,54 @@ namespace DeployAssistant.View
         public static readonly Size CompactDefaultSize = new Size(380, 600);
         public static readonly Size CompactMinSize = new Size(340, 480);
 
-        /// <summary>
-        /// The saved bounds when they are still on a connected screen with the title bar
-        /// reachable; otherwise the default size centred in the primary work area. Either way the
-        /// size is clamped between <paramref name="min"/> and the work area, so a window saved on
-        /// a large monitor never opens bigger than a small laptop screen.
-        /// </summary>
-        public static Rect Fit(WindowBounds? saved, Size defaultSize, Size min, Rect workArea, Rect virtualScreen)
+        /// <summary>The mode's minimum size, never larger than the primary work area.</summary>
+        public static Size MinSizeFor(bool compact, Rect primaryWorkArea)
         {
-            bool hasSaved = saved != null && saved.Width > 0 && saved.Height > 0;
-            double w = Clamp(hasSaved ? saved!.Width : defaultSize.Width, min.Width, System.Math.Max(min.Width, workArea.Width));
-            double h = Clamp(hasSaved ? saved!.Height : defaultSize.Height, min.Height, System.Math.Max(min.Height, workArea.Height));
+            Size min = compact ? CompactMinSize : FullMinSize;
+            return new Size(System.Math.Min(min.Width, primaryWorkArea.Width), System.Math.Min(min.Height, primaryWorkArea.Height));
+        }
 
-            if (hasSaved)
+        /// <summary>
+        /// The saved bounds when they still overlap a monitor's work area with the title bar
+        /// reachable — kept on that monitor and shrunk to fit it; otherwise the default size
+        /// centred in the primary work area (<paramref name="workAreas"/>[0]). Work areas are in
+        /// DIPs, each converted with its own monitor's DPI (see MonitorWorkAreas).
+        /// </summary>
+        public static Rect Fit(WindowBounds? saved, Size defaultSize, Size min, IReadOnlyList<Rect> workAreas)
+        {
+            Rect primary = workAreas[0];
+            if (saved != null && saved.Width > 0 && saved.Height > 0)
             {
-                var rect = new Rect(saved!.Left, saved.Top, w, h);
-                Rect visible = Rect.Intersect(rect, virtualScreen);
-                bool titleBarReachable = saved.Top >= virtualScreen.Top && saved.Top <= virtualScreen.Bottom - 40;
-                if (!visible.IsEmpty && visible.Width >= 120 && visible.Height >= 80 && titleBarReachable)
-                    return rect;
+                var rect = new Rect(saved.Left, saved.Top, System.Math.Max(saved.Width, min.Width), System.Math.Max(saved.Height, min.Height));
+                Rect? home = null;
+                double best = 0;
+                foreach (Rect area in workAreas)
+                {
+                    Rect overlap = Rect.Intersect(rect, area);
+                    if (overlap.IsEmpty || overlap.Width < 120 || overlap.Height < 80) continue;
+                    bool titleBarReachable = saved.Top >= area.Top && saved.Top <= area.Bottom - 40;
+                    if (titleBarReachable && overlap.Width * overlap.Height > best)
+                    {
+                        best = overlap.Width * overlap.Height;
+                        home = area;
+                    }
+                }
+                if (home is Rect target) return KeepInside(rect, target);
             }
-            return new Rect(workArea.Left + (workArea.Width - w) / 2, workArea.Top + (workArea.Height - h) / 2, w, h);
+
+            double w = Clamp(defaultSize.Width, min.Width, System.Math.Max(min.Width, primary.Width));
+            double h = Clamp(defaultSize.Height, min.Height, System.Math.Max(min.Height, primary.Height));
+            return new Rect(primary.Left + (primary.Width - w) / 2, primary.Top + (primary.Height - h) / 2, w, h);
+        }
+
+        /// <summary>Shrinks <paramref name="rect"/> to the area if needed, then slides it inside.</summary>
+        public static Rect KeepInside(Rect rect, Rect area)
+        {
+            double w = System.Math.Min(rect.Width, area.Width);
+            double h = System.Math.Min(rect.Height, area.Height);
+            double left = Clamp(rect.Left, area.Left, area.Right - w);
+            double top = Clamp(rect.Top, area.Top, area.Bottom - h);
+            return new Rect(left, top, w, h);
         }
 
         private static double Clamp(double value, double min, double max) =>
