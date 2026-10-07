@@ -219,6 +219,11 @@ namespace DeployAssistant.DataComponent
 
         public void RequestSaveLanguage(string languageCode) => _settingManager.SaveLanguage(languageCode);
 
+        /// <summary>GUI window mode and per-mode bounds; null when never saved (a pre-4.1.0 config).</summary>
+        public WindowLayoutData? RequestWindowLayout() => _settingManager.GetWindowLayout();
+
+        public void RequestSaveWindowLayout(WindowLayoutData layout) => _settingManager.SaveWindowLayout(layout);
+
         #region View Model Request Calls
         /// <summary>
         /// Opens the project at <paramref name="projectPath"/> from its <c>ProjectMetaData.bin</c>.
@@ -876,6 +881,9 @@ namespace DeployAssistant.DataComponent
         public List<string> RequestRecentProjects() => _settingManager.GetRecentProjects();
 
         public int RequestFastIntegritySamplePercent() => _settingManager.GetFastIntegritySamplePercent();
+
+        /// <summary>Hash sample percent the most recent integrity check ran with (100 = full hash).</summary>
+        public int LastIntegritySamplePercent => _fileManager?.IntegritySamplePercent ?? 100;
 
         public void RequestSaveFastIntegritySamplePercent(int percent) => _settingManager.SaveFastIntegritySamplePercent(percent);
 

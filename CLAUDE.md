@@ -65,6 +65,8 @@ User-visible GUI strings live in `DeployAssistant/View/Strings.ko-KR.xaml` and `
 
 There is no automated UI test harness. WPF changes require manually running the GUI on Windows. If you cannot exercise the UI in your session, say so explicitly rather than claiming success.
 
+To look at a `MainWindow` layout change headlessly, set `DA_GUI_PREVIEW_DIR` and run `dotnet test DeployAssistant.Tests/DeployAssistant.Tests.csproj --filter MainWindowRenderTests`: it renders the compact and full layouts to PNG files in that folder. It renders layout and bindings only; interaction still needs the real GUI.
+
 ## Known tech debt to avoid amplifying
 
 - **Mixed namespaces:** `DeployManager.DataComponent` (only `SettingManager.cs`) and `DeployManager.Model` (only `LocalConfigData.cs`) coexist with the dominant `DeployAssistant.*` prefix. Use `DeployAssistant.*` for new code; consolidating the stragglers is welcome.

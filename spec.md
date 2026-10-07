@@ -324,7 +324,7 @@ None=0, Integration=1, IntegrityCheck=2, Deploy=4, Initialization=8, All=~0
 The `DeployAssistant.deploy` sidecar is retired: 4.x neither writes it (allocation resolution no longer persists) nor reads it (`RetrieveDataSrc` skips straight to scanning). The `[Obsolete]` `DeployData` class stays only to document the shape 3.6.1 still writes in the field — `ProjectName` plus `Dictionary<string, ProjectFile> SortedTopFiles` (key = `DataRelPath`) — and scans keep ignoring the file itself (the `*.deploy` ignore entry and the explicit `.deploy` skip in `HandleAbnormalFiles` both remain).
 
 ### 6.8 `LocalConfigData`
-Saved as `DeployAssistant.config` (JSON) in `%USERPROFILE%\Documents`. Contains `LastOpenedDstPath`, `Language` (`"ko-KR"` / `"en-US"`), `RecentProjects` (MRU project paths, newest first, capped at 8 — feeds the Project ▸ Recent Projects menu) and `FastIntegritySamplePercent` (nullable int, see §12.4; `null` reads as 100). All fields after `LastOpenedDstPath` are additive, so 3.6.1-era configs still load — but a 3.6.1 save drops them, resetting the choices. Loaded on startup to offer re-opening the last project and to pick the UI language (default Korean).
+Saved as `DeployAssistant.config` (JSON) in `%USERPROFILE%\Documents`. Contains `LastOpenedDstPath`, `Language` (`"ko-KR"` / `"en-US"`), `RecentProjects` (MRU project paths, newest first, capped at 8 — feeds the Project ▸ Recent Projects menu), `FastIntegritySamplePercent` (nullable int, see §12.4; `null` reads as 100) and `WindowLayout` (GUI 4.1.0+, `WindowLayoutData`: `Mode` `"Full"`/`"Compact"`, `Full` and `Compact` `WindowBounds` in DIPs with a `Maximized` flag, `CompactPinned`; see §11.1). All fields after `LastOpenedDstPath` are additive, so older configs still load (a missing `WindowLayout` opens the full layout at default bounds) — but a save by an older build drops the fields it does not know, resetting those choices. Loaded on startup to offer re-opening the last project and to pick the UI language (default Korean).
 
 ### 6.9 `RecordedFile`
 A lightweight entry inside `ProjectIgnoreData.IgnoreFileList`. Implements `IProjectData` but most properties are `[JsonIgnore]`. Carries `DataName`, `DataType`, `IgnoreType`, `UpdatedTime`.
@@ -630,7 +630,7 @@ Failure semantics follow the persist boundary. **Before** the persist, everythin
 
 **Startup (`Awake()`):** wiring only. **`PromptPreviousProjectRestore()`** reads `DeployAssistant.config`, validates the stored path (must contain a `ProjectMetaData.bin`), and prompts to re-open — exposed as `MetaDataManager.RequestPreviousProjectRestore()` and called by the GUI only after the ViewModels have subscribed (`MainWindow.Loaded`).
 
-**`SetRecentDstDirectory(string path)`** — read-merge-write: loads the existing config, updates `LastOpenedDstPath`, and re-serializes, so other fields (`Language`) survive. It also maintains the `RecentProjects` MRU: dedupe (OrdinalIgnoreCase), insert at front, cap 8. **`GetSavedLanguage()` / `SaveLanguage(code)`**, **`GetRecentProjects()`** and **`GetFastIntegritySamplePercent()` / `SaveFastIntegritySamplePercent(int)`** (clamped 1–100, default 100) use the same read-merge-write path.
+**`SetRecentDstDirectory(string path)`** — read-merge-write: loads the existing config, updates `LastOpenedDstPath`, and re-serializes, so other fields (`Language`) survive. It also maintains the `RecentProjects` MRU: dedupe (OrdinalIgnoreCase), insert at front, cap 8. **`GetSavedLanguage()` / `SaveLanguage(code)`**, **`GetRecentProjects()`**, **`GetFastIntegritySamplePercent()` / `SaveFastIntegritySamplePercent(int)`** (clamped 1–100, default 100) and **`GetWindowLayout()` / `SaveWindowLayout(WindowLayoutData)`** (exposed as `MetaDataManager.RequestWindowLayout()` / `RequestSaveWindowLayout(...)`) use the same read-merge-write path. `MetaDataManager.LastIntegritySamplePercent` reports the sample percent the latest integrity check ran with (100 = full hash).
 
 **`ConfigDirectoryOverride`** (static) — test seam that redirects `DeployAssistant.config` away from the real `Documents` folder. Both test assemblies set it in a `[ModuleInitializer]` so test runs neither read nor pollute the developer's live settings (a saved fast-check sample percent had broken version-cut tests nondeterministically).
 
@@ -704,6 +704,10 @@ Root ViewModel composed in `MainWindow`. Constructs and exposes:
 - `MetaDataVM` (`MetaDataViewModel`)
 - `FileTrackVM` (`FileTrackViewModel`)
 - `BackupVM` (`BackupViewModel`)
+- `MetaFileDiffVM`, `IgnoreVM`
+- `CompactVM` (`CompactViewModel`, §11.1)
+
+It also owns the compact-mode state: `IsCompact` / `IsFull`, `IsCompactPinned` and the `ToggleCompact` command (Ctrl+M). Leaving compact mode closes its revisions sub-page.
 
 Calls `App.AwakeModel()` in constructor.
 
@@ -815,6 +819,20 @@ Stub or minimal implementations referenced by view windows. Details TBD in a fut
 **Window policy, reaffirmed.** The dockable-islands plan (see §18) was dropped; secondary windows stay windows. The informational ones — `IntegrityLogWindow`, `VersionDiffWindow`, `VersionIntegrationView`, `OverlapFileWindow`, `VersionComparisonWindow` — are opened from `MainWindow.xaml.cs` as **owned, `WindowStartupLocation.CenterOwner`, non-modal `Show()`** windows, and are expected to stay that way: they are read-alongside surfaces, so blocking the shell would be wrong.
 
 The three gate windows above are the deliberate exception. They exist to take a yes/no decision that a destructive operation is waiting on, so they are `ShowDialog()` modal, owned by `Application.Current.MainWindow`, and expose a `static bool Ask/Confirm/Prompt(...)` entry point rather than being constructed by the caller.
+
+### 11.1 Compact mode and window layout (GUI 4.1.0)
+
+`MainWindow` holds two layouts over the same view models; `MainViewModel.IsCompact` shows exactly one. The full layout (menu, toolbar, three-column workspace) keeps all of its state while hidden. Switching: the toolbar's **Compact view** button or Ctrl+M; back with **Full view** in the compact header, Ctrl+M, or "Show all". The minimize button is untouched.
+
+The compact layout (default 380 × 600 DIP, minimum 340 × 480) shows the project name, a **Pin** toggle (`Topmost` while compact), the main version and state badge, a large integrity-check button, the last result, the Deploy button (enabled only when that result has changes, with the updater and log fields shown alongside) and a version-history sub-page with Checkout. Source-folder selection and the ignore list stay full-mode only. Shortcuts in both layouts: F5 fast check (saved sample percent), Ctrl+F5 full hash (`FileTrackVM.CheckProjectIntegrityFull`), Ctrl+M toggle. The window-wide drop zone works in both layouts.
+
+`CompactViewModel` listens to `IntegrityCheckCompleteEventHandler` and summarises only `IntegrityChecked` file entries (drag & drop items waiting in the pre-staged queue are not findings): counts by kind, the first 8 rows (badge, file name, folder) and "Fast check, N% sample · HH:mm" / "Full hash · HH:mm" from `LastIntegritySamplePercent`. `ProjLoadedEventHandler` (load, update, checkout) clears the result, since main has moved. While compact, the integrity dashboard (`IntegrityLogWindow`) does not auto-open; **Show all** switches to full and opens it with the stored result. The busy overlay's card drops its 440 DIP minimum width in compact mode.
+
+**Bounds and persistence** (`MainWindow.Layout.cs`). Each mode keeps its own bounds; switching stores the outgoing mode's bounds (`RestoreBounds` when maximized), applies the incoming mode's minimum size and bounds, and saves `WindowLayout`. Closing saves the current mode, both bounds and the pin, so the app reopens in the last mode. `WindowPlacement.Fit` decides where a mode opens: saved bounds are kept when at least 120 × 80 DIP of them lies on the virtual screen and the title bar is reachable; otherwise the default size is centred in the primary work area. Sizes are clamped between the mode's minimum and the work area, and the full layout's minimum (960 × 600) is itself capped to the work area, so a 1366 × 768 laptop at 125% (≈ 1093 × 574 DIP usable) gets a window that fits.
+
+**DPI and fonts.** `app.manifest` declares `PerMonitorV2` (fallback `PerMonitor`, `dpiAware true/PM`) and `App.config` sets `Switch.System.Windows.DoNotScaleForDpiChanges=false`, so WPF re-lays-out at each monitor's scale instead of Windows bitmap-stretching the window. The window sets `FontFamily="Segoe UI, Malgun Gothic"` (Latin always Segoe UI, Hangul Malgun Gothic, whatever the OS UI language), `UseLayoutRounding` and `TextOptions.TextFormattingMode="Display"`.
+
+`LocalizationKeyTests` scans every `StaticResource` / `DynamicResource` / `Loc.T` key the GUI uses and fails when either `Strings.*.xaml` lacks one, or when the two files define different key sets. `MainWindowRenderTests` is an opt-in preview: with `DA_GUI_PREVIEW_DIR` set it builds the real `MainWindow` on an STA thread and renders the compact states and the full layout (default and 1077 × 535) to PNG; without the variable it returns immediately, because a WPF `Application` in the shared test process changes other tests' `Loc.T` results and can deadlock.
 
 ---
 

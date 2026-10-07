@@ -144,6 +144,15 @@ namespace DeployAssistant.DataComponent
             _fileHandlerTool.TrySerializeJsonData(DAMetaFilePath, localConfig);
         }
 
+        public WindowLayoutData? GetWindowLayout() => ReadConfigOrNew().WindowLayout;
+
+        public void SaveWindowLayout(WindowLayoutData layout)
+        {
+            LocalConfigData localConfig = ReadConfigOrNew();
+            localConfig.WindowLayout = layout;
+            _fileHandlerTool.TrySerializeJsonData(DAMetaFilePath, localConfig);
+        }
+
         public string? GetSavedLanguage() => ReadConfigOrNew().Language;
 
         public void SaveLanguage(string languageCode)

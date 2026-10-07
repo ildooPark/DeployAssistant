@@ -278,4 +278,22 @@
     <sys:String x:Key="S.Menu.Settings">_Settings</sys:String>
     <sys:String x:Key="S.Menu.FastCheckPercent">Fast-check hash sample</sys:String>
     <sys:String x:Key="S.Menu.FastCheckTooltip">Share of files that get a full MD5 hash during a normal integrity check; the rest are verified by size/version metadata. Checkout gates always hash 100%.</sys:String>
+
+    <!-- Compact mode (4.1.0) -->
+    <sys:String x:Key="S.Compact.Enter">Compact view</sys:String>
+    <sys:String x:Key="S.Compact.EnterTooltip">Switch to a small window (Ctrl+M)</sys:String>
+    <sys:String x:Key="S.Compact.Expand">Full view</sys:String>
+    <sys:String x:Key="S.Compact.Pin">Pin</sys:String>
+    <sys:String x:Key="S.Compact.PinTooltip">Keep this window above other windows</sys:String>
+    <sys:String x:Key="S.Compact.Keys">F5 fast check · Ctrl+F5 full hash</sys:String>
+    <sys:String x:Key="S.Compact.LastResult">Last check</sys:String>
+    <sys:String x:Key="S.Compact.NoCheck">No integrity check has run yet.</sys:String>
+    <sys:String x:Key="S.Compact.AllMatch">All files match</sys:String>
+    <sys:String x:Key="S.Compact.ShowAll">Show all in the full view →</sys:String>
+    <sys:String x:Key="S.Compact.Back">Back</sys:String>
+    <sys:String x:Key="S.Compact.Modified">modified</sys:String>
+    <sys:String x:Key="S.Compact.Added">added</sys:String>
+    <sys:String x:Key="S.Compact.Deleted">deleted</sys:String>
+    <sys:String x:Key="S.Compact.FullHashAt">Full hash · {0:HH:mm}</sys:String>
+    <sys:String x:Key="S.Compact.FastCheckAt">Fast check, {0}% sample · {1:HH:mm}</sys:String>
 </ResourceDictionary>

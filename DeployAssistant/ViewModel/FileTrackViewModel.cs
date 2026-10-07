@@ -82,6 +82,11 @@ namespace DeployAssistant.ViewModel
         private ICommand? _checkProjectIntegrity;
         public ICommand CheckProjectIntegrity => _checkProjectIntegrity ??= new RelayCommand(MainProjectIntegrityTest, CanRunIntegrityTest);
 
+        // Ctrl+F5: hash every file regardless of the fast-check sample setting.
+        private ICommand? _checkProjectIntegrityFull;
+        public ICommand CheckProjectIntegrityFull => _checkProjectIntegrityFull ??= new RelayCommand(
+            _ => Task.Run(() => _metaDataManager.RequestProjectIntegrityCheck(forceFullHash: true)), CanRunIntegrityTest);
+
         private ICommand? _stageChanges;
         public ICommand StageChanges => _stageChanges ??= new RelayCommand(StageNewChanges, CanStageChanges);
 
