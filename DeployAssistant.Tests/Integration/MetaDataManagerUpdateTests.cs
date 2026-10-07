@@ -719,7 +719,7 @@ namespace DeployAssistant.Tests.Integration
             await InitializeAndWaitAsync(mgr, _projectDir);
 
             File.WriteAllText(Path.Combine(_projectDir, "logs", "run.log"), "log v2 — drifted");
-            File.WriteAllText(Path.Combine(_projectDir, "app.dll"), "binary content v2");
+            File.WriteAllText(Path.Combine(_projectDir, "app.dll"), "MODIFIED content v2");
             await IntegrityCheckAndCaptureAsync(mgr);
 
             // Ignore straight from the result list, then Stage + Update without re-checking.
@@ -746,7 +746,7 @@ namespace DeployAssistant.Tests.Integration
             ProjectData v1 = mgr.MainProjectData!;
 
             File.WriteAllText(Path.Combine(_projectDir, "logs", "run.log"), "log v2");
-            File.WriteAllText(Path.Combine(_projectDir, "app.dll"), "binary content v2");
+            File.WriteAllText(Path.Combine(_projectDir, "app.dll"), "MODIFIED content v2");
             await IntegrityCheckThenStageAndWaitAsync(mgr);
             Assert.True(mgr.RequestProjectUpdate("tester", "v2 update", _projectDir));
             Assert.True(mgr.RequestAddIgnoreEntry("logs", ProjectDataType.Directory));
