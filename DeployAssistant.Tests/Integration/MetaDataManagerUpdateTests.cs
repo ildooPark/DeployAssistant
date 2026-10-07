@@ -689,5 +689,152 @@ namespace DeployAssistant.Tests.Integration
                 (c.DstFile?.DataName ?? c.SrcFile?.DataName) == "app.dll" &&
                 (c.DataState & DataState.Restored) != 0);
         }
+
+        [Fact]
+        public async Task RequestProjectIntegrityCheck_FolderIgnoredAfterFirstRun_ResultOmitsIgnoredFiles()
+        {
+            Directory.CreateDirectory(Path.Combine(_projectDir, "logs"));
+            File.WriteAllText(Path.Combine(_projectDir, "logs", "run.log"), "log v1");
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            File.WriteAllText(Path.Combine(_projectDir, "logs", "run.log"), "log v2 — drifted");
+            List<ProjectFile> first = await IntegrityCheckAndCaptureAsync(mgr);
+            Assert.Contains(first, f => f.DataRelPath == Path.Combine("logs", "run.log"));
+
+            // The user notices the noise, ignores the folder, and re-runs the check.
+            // Both the result popup and the staged list must drop the folder.
+            Assert.True(mgr.RequestAddIgnoreEntry("logs", ProjectDataType.Directory));
+            List<ProjectFile> second = await IntegrityCheckAndCaptureAsync(mgr);
+
+            Assert.DoesNotContain(second, f => f.DataRelPath.StartsWith("logs"));
+        }
+
+        [Fact]
+        public async Task RequestAddIgnoreEntry_AfterIntegrityCheck_IgnoredChangesNotCommitted()
+        {
+            Directory.CreateDirectory(Path.Combine(_projectDir, "logs"));
+            File.WriteAllText(Path.Combine(_projectDir, "logs", "run.log"), "log v1");
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            File.WriteAllText(Path.Combine(_projectDir, "logs", "run.log"), "log v2 — drifted");
+            File.WriteAllText(Path.Combine(_projectDir, "app.dll"), "binary content v2");
+            await IntegrityCheckAndCaptureAsync(mgr);
+
+            // Ignore straight from the result list, then Stage + Update without re-checking.
+            object? view = null;
+            mgr.FileChangesEventHandler += p => view = p;
+            Assert.True(mgr.RequestAddIgnoreEntry("logs", ProjectDataType.Directory));
+            var shown = Assert.IsAssignableFrom<System.Collections.ObjectModel.ObservableCollection<ProjectFile>>(view);
+            Assert.DoesNotContain(shown, f => f.DataRelPath.StartsWith("logs"));
+
+            await StageAndWaitAsync(mgr);
+            Assert.True(mgr.RequestProjectUpdate("tester", "v2 update", _projectDir));
+
+            Assert.Contains(mgr.MainProjectData!.ChangedFiles, c => c.DstFile?.DataRelPath == "app.dll");
+            Assert.DoesNotContain(mgr.MainProjectData!.ChangedFiles, c => (c.DstFile?.DataRelPath ?? "").StartsWith("logs"));
+        }
+
+        [Fact]
+        public async Task RequestProjVersionDiff_IgnoredFolder_OmittedFromComparison()
+        {
+            Directory.CreateDirectory(Path.Combine(_projectDir, "logs"));
+            File.WriteAllText(Path.Combine(_projectDir, "logs", "run.log"), "log v1");
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+            ProjectData v1 = mgr.MainProjectData!;
+
+            File.WriteAllText(Path.Combine(_projectDir, "logs", "run.log"), "log v2");
+            File.WriteAllText(Path.Combine(_projectDir, "app.dll"), "binary content v2");
+            await IntegrityCheckThenStageAndWaitAsync(mgr);
+            Assert.True(mgr.RequestProjectUpdate("tester", "v2 update", _projectDir));
+            Assert.True(mgr.RequestAddIgnoreEntry("logs", ProjectDataType.Directory));
+
+            // Fast checkout to v1 skips ignored paths, so the comparison must not list them either.
+            List<ChangedFile>? diff = null;
+            mgr.ProjComparisonCompleteEventHandler += (src, dst, d) => diff = d;
+            mgr.RequestProjVersionDiff(v1);
+
+            Assert.NotNull(diff);
+            Assert.Contains(diff!, c => (c.DstFile?.DataRelPath ?? c.SrcFile?.DataRelPath) == "app.dll");
+            Assert.DoesNotContain(diff!, c =>
+                (c.DstFile?.DataRelPath ?? "").StartsWith("logs") || (c.SrcFile?.DataRelPath ?? "").StartsWith("logs"));
+        }
+
+        [Fact]
+        public async Task RequestDroppedFiles_PathHeldByIntegrityFinding_DeployedFileWins()
+        {
+            string subDir = Path.Combine(_projectDir, "sub");
+            Directory.CreateDirectory(subDir);
+            File.WriteAllText(Path.Combine(subDir, "engine.dll"), "engine v1");
+            var mgr = BuildAndAwakeManager();
+            await InitializeAndWaitAsync(mgr, _projectDir);
+
+            File.WriteAllText(Path.Combine(subDir, "engine.dll"), "engine drifted on disk");
+            List<ProjectFile> found = await IntegrityCheckAndCaptureAsync(mgr);
+            Assert.Contains(found, f => f.DataRelPath == Path.Combine("sub", "engine.dll"));
+
+            string dropSrc = Path.Combine(Path.GetTempPath(), "DA_DropSrc_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dropSrc);
+            string droppedFile = Path.Combine(dropSrc, "engine.dll");
+            File.WriteAllText(droppedFile, "engine v2 deployed");
+            try
+            {
+                mgr.RequestDroppedFiles(new[] { droppedFile });
+                await StageAndWaitAsync(mgr);
+                Assert.True(mgr.RequestProjectUpdate("tester", "deploy engine v2", _projectDir));
+
+                Assert.Equal("engine v2 deployed", File.ReadAllText(Path.Combine(subDir, "engine.dll")));
+            }
+            finally
+            {
+                Directory.Delete(dropSrc, recursive: true);
+            }
+        }
+
+        private static async Task StageAndWaitAsync(MetaDataManager mgr, int timeoutMs = 10_000)
+        {
+            // Idle also fires between hashing and staging; the staged-list event marks the end.
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Action<object> handler = _ => tcs.TrySetResult(true);
+            mgr.StagedChangesEventHandler += handler;
+            try
+            {
+                mgr.RequestStageChanges();
+                using var cts = new System.Threading.CancellationTokenSource(timeoutMs);
+                cts.Token.Register(() => tcs.TrySetCanceled());
+                await tcs.Task;
+                while (mgr.CurrentState != MetaDataState.Idle && !cts.IsCancellationRequested)
+                    await Task.Delay(10);
+            }
+            finally
+            {
+                mgr.StagedChangesEventHandler -= handler;
+            }
+        }
+
+        private static async Task<List<ProjectFile>> IntegrityCheckAndCaptureAsync(MetaDataManager mgr, int timeoutMs = 10_000)
+        {
+            var tcs = new TaskCompletionSource<List<ProjectFile>>();
+            Action<string, System.Collections.ObjectModel.ObservableCollection<ProjectFile>> handler =
+                (log, files) => tcs.TrySetResult(new List<ProjectFile>(files));
+            mgr.IntegrityCheckCompleteEventHandler += handler;
+            try
+            {
+                mgr.RequestProjectIntegrityCheck();
+                using var cts = new System.Threading.CancellationTokenSource(timeoutMs);
+                cts.Token.Register(() => tcs.TrySetCanceled());
+                List<ProjectFile> result = await tcs.Task;
+                // The completion event fires just before the manager flips back to Idle.
+                while (mgr.CurrentState != MetaDataState.Idle && !cts.IsCancellationRequested)
+                    await Task.Delay(10);
+                return result;
+            }
+            finally
+            {
+                mgr.IntegrityCheckCompleteEventHandler -= handler;
+            }
+        }
     }
 }

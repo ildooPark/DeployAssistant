@@ -465,12 +465,15 @@ All public `Request*` methods are the sole API surface that ViewModels call. The
 #### Key Operations
 
 **`RetrieveDataSrc(srcPath)`**
-0. Purge stale `IntegrityChecked` entries from `_registeredChangesDict` (leftovers of earlier integrity runs would otherwise accumulate for the whole session and ride into the next update).
 1. Check for a `.VersionLog` file; if found, deserialize it as `_srcProjectData`.
 2. Scan all files/directories (`DeployAssistant.deploy` sidecars are deprecated and no longer consulted — see §6.7):
    - Files in **sub-directories** → added to `_preStagedFilesDict` directly with correct relative paths.
    - Files in the **top directory** → handled as "abnormal" (may be updates to files that live in sub-directories).
 3. Fire `DataPreStagedEventHandler`.
+
+**Path precedence (`TryPreStage` / `StageChange`).** Deploy sources, dropped files and restores replace an `IntegrityChecked` finding for the same rel path — in `_preStagedFilesDict` when queued, and in `_registeredChangesDict` at staging — so the file the user is deploying wins over the drift a previous check recorded there. Other existing entries still win (first one queued stays).
+
+**Ignore-list edits (`MetaDataManager_ProjectContextLoadedCallBack`).** Every new `ProjectContext` prunes queued work that the new filter now matches: `IntegrityChecked` entries under the `IntegrityCheck` scope, scanned/dropped sources under the `Deploy` scope, from both dictionaries; restores are kept. Both list events re-fire, so the staging view and `UpdateManager` drop the entries without a re-check.
 
 **`HandleAbnormalFiles` / `RegisterDroppedFiles`** — top-directory source files and files dropped onto the staging surface share one categorization: a name matching exactly **one** tracked file pre-stages automatically at that rel path; **several** matches or **no** match raise `OverlappedFileFoundEventHandler` so the user allocates a destination (new-file candidates are computed fresh from `ProjectDirFileList`, which includes the root `""` entry). The event fires when *either* the overlap or the new list is non-empty — an overlap is not required. Dropped files are first copied into a per-drop `%TEMP%\DeployAssistant\Drop_<guid>\` folder so originals are never touched; directories and unreadable paths are skipped (the GUI reports ignored folders).
 
@@ -495,13 +498,16 @@ All public `Request*` methods are the sole API surface that ViewModels call. The
    path — missing project, missing context, stale context — still fires
    `IntegrityCheckEventHandler` with the reason and an empty list, so consumers can never
    wait forever on a check that will not report.
+   Before scanning, drops the previous run's `IntegrityChecked` entries from both
+   `_registeredChangesDict` and `_preStagedFilesDict` (user-queued restores and deploy
+   sources stay), so files `.ignore`d since the last run never reappear in the result.
 1. Gather all files/dirs on disk, excluding the ignore list.
 2. Compare against recorded `ProjectFiles`:
    - Added / deleted files & directories → generate `IntegrityChecked` change entries.
    - Intersecting files → parallel MD5 compare; mismatches → `Modified | IntegrityChecked`. When `IntegritySamplePercent < 100`, only a per-run random sample of that share is hashed; the rest go through the size/version metadata fallback (`VerifyByMetadata`).
 3. Fire `IntegrityCheckEventHandler` with log and changed list.
 
-**`FindVersionDifferences(src, dst, isRevert)`** — diff between two `ProjectData` snapshots, used for revert.
+**`FindVersionDifferences(src, dst, isRevert)`** — diff between two `ProjectData` snapshots, used for revert. Both the revert and the plain compare form (`VersionDiffWindow`, Metafile Compare, src-project integration validation) drop every path any active `.ignore` entry matches (`IgnoreType.All`), so a comparison never lists changes a checkout would skip.
 
 **`FindVersionDifferencesForIntegration(src, dst, out significantDiff)`** — diff for merge; applies integration ignore filter to compute a "significant diff" count alongside the full diff.
 
@@ -1212,7 +1218,7 @@ The decomposition below survived the AvalonDock removal; only the docking types 
 | Diff Log | Col 0, bottom | `DataGrid` of the selected version's changed files, plus Updater / Log fields and a per-row **Restore** button |
 | Project Files | Col 2, tab 1 | `DataGrid` of the tracked file set with a keyword filter, plus a **폴더별 보기** (`S.GroupByFolder`) chip that swaps the grid for a `TreeView` folder hierarchy built by `ProjectFileTreeNode.Build` (Core): folder nodes show `(file count · total size)`, leaves show name + `VersionDisplay` + human-readable size + trimmed hash — no rel-path / deployed-version / time columns (names `FsHeader`, metadata `FsBody`, one step above the app norm for scanability). Selecting a file highlights every file with the same hash (`#FFF3C4`) and auto-expands the ancestor folders of each match without collapsing anything. The tree is rebuilt from the grid's view, so the keyword filter carries over, and refreshes on project (re)load |
 | Metafile Compare | Col 2, tab 2 | Import / export sync-package flow against a `.VersionLog` metafile |
-| Ignore List | Col 2, tab 3 | Git-style ignore editor over `DeployAssistant.ignore` (`IgnoreViewModel`): add file patterns (`*`/`?` globs, matched against file names) or folder names (excludes that folder anywhere, subtree included); new entries get `IgnoreType.All`. Well-known default entries render grayed with no Remove button. Edits are local until **Save** (`RequestSaveIgnoreEntries`); **Revert** re-requests the persisted list. An unsaved-changes hint gates the Save button |
+| Ignore List | Col 2, tab 3 | Git-style ignore editor over `DeployAssistant.ignore` (`IgnoreViewModel`): add file patterns (`*`/`?` globs, matched against file names) or folder names (excludes that folder anywhere, subtree included); new entries get `IgnoreType.All`. Well-known default entries render grayed with no Remove button. Edits are local until **Save** (`RequestSaveIgnoreEntries`); **Revert** re-requests the persisted list. An unsaved-changes hint gates the Save button. A saved edit also drops already-queued changes the new entries match (§8.2, ignore-list edits) |
 | Staged Changes | Col 4, top | Staged + pre-staged change list. The **entire window is a file drop zone** once a project is loaded: dragging files in shows a full-window overlay (dashed drop mask + hint), and the drop queues via `RequestDroppedFilesAsync` (folders are refused with a dialog). A drag with no project loaded is refused outright |
 | Actions | Col 4, bottom | Updater / Update Log inputs and the Stage / Update / Clear / Refresh buttons |
 
