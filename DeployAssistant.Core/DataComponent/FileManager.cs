@@ -117,15 +117,20 @@ namespace DeployAssistant.DataComponent
                 IntegrityCheckEventHandler?.Invoke(reason, new List<ProjectFile>());
                 return;
             }
-            // _preStagedFilesDict is deliberately left alone: it holds user-queued intent
-            // (file restores, scanned deploy sources) that an integrity run — including the
-            // ones checkout gates trigger — must not silently discard.
             // Entries from earlier integrity runs would otherwise accumulate for the whole
-            // session (TryAdd lets stale state win) and ride into the next update.
+            // session (TryAdd lets stale state win) and ride into the next update, or show
+            // up in this run's result after the user has since .ignore'd them.
+            // Only IntegrityChecked entries are dropped: the rest of _preStagedFilesDict is
+            // user-queued intent (file restores, scanned deploy sources) that an integrity
+            // run — including the ones checkout gates trigger — must not silently discard.
             foreach (string staleKey in _registeredChangesDict
                          .Where(kv => (kv.Value.DataState & DataState.IntegrityChecked) != 0)
                          .Select(kv => kv.Key).ToList())
                 _registeredChangesDict.Remove(staleKey);
+            foreach (string staleKey in _preStagedFilesDict
+                         .Where(kv => (kv.Value.DataState & DataState.IntegrityChecked) != 0)
+                         .Select(kv => kv.Key).ToList())
+                _preStagedFilesDict.Remove(staleKey);
 
             try
             {
@@ -798,17 +803,27 @@ namespace DeployAssistant.DataComponent
                 Dictionary<string, ProjectFile> srcDict = srcData.ProjectFiles;
                 Dictionary<string, ProjectFile> dstDict = dstData.ProjectFiles;
 
-                // Files which is not on the Dst 
-                IEnumerable<string> filesOnSrc = srcData.ProjectRelFilePathsList.Except(dstData.ProjectRelFilePathsList);
+                // Same .ignore semantics as the revert diff above, so a version comparison
+                // (and the integration validation built on it) never lists paths a
+                // checkout to that version would skip.
+                Func<string, ProjectDataType, bool> isIgnored = (rel, dt) =>
+                    _projectContext != null && _projectContext.IgnoreFilter.Matches(rel, dt, IgnoreType.All);
+
+                var srcFilePaths = srcData.ProjectRelFilePathsList.Where(p => !isIgnored(p, ProjectDataType.File)).ToList();
+                var dstFilePaths = dstData.ProjectRelFilePathsList.Where(p => !isIgnored(p, ProjectDataType.File)).ToList();
+                var srcDirPaths  = srcData.ProjectRelDirsList.Where(p => !isIgnored(p, ProjectDataType.Directory)).ToList();
+                var dstDirPaths  = dstData.ProjectRelDirsList.Where(p => !isIgnored(p, ProjectDataType.Directory)).ToList();
+
+                // Files which is not on the Dst
+                IEnumerable<string> filesOnSrc = srcFilePaths.Except(dstFilePaths);
                 // Files which is not on the Src
-                IEnumerable<string> filesOnDst = dstData.ProjectRelFilePathsList.Except(srcData.ProjectRelFilePathsList);
+                IEnumerable<string> filesOnDst = dstFilePaths.Except(srcFilePaths);
                 // Directories which is not on the Src
-                IEnumerable<string> dirsOnSrc = srcData.ProjectRelDirsList.Except(dstData.ProjectRelDirsList);
+                IEnumerable<string> dirsOnSrc = srcDirPaths.Except(dstDirPaths);
                 // Directories which is not on the Dst
-                IEnumerable<string> dirsOnDst = dstData.ProjectRelDirsList.Except(srcData.ProjectRelDirsList);
+                IEnumerable<string> dirsOnDst = dstDirPaths.Except(srcDirPaths);
                 // Files to Overwrite
-                IEnumerable<string> intersectFiles = srcData.ProjectRelFilePathsList.Intersect(dstData.ProjectRelFilePathsList);
-                // TODO: Filter out the Ignore File List 
+                IEnumerable<string> intersectFiles = srcFilePaths.Intersect(dstFilePaths);
 
                 foreach (string dirRelPath in dirsOnSrc)
                 {
@@ -990,7 +1005,7 @@ namespace DeployAssistant.DataComponent
                         srcDirPath,
                         PathCompat.GetRelativePath(srcDirPath, subDirFileAbsPath)
                         );
-                    _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
+                    TryPreStage(newFile);
                 }
 
                 foreach (string dirAbsPath in dirsAllDirs)
@@ -1002,7 +1017,7 @@ namespace DeployAssistant.DataComponent
                         srcDirPath,
                         PathCompat.GetRelativePath(srcDirPath, dirAbsPath)
                         );
-                    _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
+                    TryPreStage(newFile);
                 }
                 DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
             }
@@ -1074,7 +1089,7 @@ namespace DeployAssistant.DataComponent
                         srcDirPath,
                         PathCompat.GetRelativePath(srcDirPath, subDirFileAbsPath)
                         );
-                    _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
+                    TryPreStage(newFile);
                 }
 
                 foreach (string dirAbsPath in filteredDirs2)
@@ -1086,7 +1101,7 @@ namespace DeployAssistant.DataComponent
                         srcDirPath,
                         PathCompat.GetRelativePath(srcDirPath, dirAbsPath)
                         );
-                    _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
+                    TryPreStage(newFile);
                 }
                 DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
             }
@@ -1155,7 +1170,9 @@ namespace DeployAssistant.DataComponent
                     List<ProjectFile> filteredFileList = [];
                     foreach (ProjectFile file in overlappingFiles)
                     {
-                        if (_preStagedFilesDict.TryGetValue(file.DataRelPath, out ProjectFile? projFile))
+                        // An integrity finding doesn't claim the path — TryPreStage replaces it.
+                        if (_preStagedFilesDict.TryGetValue(file.DataRelPath, out ProjectFile? projFile)
+                            && (projFile.DataState & DataState.IntegrityChecked) == 0)
                         {
                             continue;
                         }
@@ -1166,7 +1183,7 @@ namespace DeployAssistant.DataComponent
                         string newSrcFilePath = Path.Combine(srcPath, filteredFileList[0].DataRelPath);
                         _fileHandlerTool.HandleFile(newFile.DataAbsPath, newSrcFilePath, DataState.PreStaged);
                         newFile.DataRelPath = filteredFileList[0].DataRelPath;
-                        _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
+                        TryPreStage(newFile);
                     }
                     else
                     {
@@ -1192,7 +1209,7 @@ namespace DeployAssistant.DataComponent
                         PathCompat.GetRelativePath(srcPath, newSrcFilePath)
                         );
 
-                    _preStagedFilesDict.TryAdd(newFile.DataRelPath, newFile);
+                    TryPreStage(newFile);
                 }
                 // New File
                 else
@@ -1224,10 +1241,24 @@ namespace DeployAssistant.DataComponent
             }
             DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
         }
+        /// <summary>
+        /// Queues a deploy source, drop or restore at its rel path. An integrity finding
+        /// already holding that path gives way: the user is deliberately replacing that
+        /// drifted file, and a bare TryAdd let the stale finding win and silently dropped
+        /// the new source.
+        /// </summary>
+        private bool TryPreStage(ProjectFile file)
+        {
+            if (_preStagedFilesDict.TryGetValue(file.DataRelPath, out ProjectFile? existing)
+                && (existing.DataState & DataState.IntegrityChecked) != 0)
+                _preStagedFilesDict.Remove(file.DataRelPath);
+            return _preStagedFilesDict.TryAdd(file.DataRelPath, file);
+        }
+
         public void RegisterNewfile(ProjectFile projectFile, DataState fileState)
         {
             ProjectFile newfile = new ProjectFile(projectFile, fileState | DataState.PreStaged);
-            if (!_preStagedFilesDict.TryAdd(newfile.DataRelPath, newfile))
+            if (!TryPreStage(newfile))
             {
                 PreStagedDataOverlapEventHandler?.Invoke(newfile);
                 return;
@@ -1245,7 +1276,7 @@ namespace DeployAssistant.DataComponent
                     _fileHandlerTool.HandleFile(overlappedFile.SrcFile.DataAbsPath, newSrcFilePath, DataState.PreStaged);
                     ProjectFile newPreStagedFile = new ProjectFile(overlappedFile.SrcFile, DataState.PreStaged);
                     newPreStagedFile.DataRelPath = overlappedFile.DstFile.DataRelPath;
-                    _preStagedFilesDict.TryAdd(newPreStagedFile.DataRelPath, newPreStagedFile);
+                    TryPreStage(newPreStagedFile);
                 }
             }
             foreach (ChangedFile newFile in sortedNew)
@@ -1259,7 +1290,7 @@ namespace DeployAssistant.DataComponent
                     _fileHandlerTool.HandleFile(newFile.SrcFile.DataAbsPath, newSrcFilePath, DataState.Added);
                     ProjectFile newPreStagedFile = new ProjectFile(newFile.SrcFile, DataState.Added);
                     newPreStagedFile.DataRelPath = newSrcFileRelPath;
-                    _preStagedFilesDict.TryAdd(newPreStagedFile.DataRelPath, newPreStagedFile);
+                    TryPreStage(newPreStagedFile);
                 }
             }
             DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
@@ -1486,6 +1517,20 @@ namespace DeployAssistant.DataComponent
             }
         }
         
+        /// <summary>
+        /// Staging-step counterpart of <see cref="TryPreStage"/>: a queued source replaces
+        /// an integrity finding already staged for its path. Integrity findings passing
+        /// through here keep the original (IntegrityChecked) change.
+        /// </summary>
+        private void StageChange(ProjectFile queuedFile, ChangedFile change)
+        {
+            if ((queuedFile.DataState & DataState.IntegrityChecked) == 0
+                && _registeredChangesDict.TryGetValue(queuedFile.DataRelPath, out ChangedFile? existing)
+                && (existing.DataState & DataState.IntegrityChecked) != 0)
+                _registeredChangesDict.Remove(queuedFile.DataRelPath);
+            _registeredChangesDict.TryAdd(queuedFile.DataRelPath, change);
+        }
+
         private void UpdateStageFileList()
         {
             if (_preStagedFilesDict.Count <= 0) return;
@@ -1507,14 +1552,14 @@ namespace DeployAssistant.DataComponent
                             ProjectFile srcFile = new ProjectFile(projectFile, DataState.Backup, backupFile.DataSrcPath);
                             ProjectFile dstFile = new ProjectFile(registerdFile, DataState.Modified, projectFile.DataSrcPath);
                             ChangedFile newChange = new ChangedFile(srcFile, dstFile, DataState.Restored, true);
-                            _registeredChangesDict.TryAdd(registerdFile.DataRelPath, newChange);
+                            StageChange(registerdFile, newChange);
                         }
                         else
                         {
                             ProjectFile srcFile = new ProjectFile(registerdFile, DataState.Backup, backupFile.DataSrcPath);
                             ProjectFile dstFile = new ProjectFile(registerdFile, DataState.Restored, _dstProjectData.ProjectPath);
                             ChangedFile newChange = new ChangedFile(srcFile, dstFile, DataState.Restored, true);
-                            _registeredChangesDict.TryAdd(registerdFile.DataRelPath, newChange);
+                            StageChange(registerdFile, newChange);
                         }
                     }
                     continue;
@@ -1524,7 +1569,7 @@ namespace DeployAssistant.DataComponent
                 if ((registerdFile.DataState & DataState.Deleted) != 0)
                 {
                     ChangedFile newChange = new ChangedFile(new ProjectFile(registerdFile), DataState.Deleted);
-                    _registeredChangesDict.TryAdd(registerdFile.DataRelPath, newChange);
+                    StageChange(registerdFile, newChange);
                     continue;
                 }
                 // If File is Modified or Added
@@ -1536,7 +1581,7 @@ namespace DeployAssistant.DataComponent
                         ProjectFile srcFile = new ProjectFile(dstProjectFile, DataState.None, registerdFile.DataSrcPath);
                         ProjectFile dstFile = new ProjectFile(registerdFile, DataState.Modified, dstProjectFile.DataSrcPath);
                         ChangedFile newChange = new ChangedFile(srcFile, dstFile, DataState.Modified, true);
-                        _registeredChangesDict.TryAdd(registerdFile.DataRelPath, newChange);
+                        StageChange(registerdFile, newChange);
                     }
                     else
                         continue;
@@ -1545,7 +1590,7 @@ namespace DeployAssistant.DataComponent
                 {
                     ProjectFile srcFile = new ProjectFile(registerdFile, DataState.None);
                     ProjectFile dstFile = new ProjectFile(registerdFile, DataState.Added, _dstProjectData.ProjectPath);
-                    _registeredChangesDict.TryAdd(registerdFile.DataRelPath, new ChangedFile(srcFile, dstFile, DataState.Added));
+                    StageChange(registerdFile, new ChangedFile(srcFile, dstFile, DataState.Added));
                 }
             }
 
@@ -1665,6 +1710,39 @@ namespace DeployAssistant.DataComponent
         {
             if (ctxObj is not ProjectContext ctx) return;
             _projectContext = ctx;
+            PruneNewlyIgnoredChanges();
+        }
+
+        /// <summary>
+        /// An .ignore edit applies to work already queued, not only to future scans —
+        /// otherwise changes found before the edit stay staged and ride into the next
+        /// update. Integrity findings follow the IntegrityCheck scope, scanned or dropped
+        /// deploy sources the Deploy scope; explicit restores are user intent and stay.
+        /// </summary>
+        private void PruneNewlyIgnoredChanges()
+        {
+            if (_projectContext == null) return;
+            IIgnoreFilter filter = _projectContext.IgnoreFilter;
+            bool IsNowIgnored(string relPath, ProjectFile? file, DataState state)
+            {
+                if (file == null || (state & DataState.Restored) != 0) return false;
+                IgnoreType scope = (state & DataState.IntegrityChecked) != 0 ? IgnoreType.IntegrityCheck : IgnoreType.Deploy;
+                return filter.Matches(relPath, file.DataType, scope);
+            }
+
+            List<string> preStagedKeys = _preStagedFilesDict
+                .Where(kv => IsNowIgnored(kv.Key, kv.Value, kv.Value.DataState))
+                .Select(kv => kv.Key).ToList();
+            List<string> stagedKeys = _registeredChangesDict
+                .Where(kv => IsNowIgnored(kv.Key, kv.Value.DstFile ?? kv.Value.SrcFile, kv.Value.DataState))
+                .Select(kv => kv.Key).ToList();
+            if (preStagedKeys.Count == 0 && stagedKeys.Count == 0) return;
+
+            foreach (string key in preStagedKeys) _preStagedFilesDict.Remove(key);
+            foreach (string key in stagedKeys) _registeredChangesDict.Remove(key);
+            DeleteOwnedDropRoots(onlyUnreferenced: true);
+            DataPreStagedEventHandler?.Invoke(_preStagedFilesDict.Values.ToList());
+            DataStagedEventHandler?.Invoke(_registeredChangesDict.Values.ToList());
         }
         #endregion
 
