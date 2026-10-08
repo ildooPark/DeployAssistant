@@ -465,12 +465,15 @@ All public `Request*` methods are the sole API surface that ViewModels call. The
 #### Key Operations
 
 **`RetrieveDataSrc(srcPath)`**
-0. Purge stale `IntegrityChecked` entries from `_registeredChangesDict` (leftovers of earlier integrity runs would otherwise accumulate for the whole session and ride into the next update).
 1. Check for a `.VersionLog` file; if found, deserialize it as `_srcProjectData`.
 2. Scan all files/directories (`DeployAssistant.deploy` sidecars are deprecated and no longer consulted — see §6.7):
    - Files in **sub-directories** → added to `_preStagedFilesDict` directly with correct relative paths.
    - Files in the **top directory** → handled as "abnormal" (may be updates to files that live in sub-directories).
 3. Fire `DataPreStagedEventHandler`.
+
+**Path precedence (`TryPreStage` / `StageChange`).** Deploy sources, dropped files and restores replace an `IntegrityChecked` finding for the same rel path — in `_preStagedFilesDict` when queued, and in `_registeredChangesDict` at staging — so the file the user is deploying wins over the drift a previous check recorded there. Other existing entries still win (first one queued stays).
+
+**Ignore-list edits (`MetaDataManager_ProjectContextLoadedCallBack`).** Every new `ProjectContext` prunes queued work that the new filter now matches: `IntegrityChecked` entries under the `IntegrityCheck` scope, scanned/dropped sources under the `Deploy` scope, from both dictionaries; restores are kept. Both list events re-fire, so the staging view and `UpdateManager` drop the entries without a re-check.
 
 **`HandleAbnormalFiles` / `RegisterDroppedFiles`** — top-directory source files and files dropped onto the staging surface share one categorization: a name matching exactly **one** tracked file pre-stages automatically at that rel path; **several** matches or **no** match raise `OverlappedFileFoundEventHandler` so the user allocates a destination (new-file candidates are computed fresh from `ProjectDirFileList`, which includes the root `""` entry). The event fires when *either* the overlap or the new list is non-empty — an overlap is not required. Dropped files are first copied into a per-drop `%TEMP%\DeployAssistant\Drop_<guid>\` folder so originals are never touched; directories and unreadable paths are skipped (the GUI reports ignored folders).
 
@@ -495,13 +498,16 @@ All public `Request*` methods are the sole API surface that ViewModels call. The
    path — missing project, missing context, stale context — still fires
    `IntegrityCheckEventHandler` with the reason and an empty list, so consumers can never
    wait forever on a check that will not report.
+   Before scanning, drops the previous run's `IntegrityChecked` entries from both
+   `_registeredChangesDict` and `_preStagedFilesDict` (user-queued restores and deploy
+   sources stay), so files `.ignore`d since the last run never reappear in the result.
 1. Gather all files/dirs on disk, excluding the ignore list.
 2. Compare against recorded `ProjectFiles`:
    - Added / deleted files & directories → generate `IntegrityChecked` change entries.
    - Intersecting files → parallel MD5 compare; mismatches → `Modified | IntegrityChecked`. When `IntegritySamplePercent < 100`, only a per-run random sample of that share is hashed; the rest go through the size/version metadata fallback (`VerifyByMetadata`).
 3. Fire `IntegrityCheckEventHandler` with log and changed list.
 
-**`FindVersionDifferences(src, dst, isRevert)`** — diff between two `ProjectData` snapshots, used for revert.
+**`FindVersionDifferences(src, dst, isRevert)`** — diff between two `ProjectData` snapshots, used for revert. Both the revert and the plain compare form (`VersionDiffWindow`, Metafile Compare, src-project integration validation) drop every path any active `.ignore` entry matches (`IgnoreType.All`), so a comparison never lists changes a checkout would skip.
 
 **`FindVersionDifferencesForIntegration(src, dst, out significantDiff)`** — diff for merge; applies integration ignore filter to compute a "significant diff" count alongside the full diff.
 
@@ -828,7 +834,9 @@ The compact layout (default 380 × 600 DIP, minimum 340 × 480) shows the projec
 
 `CompactViewModel` listens to `IntegrityCheckCompleteEventHandler` and summarises only `IntegrityChecked` file entries (drag & drop items waiting in the pre-staged queue are not findings): counts by kind, the first 8 rows (badge, file name, folder) and "Fast check, N% sample · HH:mm" / "Full hash · HH:mm" from `LastIntegritySamplePercent`. `ProjLoadedEventHandler` (load, update, checkout) clears the result, since main has moved. While compact, the integrity dashboard (`IntegrityLogWindow`) does not auto-open; **Show all** switches to full and opens it with the stored result. The busy overlay's card drops its 440 DIP minimum width in compact mode.
 
-**Bounds and persistence** (`MainWindow.Layout.cs`). Each mode keeps its own bounds; switching stores the outgoing mode's bounds (`RestoreBounds` when maximized), applies the incoming mode's minimum size and bounds, and saves `WindowLayout`. Closing saves the current mode, both bounds and the pin, so the app reopens in the last mode. `WindowPlacement.Fit` decides where a mode opens: saved bounds are kept when at least 120 × 80 DIP of them lies on the virtual screen and the title bar is reachable; otherwise the default size is centred in the primary work area. Sizes are clamped between the mode's minimum and the work area, and the full layout's minimum (960 × 600) is itself capped to the work area, so a 1366 × 768 laptop at 125% (≈ 1093 × 574 DIP usable) gets a window that fits.
+**Bounds and persistence** (`MainWindow.Layout.cs`). Each mode keeps its own bounds; switching stores the outgoing mode's bounds (`RestoreBounds` when maximized), applies the incoming mode's minimum size and bounds, and saves `WindowLayout`. Closing saves the current mode, both bounds and the pin, so the app reopens in the last mode. `WindowPlacement.Fit` decides where a mode opens, against every monitor's work area (`MonitorWorkAreas.AllInDips`, Win32 `EnumDisplayMonitors` + `GetDpiForMonitor`, each monitor divided by its own DPI — `SystemParameters.WorkArea` only knows the primary monitor at the system DPI): saved bounds are kept on the monitor they overlap most (at least 120 × 80 DIP, title bar reachable), shrunk to that monitor and slid inside it (`KeepInside`); otherwise the default size is centred in the primary work area. The full layout's minimum (960 × 600) is capped to the primary work area, so a 1366 × 768 laptop at 125% (≈ 1093 × 574 DIP usable) gets a window that fits. Once the window has a handle (`SourceInitialized`, again on `Loaded`) `ClampToCurrentMonitor` re-fits it into the work area of the monitor it actually landed on, using `GetDpiForWindow`. Setting `DA_LAYOUT_TRACE` to a file path appends every placement decision there, for "the window opens off-screen" reports.
+
+The integrity-check commands (button, F5, Ctrl+F5) are disabled until a project is loaded: with no project `FileManager` refuses the check and reports an empty list, which compact mode would otherwise have shown as "All files match". `CompactViewModel` also ignores any result that arrives while `MainProjectData` is null.
 
 **DPI and fonts.** `app.manifest` declares `PerMonitorV2` (fallback `PerMonitor`, `dpiAware true/PM`) and `App.config` sets `Switch.System.Windows.DoNotScaleForDpiChanges=false`, so WPF re-lays-out at each monitor's scale instead of Windows bitmap-stretching the window. The window sets `FontFamily="Segoe UI, Malgun Gothic"` (Latin always Segoe UI, Hangul Malgun Gothic, whatever the OS UI language), `UseLayoutRounding` and `TextOptions.TextFormattingMode="Display"`.
 
@@ -892,7 +900,7 @@ Checkout applies a stored snapshot to the working directory. There is one entry 
 2. `FileManager.MainProjectIntegrityCheck()` runs async:
    - Reads all files/dirs from disk; excludes ignore list.
    - Set-arithmetic vs. recorded list → Added/Deleted entries.
-   - Parallel MD5 of intersecting files → Modified entries. **Fast check:** when the saved `FastIntegritySamplePercent` (GUI Settings menu, 1–100, default 100) is below 100, only a random sample of that share is hashed per run — a fresh `Random` each run, so a file sampled out this time can be caught the next — and the rest verify by size/version metadata. The pre-checkout gates always force 100% (`forceFullHash: true`), so sampling never weakens a checkout decision.
+   - Parallel MD5 of intersecting files → Modified entries. The hashing and verification run concurrently (up to 12 tasks), but the tasks only *queue* their findings and log lines; `_preStagedFilesDict`, `_registeredChangesDict` and the log are written on one thread after `Task.WhenAll`, in path order. (Through GUI 4.1.1 each task wrote those plain `Dictionary`s itself, and concurrent writes lost entries: the result window, which reads the pre-staged list, could show 4 changes while Deploy, which reads the staged list, committed 1.) **Fast check:** when the saved `FastIntegritySamplePercent` (GUI Settings menu, 1–100, default 100) is below 100, only a random sample of that share is hashed per run — a fresh `Random` each run, so a file sampled out this time can be caught the next — and the rest verify by size/version metadata. The pre-checkout gates always force 100% (`forceFullHash: true`), so sampling never weakens a checkout decision.
 3. Result opens `IntegrityLogWindow` with a text log and list of deviant files.
 4. User can select a deviant file and click **Revert Change** to restore it individually.
 
@@ -1235,7 +1243,7 @@ The decomposition below survived the AvalonDock removal; only the docking types 
 | Diff Log | Col 0, bottom | `DataGrid` of the selected version's changed files, plus Updater / Log fields and a per-row **Restore** button |
 | Project Files | Col 2, tab 1 | `DataGrid` of the tracked file set with a keyword filter, plus a **폴더별 보기** (`S.GroupByFolder`) chip that swaps the grid for a `TreeView` folder hierarchy built by `ProjectFileTreeNode.Build` (Core): folder nodes show `(file count · total size)`, leaves show name + `VersionDisplay` + human-readable size + trimmed hash — no rel-path / deployed-version / time columns (names `FsHeader`, metadata `FsBody`, one step above the app norm for scanability). Selecting a file highlights every file with the same hash (`#FFF3C4`) and auto-expands the ancestor folders of each match without collapsing anything. The tree is rebuilt from the grid's view, so the keyword filter carries over, and refreshes on project (re)load |
 | Metafile Compare | Col 2, tab 2 | Import / export sync-package flow against a `.VersionLog` metafile |
-| Ignore List | Col 2, tab 3 | Git-style ignore editor over `DeployAssistant.ignore` (`IgnoreViewModel`): add file patterns (`*`/`?` globs, matched against file names) or folder names (excludes that folder anywhere, subtree included); new entries get `IgnoreType.All`. Well-known default entries render grayed with no Remove button. Edits are local until **Save** (`RequestSaveIgnoreEntries`); **Revert** re-requests the persisted list. An unsaved-changes hint gates the Save button |
+| Ignore List | Col 2, tab 3 | Git-style ignore editor over `DeployAssistant.ignore` (`IgnoreViewModel`): add file patterns (`*`/`?` globs, matched against file names) or folder names (excludes that folder anywhere, subtree included); new entries get `IgnoreType.All`. Well-known default entries render grayed with no Remove button. Edits are local until **Save** (`RequestSaveIgnoreEntries`); **Revert** re-requests the persisted list. An unsaved-changes hint gates the Save button. A saved edit also drops already-queued changes the new entries match (§8.2, ignore-list edits) |
 | Staged Changes | Col 4, top | Staged + pre-staged change list. The **entire window is a file drop zone** once a project is loaded: dragging files in shows a full-window overlay (dashed drop mask + hint), and the drop queues via `RequestDroppedFilesAsync` (folders are refused with a dialog). A drag with no project loaded is refused outright |
 | Actions | Col 4, bottom | Updater / Update Log inputs and the Stage / Update / Clear / Refresh buttons |
 

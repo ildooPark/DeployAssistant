@@ -351,7 +351,8 @@ namespace DeployAssistant.ViewModel
 
         private bool CanRunIntegrityTest(object sender)
         {
-            return _metaDataState == MetaDataState.Idle;
+            // Without a project the check only reports "could not run" as an empty result.
+            return _metaDataState == MetaDataState.Idle && _dstProjData != null;
         }
 
         private void MainProjectIntegrityTest(object sender)
