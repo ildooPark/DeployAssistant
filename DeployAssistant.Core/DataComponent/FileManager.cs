@@ -303,6 +303,14 @@ namespace DeployAssistant.DataComponent
                 foreach (string warning in hashFailureLog)
                     fileIntegrityLog.AppendLine(warning);
 
+                // The verification tasks below run up to 12 at a time. They must not touch
+                // _preStagedFilesDict, _registeredChangesDict or the log StringBuilder — none
+                // is thread-safe, and concurrent writes silently dropped findings (a site check
+                // showed 4 changes while Deploy, which reads the staged dict, committed 1).
+                // Findings and log lines are queued here and applied after Task.WhenAll.
+                var modifiedFindings = new ConcurrentQueue<(ProjectFile Src, ProjectFile Dst)>();
+                var verifyLog = new ConcurrentQueue<(string RelPath, string Line)>();
+
                 List<Task> asyncTask = [];
                 foreach (ProjectFile intersectedFile in projectFilesConcurrent.Values)
                 {
@@ -324,7 +332,7 @@ namespace DeployAssistant.DataComponent
                             {
                                 // Hash retries exhausted — fall back to size + version metadata.
                                 var (metadataMatch, logMsg) = VerifyByMetadata(_dstProjectData.ProjectPath, projectFile.DataRelPath, projectFile);
-                                fileIntegrityLog.AppendLine(logMsg);
+                                verifyLog.Enqueue((projectFile.DataRelPath, logMsg));
                                 hashMismatch = !metadataMatch;
                                 verifiedByMetadata = true;
                             }
@@ -344,7 +352,7 @@ namespace DeployAssistant.DataComponent
 
                             if (hashMismatch)
                             {
-                                fileIntegrityLog.AppendLine($"File {projectFile.DataName} on {projectFile.DataRelPath} has been modified");
+                                verifyLog.Enqueue((projectFile.DataRelPath, $"File {projectFile.DataName} on {projectFile.DataRelPath} has been modified"));
 
                                 ProjectFile srcFile = new ProjectFile(projectFile, DataState.None);
                                 ProjectFile dstFile = new ProjectFile(projectFile, DataState.Modified | DataState.IntegrityChecked);
@@ -361,12 +369,11 @@ namespace DeployAssistant.DataComponent
                                 catch (Exception ex)
                                 {
                                     // Version/size/time read failed; retain values copied from projectFile and log the warning.
-                                    fileIntegrityLog.AppendLine($"Warning: Could not read version/size/time for modified file {projectFile.DataRelPath}: {ex.Message}");
+                                    verifyLog.Enqueue((projectFile.DataRelPath, $"Warning: Could not read version/size/time for modified file {projectFile.DataRelPath}: {ex.Message}"));
                                 }
                                 dstFile.DataHash = intersectedFile.DataHash;  // may be "" when hash failed — new contract: callers tolerate empty
 
-                                _preStagedFilesDict.TryAdd(projectFile.DataRelPath, dstFile);
-                                _registeredChangesDict.TryAdd(dstFile.DataRelPath, new ChangedFile(srcFile, dstFile, DataState.Modified | DataState.IntegrityChecked, true));
+                                modifiedFindings.Enqueue((srcFile, dstFile));
                             }
                         }
                         catch (Exception Ex)
@@ -384,6 +391,15 @@ namespace DeployAssistant.DataComponent
                 }
 
                 await Task.WhenAll(asyncTask);
+
+                // Single-threaded from here; path order keeps the log and the lists stable run to run.
+                foreach (var (_, line) in verifyLog.OrderBy(e => e.RelPath, StringComparer.OrdinalIgnoreCase))
+                    fileIntegrityLog.AppendLine(line);
+                foreach (var (srcFile, dstFile) in modifiedFindings.OrderBy(f => f.Dst.DataRelPath, StringComparer.OrdinalIgnoreCase))
+                {
+                    _preStagedFilesDict.TryAdd(dstFile.DataRelPath, dstFile);
+                    _registeredChangesDict.TryAdd(dstFile.DataRelPath, new ChangedFile(srcFile, dstFile, DataState.Modified | DataState.IntegrityChecked, true));
+                }
 
                 fileIntegrityLog.Append($"Integrity Check Took: {sw.Elapsed.ToString()}s \n");
                 fileIntegrityLog.AppendLine("Integrity Check Complete");

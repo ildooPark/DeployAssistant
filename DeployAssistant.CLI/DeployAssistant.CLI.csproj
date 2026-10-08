@@ -11,9 +11,9 @@
     <!-- The CLI carries its own semver line, independent of the GUI's
          (see docs/release-process.md). Bump alongside the -CliVersion passed to
          scripts/release.ps1, and update CliVersionTests to match. -->
-    <Version>2.0.2</Version>
-    <AssemblyVersion>2.0.2.0</AssemblyVersion>
-    <FileVersion>2.0.2.0</FileVersion>
+    <Version>2.0.3</Version>
+    <AssemblyVersion>2.0.3.0</AssemblyVersion>
+    <FileVersion>2.0.3.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
