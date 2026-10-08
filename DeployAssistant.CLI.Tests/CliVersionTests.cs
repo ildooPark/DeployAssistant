@@ -32,7 +32,7 @@ public class CliVersionTests
     {
         // CLI versions independently of the GUI (docs/release-process.md); bump both
         // this expectation and the csproj together when the CLI release line moves.
-        Assert.Equal("2.0.2", CliVersion.Display);
+        Assert.Equal("2.0.3", CliVersion.Display);
     }
 
     [Fact]
