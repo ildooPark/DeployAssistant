@@ -68,31 +68,37 @@ internal sealed class VersionDeleteGateScreen : Screen
         _phase = Phase.Preview;
     }
 
+    public override string Title => "Delete";
+
+    public override IReadOnlyList<KeyHint> Hints => _phase switch
+    {
+        Phase.Preview => new[] { new KeyHint("y", "delete permanently"), new KeyHint("n/esc", "cancel") },
+        Phase.Blocked or Phase.Error => new[] { new KeyHint("any key", "back") },
+        _ => Array.Empty<KeyHint>(),
+    };
+
     public override void Render()
     {
         switch (_phase)
         {
             case Phase.Preview:
-                AnsiConsole.Write(BuildPlanCard(_plan!));
-                AnsiConsole.WriteLine();
-                AnsiConsole.MarkupLine(TextStyle.Dim("  This removes the version from the history permanently."));
-                AnsiConsole.WriteLine();
-                AnsiConsole.MarkupLine(TextStyle.Dim("  y delete · n/esc cancel"));
+                RenderPlanCard(_plan!);
+                Ui.Blank();
+                Ui.Line($"  [red]{Glyphs.Warn}[/] This removes the version from the history permanently.");
                 return;
 
             case Phase.Blocked:
-                AnsiConsole.Write(BuildBlockedCard());
-                AnsiConsole.WriteLine();
-                AnsiConsole.MarkupLine(TextStyle.Dim("  Press any key to return."));
+                RenderBlockedCard();
                 return;
 
             case Phase.Deleting:
-                AnsiConsole.MarkupLine("  [cyan]Working...[/]");
+                Ui.Blank();
+                Ui.Line("  [aqua]Deleting...[/]");
                 return;
 
             case Phase.Error:
-                AnsiConsole.MarkupLine($"  [red]{TextStyle.ErrorGlyph} {Markup.Escape(_errorMessage ?? "Unknown error")}[/]");
-                AnsiConsole.MarkupLine(TextStyle.Dim("  Press any key to return."));
+                Ui.Box("Delete failed", new[] { $"[red]{Markup.Escape(_errorMessage ?? "Unknown error")}[/]" },
+                       Color.Red, "red bold");
                 return;
         }
     }
@@ -153,27 +159,26 @@ internal sealed class VersionDeleteGateScreen : Screen
         return ScreenAction.StayAction;
     }
 
-    private Panel BuildPlanCard(VersionDeletePlan plan)
+    private static void RenderPlanCard(VersionDeletePlan plan)
     {
-        string body =
-            $"{TextStyle.Bold("Version   ")}  {TextStyle.Accent(Markup.Escape(plan.VersionName))}\n" +
-            $"{TextStyle.Bold("Folder    ")}  {Markup.Escape(plan.BackupFolderPath)}\n" +
-            $"{TextStyle.Bold("Reclaims  ")}  {FormatBytes(plan.ReclaimableBytes)}   " +
-                $"{TextStyle.Dim($"({plan.ExclusiveHashes.Count} exclusive backup file(s) deleted)")}\n" +
-            $"{TextStyle.Bold("Keeps     ")}  {plan.SharedHashes.Count} shared backup file(s)   " +
-                $"{TextStyle.Dim($"({plan.RelocationHashes.Count} relocated first)")}\n" +
-            $"{TextStyle.Bold("Folder    ")}  {(plan.BackupFolderRemovable ? "removed after relocation" : TextStyle.Dim("kept (still referenced)"))}";
-
-        return new Panel(body)
-            .Header(TextStyle.Removed(Markup.Escape("Delete version")))
-            .BorderColor(Color.Red);
+        Ui.Card("Delete version", new[]
+        {
+            new CardRow("Version", plan.VersionName, style: "aqua bold"),
+            new CardRow("Backup folder", plan.BackupFolderPath, isPath: true),
+            new CardRow("Reclaims", FormatBytes(plan.ReclaimableBytes),
+                        note: $"{plan.ExclusiveHashes.Count} exclusive backup file(s) deleted"),
+            new CardRow("Keeps", $"{plan.SharedHashes.Count} shared backup file(s)",
+                        note: $"{plan.RelocationHashes.Count} relocated first"),
+            new CardRow("Folder", plan.BackupFolderRemovable ? "removed after relocation" : "kept (still referenced)",
+                        style: plan.BackupFolderRemovable ? null : "grey"),
+        }, Color.Red, "red bold");
     }
 
-    private Panel BuildBlockedCard()
+    private void RenderBlockedCard()
     {
         var lines = new List<string>
         {
-            $"{TextStyle.Bold("Version   ")}  {Markup.Escape(_plan?.VersionName ?? _target.UpdatedVersion ?? "")}",
+            $"[grey]Version[/]  {TextStyle.Accent(Markup.Escape(Ui.Fit(_plan?.VersionName ?? _target.UpdatedVersion ?? "", Ui.Width - 14)))}",
             "",
             "Cannot delete this version:",
         };
@@ -182,9 +187,7 @@ internal sealed class VersionDeleteGateScreen : Screen
         if (_messages.Count == 0)
             lines.Add($"  {TextStyle.ErrorGlyph} (no reason reported)");
 
-        return new Panel(string.Join("\n", lines))
-            .Header(TextStyle.Modified(Markup.Escape("Delete refused")))
-            .BorderColor(Color.Yellow);
+        Ui.Box("Delete refused", lines, Color.Yellow, "yellow bold");
     }
 
     private static string Describe(VersionDeleteResult? result, string fallback)

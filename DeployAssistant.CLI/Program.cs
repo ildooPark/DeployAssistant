@@ -60,6 +60,7 @@ namespace DeployAssistant.CLI
             Console.WriteLine();
             Console.WriteLine("The TUI requires a real terminal (cmd.exe, Windows Terminal, etc).");
             Console.WriteLine("Output redirection / piping is not supported by the TUI.");
+            Console.WriteLine("Set DA_CLI_GLYPHS=ascii (or unicode) to force the border/symbol set.");
         }
 
         private static void PrintVersion()

@@ -25,29 +25,30 @@ public class TextStyleTests
     }
 
     [Fact]
-    public void Restored_WrapsInMagentaMarkup()
+    public void Restored_WrapsInFuchsiaMarkup()
     {
-        Assert.Equal("[magenta]hello[/]", TextStyle.Restored("hello"));
+        Assert.Equal("[fuchsia]hello[/]", TextStyle.Restored("hello"));
     }
 
     [Fact]
-    public void Accent_WrapsInCyanBoldMarkup()
+    public void Accent_WrapsInAquaBoldMarkup()
     {
-        Assert.Equal("[cyan bold]hello[/]", TextStyle.Accent("hello"));
+        Assert.Equal("[aqua bold]hello[/]", TextStyle.Accent("hello"));
     }
 
     [Fact]
-    public void Dim_WrapsInDimMarkup()
+    public void Dim_UsesGreyNotTheFaintAttribute()
     {
-        Assert.Equal("[dim]hello[/]", TextStyle.Dim("hello"));
+        // Legacy conhost ignores SGR 2 (faint), so "dim" text would look normal there.
+        Assert.Equal("[grey]hello[/]", TextStyle.Dim("hello"));
     }
 
     [Theory]
-    [InlineData(DataState.Added,    "  [green]+[/] [green]src/Foo.cs[/]  [dim](added)[/]")]
-    [InlineData(DataState.Deleted,  "  [red]-[/] [red]src/Foo.cs[/]  [dim](deleted)[/]")]
-    [InlineData(DataState.Modified, "  [yellow]~[/] [yellow]src/Foo.cs[/]  [dim](modified)[/]")]
-    [InlineData(DataState.Restored, "  [magenta]*[/] [magenta]src/Foo.cs[/]  [dim](restored)[/]")]
-    public void FormatFileState_MatchesLegacyOutput(DataState state, string expected)
+    [InlineData(DataState.Added,    "[green]ADD[/]  [green]src/Foo.cs[/]")]
+    [InlineData(DataState.Deleted,  "[red]DEL[/]  [red]src/Foo.cs[/]")]
+    [InlineData(DataState.Modified, "[yellow]MOD[/]  [yellow]src/Foo.cs[/]")]
+    [InlineData(DataState.Restored, "[fuchsia]RST[/]  [fuchsia]src/Foo.cs[/]")]
+    public void FormatFileState_RendersBadgeAndPath(DataState state, string expected)
     {
         Assert.Equal(expected, TextStyle.FormatFileState(state, "src/Foo.cs"));
     }

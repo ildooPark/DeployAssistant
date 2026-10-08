@@ -14,13 +14,13 @@ internal sealed class RevisionListScreen : Screen
     private readonly MetaDataManager _mgr;
     private List<ProjectData> _rows;
     private readonly SelectableList _list;
-    private const int ViewportHeight = 12;
+
 
     public RevisionListScreen(MetaDataManager mgr)
     {
         _mgr = mgr;
         _rows = mgr.ProjectMetaData?.ProjectDataList?.ToList() ?? new List<ProjectData>();
-        _list = new SelectableList(_rows.Count, ViewportHeight);
+        _list = new SelectableList(_rows.Count, 12);
     }
 
     /// <summary>
@@ -37,35 +37,53 @@ internal sealed class RevisionListScreen : Screen
         _list.SetItemCount(_rows.Count);  // clamps the selection if the list shrank
     }
 
+    public override string Title => "Revisions";
+
+    public override IReadOnlyList<KeyHint> Hints => _rows.Count == 0
+        ? new[] { new KeyHint("esc", "back") }
+        : new[]
+        {
+            new KeyHint(Glyphs.UpDown, "move"),
+            new KeyHint("enter", "inspect"),
+            new KeyHint("PgUp/PgDn", "page"),
+            new KeyHint("esc", "back"),
+        };
+
     public override void Render()
     {
         if (_rows.Count == 0)
         {
-            AnsiConsole.MarkupLine(TextStyle.Dim("No revisions recorded."));
-            AnsiConsole.MarkupLine(TextStyle.Dim("Press esc to return."));
+            Ui.Blank();
+            Ui.Note("  No revisions recorded.");
             return;
         }
 
+        // Section line + column header + blank line around the list.
+        _list.SetViewportHeight(Ui.ListRows(reservedRows: 3));
         int top = _list.ViewportTop;
-        int last = Math.Min(_rows.Count, top + ViewportHeight);
-        AnsiConsole.MarkupLine(TextStyle.Accent($"  {Markup.Escape(_mgr.ProjectMetaData?.ProjectName ?? "")}"));
-        AnsiConsole.WriteLine();
+        int last = Math.Min(_rows.Count, top + _list.ViewportHeight);
+
+        Col[] cols = Ui.Compact
+            ? new[] { new Col("", 1), new Col("#", 4, alignRight: true), new Col("Version"), new Col("Updated", 16), new Col("Changes", 7, alignRight: true) }
+            : new[] { new Col("", 1), new Col("#", 4, alignRight: true), new Col("Version", 24), new Col("Updated", 16), new Col("By"), new Col("Changes", 7, alignRight: true) };
+
+        Ui.Section("History", Ui.Range(top, last - top, _rows.Count));
+        Ui.TableHeader(cols);
         for (int i = top; i < last; i++)
         {
             var pd = _rows[i];
             bool isMain = pd.Equals(_mgr.MainProjectData);
-            string mainMarker = isMain ? TextStyle.MainMarker : " ";
-            string version = isMain
-                ? TextStyle.Accent(Markup.Escape(pd.UpdatedVersion ?? ""))
-                : Markup.Escape(pd.UpdatedVersion ?? "");
-            string selMarker = i == _list.SelectedIndex ? TextStyle.SelectionMarker : " ";
-            string line = $" {selMarker} {mainMarker} #{i + 1}  {version}  " +
-                          $"{pd.UpdatedTime:yyyy-MM-dd HH:mm}  by {Markup.Escape(pd.UpdaterName ?? "")}  " +
-                          TextStyle.Dim($"({pd.NumberOfChanges} changes)");
-            AnsiConsole.MarkupLine(line);
+            var cells = new List<(string, string?)>
+            {
+                (isMain ? Glyphs.Main : "", "aqua bold"),
+                ($"{i + 1}", "grey"),
+                (pd.UpdatedVersion ?? "", isMain ? "aqua bold" : null),
+                ($"{pd.UpdatedTime:yyyy-MM-dd HH:mm}", null),
+            };
+            if (!Ui.Compact) cells.Add((pd.UpdaterName ?? "", "grey"));
+            cells.Add(($"{pd.NumberOfChanges}", "grey"));
+            Ui.TableRow(cols, cells, selected: i == _list.SelectedIndex);
         }
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine(TextStyle.Dim("↑↓ move · d/u half-page · enter inspect (checkout · rename · delete) · esc back"));
     }
 
     public override ScreenAction Handle(ConsoleKeyInfo key)

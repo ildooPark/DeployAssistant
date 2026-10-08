@@ -1084,6 +1084,7 @@ Usage:
 
 The TUI requires a real terminal (cmd.exe, Windows Terminal, etc).
 Output redirection / piping is not supported by the TUI.
+Set DA_CLI_GLYPHS=ascii (or unicode) to force the border/symbol set.
 ```
 
 ### 17.1 The CLI is a screen-stack TUI, not a verb CLI
@@ -1097,7 +1098,7 @@ Output redirection / piping is not supported by the TUI.
 | `--version` / `-v` | Print `DeployAssistant CLI <semver>`. Exit code 0 |
 | anything else | `deployassistant: unknown command '<arg>'.` on **stderr**. Exit code 1 |
 
-The version string comes from `<AssemblyVersion>` in `DeployAssistant.CLI.csproj`, trimmed from the 4-part CLR version to 3-part semver by `CliVersion`. The CLI versions independently of the GUI (see `docs/release-process.md`), and the same banner is rendered at the bottom of `TopMenuScreen` — the no-project-loaded landing screen — so a fresh user sees the build without passing `--version`.
+The version string comes from `<AssemblyVersion>` in `DeployAssistant.CLI.csproj`, trimmed from the 4-part CLR version to 3-part semver by `CliVersion`. The CLI versions independently of the GUI (see `docs/release-process.md`), and the same banner leads the frame header on every screen — including `TopMenuScreen`, the no-project-loaded landing screen — so a fresh user sees the build without passing `--version`.
 
 The CI smoke test asserts exactly this contract: no-args → exit 0 with `"DeployAssistant"` in the output; `--help` → exit 0; unknown command → exit 1.
 
@@ -1109,17 +1110,21 @@ The CI smoke test asserts exactly this contract: no-args → exit 0 with `"Deplo
 
 `App.Run(root)` drives a `Stack<Screen>`:
 
-1. If the top-of-stack changed, call `OnEnter()` — long-running synchronous work (manager calls, progress bars) belongs there, not in `Render`.
-2. `AnsiConsole.Clear()`, then `Render()`.
+1. If the top-of-stack changed, draw the frame chrome with an empty body, park the cursor in the body and call `OnEnter()` — long-running synchronous work (manager calls, progress bars) belongs there, not in `Render`, and a live widget it starts draws inside the frame at the canvas width.
+2. Compose and paint the frame (`FrameRenderer`, below).
 3. Call `AutoAdvance()`; a non-null `ScreenAction` transitions without waiting for a key.
-4. Otherwise block on `Console.ReadKey(intercept: true)` and pass it to `Handle(key)`.
+4. Otherwise wait for a key, polling `Console.KeyAvailable` every 40 ms and repainting whenever the window size changes, then pass it to `Handle(key)`.
+
+**Frame and resolution independence.** `Term.Enter()` switches to the alternate screen buffer (the user's scrollback is restored on exit), hides the cursor, and picks the glyph set once (below). `FrameRenderer.Compose` then builds every frame as exactly *window-height* lines: a header (`DeployAssistant CLI <semver>` plus a breadcrumb from each stacked screen's `Title`), a rule, the body, a rule, and one or two lines of key chips from the screen's `Hints` (the tail drops on narrow windows). The body is rendered off-screen — the static `AnsiConsole` is swapped for a `StringWriter` console — at the **canvas width**, `min(window width - 1, 120)`, so a 4K monitor gets the same 120-column layout as a laptop instead of stretched rows. Screens size themselves from `Ui.Width` / `Ui.BodyHeight`; list viewports grow with the window height, nothing else does. Every row is fitted by terminal cells (Hangul counts two) with an ellipsis — paths elide the middle and resume at a folder boundary — so the terminal never wraps a line. The frame is painted in one write (cursor home, erase-to-EOL per line, erase-below), with no clear, so there is no flicker. Below 60×16 the frame is replaced by a "Window too small" message until the window grows. `TuiPrompt.Confirm` renders as a modal box inside the bottom of the body rather than printing below the frame.
+
+**Glyph set.** Legacy conhost in a CJK code page (932/936/949/950 — i.e. a stock Korean Windows 10 console) draws East-Asian ambiguous-width glyphs (`─ │ › ✓ ·`) two cells wide, which shears every border. `Term.DetectUnicode` therefore uses rounded box borders and Unicode symbols only under Windows Terminal (`WT_SESSION`), VS Code (`TERM_PROGRAM`), ConEmu, or a non-CJK code page, and switches output to UTF-8 for them; everything else gets an all-ASCII set (`+-|` borders, `>` pointer, `...` ellipsis). `DA_CLI_GLYPHS=unicode|ascii` overrides the guess. Colours stay in the 16-colour palette and "dim" text is grey rather than SGR faint, which conhost ignores.
 
 `ScreenAction` is a record hierarchy: `Stay`, `Pop`, `Push(next)`, `Replace(next)`, `Exit`. `OnExit()` runs on pop, replace and exit — that is where screens unsubscribe from manager events. Note that `OnEnter()` re-runs every time a pushed child screen pops, so a subscription made there must be idempotent (`-=` before `+=`) — a duplicate handler on the process-lifetime manager leaks every popped screen instance. `Screen` is an abstract class rather than an interface because `AutoAdvance` needs a virtual default and default interface methods are not available on net472.
 
 Two guards sit in front of the loop, both returning exit code 0 rather than crashing:
 
 - **Redirected stdout or stdin** → print a one-line banner to stdout (so redirect-to-file users and the CI smoke test still get output), diagnostics to stderr, and exit. Interactive rendering into a pipe is meaningless.
-- **No console window / `Console.WindowHeight` throws** → same treatment. The probe is done once up front so the failure is a clean message instead of an `IOException` from deep inside the render loop. A terminal shorter than 10 rows renders "Terminal too small — please resize." and waits.
+- **No console window / `Console.WindowHeight` throws** → same treatment. The probe is done once up front so the failure is a clean message instead of an `IOException` from deep inside the render loop.
 
 `Ctrl+C` is intercepted in two places (a `CancelKeyPress` handler and an explicit check on every `ReadKey`) and clears the stack for a clean exit — which is why `ConsoleKey.C` handling in a screen can safely treat a bare `c` as its own binding.
 
@@ -1169,18 +1174,18 @@ MainScreen
 
 ### 17.2 Output Style
 
-`Spectre.Console` v0.49.1 throughout. `TextStyle` centralises the vocabulary — selection marker, main marker, accent/dim/bold helpers, and `FormatFileState` for the per-file change rows.
+`Spectre.Console` v0.49.1 throughout. `TextStyle` centralises colours and markers, `Glyphs` the Unicode/ASCII symbol pairs, and `Ui` the layout kit (cards, sections, menus, fixed-layout tables with a full-width selection bar, input fields with a drawn caret).
 
-| Concept | Symbol | Colour | Member |
+| Concept | Unicode / ASCII | Colour | Member |
 |---|---|---|---|
-| Success / completion | `✓` | Green | `TextStyle.SuccessGlyph` |
-| Error | `✗` | Red | `TextStyle.ErrorGlyph` |
-| Selected-row pointer | `›` | Cyan bold | `TextStyle.SelectionMarker` |
-| Current version marker | `→` | Cyan bold | `TextStyle.MainMarker` |
-| Added file | `+` prefix | Green | `TextStyle.FormatFileState` |
-| Deleted file | `-` prefix | Red | `TextStyle.FormatFileState` |
-| Modified file | `~` prefix | Yellow | `TextStyle.FormatFileState` |
-| Restored file | `*` prefix | Magenta | `TextStyle.FormatFileState` |
+| Success / completion | `✓` / `+` | Green | `TextStyle.SuccessGlyph` |
+| Error | `✗` / `x` | Red | `TextStyle.ErrorGlyph` |
+| Selected row | `›` / `>` plus a black-on-aqua bar | Aqua | `TextStyle.SelectionMarker`, `Ui.Highlight` |
+| Current main version | `●` / `*` | Aqua bold | `TextStyle.MainMarker` |
+| Added file | `ADD` badge | Green | `TextStyle.StateBadge` |
+| Deleted file | `DEL` badge | Red | `TextStyle.StateBadge` |
+| Modified file | `MOD` badge | Yellow | `TextStyle.StateBadge` |
+| Restored file | `RST` badge | Fuchsia | `TextStyle.StateBadge` |
 
 `RevisionDetailScreen` additionally renders a literal `★ current` badge in its header. There are no warning or info glyphs — warnings are plain `[yellow]` / `[red]` markup at the call site.
 

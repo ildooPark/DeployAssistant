@@ -79,7 +79,7 @@ internal sealed class IntegrityRunScreen : Screen
                 {
                     lock (progressLock)
                     {
-                        activeTask = ctx.AddTask("[cyan]Integrity check[/]", new ProgressTaskSettings { AutoStart = true, MaxValue = 1 });
+                        activeTask = ctx.AddTask("[aqua]Integrity check[/]", new ProgressTaskSettings { AutoStart = true, MaxValue = 1 });
                     }
                     _mgr.RequestProjectIntegrityCheck();
                     done.Wait(TimeSpan.FromMinutes(10));
@@ -100,6 +100,8 @@ internal sealed class IntegrityRunScreen : Screen
             _mgr.IntegrityProgressEventHandler -= OnProgress;
         }
     }
+
+    public override string Title => "Integrity";
 
     public override void Render()
     {

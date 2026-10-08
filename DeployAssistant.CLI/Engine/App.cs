@@ -1,13 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using Spectre.Console;
+using Spectre.Console.Rendering;
 
 namespace DeployAssistant.CLI.Engine
 {
     internal sealed class App
     {
         private readonly Stack<Screen> _stack = new Stack<Screen>();
+        private FrameRenderer.Target _target;
+        private (int Width, int Height) _drawnSize;
 
         public int Run(Screen root)
         {
@@ -36,59 +41,93 @@ namespace DeployAssistant.CLI.Engine
                 return 0;
             }
 
+            using (Term.Enter())
+            {
+                _target = new FrameRenderer.Target(Term.Ansi, AnsiConsole.Profile.Capabilities.ColorSystem);
+                TuiPrompt.ModalPresenter = ShowModal;
+                Console.CancelKeyPress += OnCancel;
+                try
+                {
+                    Loop(root);
+                }
+                finally
+                {
+                    Console.CancelKeyPress -= OnCancel;
+                    TuiPrompt.ModalPresenter = null;
+                }
+            }
+            return 0;
+        }
+
+        private void Loop(Screen root)
+        {
             _stack.Push(root);
             Screen? lastTop = null;
 
-            Console.CancelKeyPress += OnCancel;
-
-            try
+            while (_stack.Count > 0)
             {
-                while (_stack.Count > 0)
+                var current = _stack.Peek();
+                if (!ReferenceEquals(current, lastTop))
                 {
-                    var current = _stack.Peek();
-                    if (!ReferenceEquals(current, lastTop))
-                    {
-                        current.OnEnter();
-                        lastTop = current;
-                    }
-
-                    AnsiConsole.Clear();
-
-                    int windowHeight;
-                    try { windowHeight = Console.WindowHeight; }
-                    catch (IOException) { windowHeight = 0; }
-                    if (windowHeight < 10)
-                    {
-                        AnsiConsole.MarkupLine(TextStyle.Dim("Terminal too small — please resize."));
-                        var key = Console.ReadKey(intercept: true);
-                        if (IsCtrlC(key)) return 0;
-                        continue;
-                    }
-
-                    current.Render();
-
-                    var auto = current.AutoAdvance();
-                    if (auto is not null)
-                    {
-                        lastTop = ApplyAction(auto, current, lastTop);
-                        continue;
-                    }
-
-                    {
-                        var key = Console.ReadKey(intercept: true);
-                        if (IsCtrlC(key)) return 0;
-
-                        var action = current.Handle(key);
-                        lastTop = ApplyAction(action, current, lastTop);
-                    }
+                    // Chrome first, cursor parked in the body: a progress bar or spinner that
+                    // OnEnter starts then draws inside the frame at the canvas width.
+                    Draw(bodyless: true);
+                    Term.MoveTo(2, 0);
+                    AnsiConsole.Profile.Width = FrameRenderer.CanvasWidth(Term.Size().Width);
+                    current.OnEnter();
+                    lastTop = current;
+                    if (_stack.Count == 0) break;
                 }
-            }
-            finally
-            {
-                Console.CancelKeyPress -= OnCancel;
-            }
 
-            return 0;
+                Draw();
+
+                var auto = current.AutoAdvance();
+                if (auto is not null)
+                {
+                    lastTop = ApplyAction(auto, current, lastTop);
+                    continue;
+                }
+
+                ConsoleKeyInfo? key = ReadKey(() => Draw());
+                if (key is null) return; // cancelled while waiting
+
+                var action = current.Handle(key.Value);
+                lastTop = ApplyAction(action, current, lastTop);
+            }
+        }
+
+        private void Draw(IRenderable? modal = null, bool bodyless = false)
+        {
+            var size = Term.Size();
+            if (size.Width <= 0 || size.Height <= 0 || _stack.Count == 0) return;
+            var stack = _stack.Reverse().ToList();
+            Term.WriteFrame(FrameRenderer.Compose(stack, size.Width, size.Height, _target, modal, bodyless));
+            _drawnSize = size;
+        }
+
+        /// <summary>
+        /// Waits for a key while watching the window size, so dragging the window edge or
+        /// moving it to another monitor re-lays-out the frame immediately. Returns null when
+        /// Ctrl+C emptied the stack while we waited.
+        /// </summary>
+        private ConsoleKeyInfo? ReadKey(Action redraw)
+        {
+            while (!Console.KeyAvailable)
+            {
+                if (_stack.Count == 0) return null;
+                if (Term.Size() != _drawnSize) redraw();
+                Thread.Sleep(40);
+            }
+            var key = Console.ReadKey(intercept: true);
+            if (IsCtrlC(key)) { _stack.Clear(); return null; }
+            return key;
+        }
+
+        private ConsoleKeyInfo ShowModal(IRenderable modal)
+        {
+            Draw(modal);
+            ConsoleKeyInfo? key = ReadKey(() => Draw(modal));
+            return key ?? new ConsoleKeyInfo('\u001b', ConsoleKey.Escape, false, false, false);
         }
 
         private Screen? ApplyAction(ScreenAction action, Screen current, Screen? lastTop)
